@@ -20,6 +20,7 @@
           buildInputs = with pkgs; [
             rust-bin.stable."latest".default
 
+            rust-analyzer
             gcc
             pkg-config
             openssl
