@@ -2,6 +2,39 @@ WHITESPACE = _{ " " | "\t" | NEWLINE }
 COMMENT = ${ SingleLineComment }
 SingleLineComment = { ";" ~ (!"\n" ~ ANY)* }
 
-program = _{ SOI ~ stmt+ ~ EOI }
-stmt = _{ expr }
-expr = { ASCII_DIGIT+ }
+program = _{ SOI ~ func_call* ~ EOI }
+
+expr = { 
+	identifier | int | float | string | array | map | func_call | color 
+}
+
+map = {
+	"[" ~ string ~ ":" ~ expr ~ "]"
+}
+
+array = {
+	"[" ~ expr* ~ "]"
+}
+
+func_call = {
+	"(" ~ identifier ~ ((identifier ~ ":")? ~ (expr | bexpr))* ~ ")"
+}
+
+bexpr = { 
+	"(" ~ expr ~ ")"
+}
+
+identifier = @{
+	!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | special_char)+
+}
+
+special_char = @{
+	"+" | "-" | "*" | "/" | "$" | "^" | "§" | "$" | "%" | "&" | "=" | "`" | "<" | ">" | "|" | "_" | "@" | "~"
+}
+
+int = @{ ASCII_DIGIT+ }
+float = @{ ASCII_DIGIT+ ~ (("." ~ ASCII_DIGIT* ~ "f") | "f") }
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+color = @{
+	"#" ~ (ASCII_DIGIT | 'a'..'f' | 'A'..'F'){6}
+}

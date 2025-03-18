@@ -1,8 +1,9 @@
 pub mod parser;
 
-use parser::BunnyParser;
+use parser::{BunnyParser, Rule};
+use pest::Parser;
 
 fn main() {
-    let p = BunnyParser::parse(parser::Rule::program, "1234");
+    let p = BunnyParser::parse(Rule::program, "1234");
     println!("{:?}", p);
 }
