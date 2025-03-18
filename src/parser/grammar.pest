@@ -1,0 +1,7 @@
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+COMMENT = ${ SingleLineComment }
+SingleLineComment = { ";" ~ (!"\n" ~ ANY)* }
+
+program = _{ SOI ~ stmt+ ~ EOI }
+stmt = _{ expr }
+expr = { ASCII_DIGIT+ }
