@@ -1,15 +1,15 @@
 WHITESPACE = _{ " " | "\t" | NEWLINE }
-COMMENT = ${ SingleLineComment }
-SingleLineComment = { ";" ~ (!"\n" ~ ANY)* }
+COMMENT = ${ line_comment }
+line_comment = { ";" ~ (!"\n" ~ ANY)* }
 
 program = _{ SOI ~ func_call* ~ EOI }
 
 expr = { 
-	identifier | int | float | string | array | map | func_call | color 
+	 int | float | string | array | map | func_call | color | identifier
 }
 
 map = {
-	"[" ~ string ~ ":" ~ expr ~ "]"
+	"[" ~ expr ~ ":" ~ expr ~ "]"
 }
 
 array = {
@@ -17,15 +17,18 @@ array = {
 }
 
 func_call = {
-	"(" ~ identifier ~ ((identifier ~ ":")? ~ (expr | bexpr))* ~ ")"
+	"(" ~ identifier ~ argument* ~ ")"
+	| "(" ~ func_call+ ~ ")"
+	| "()"
 }
 
-bexpr = { 
-	"(" ~ expr ~ ")"
+argument = {
+	(identifier ~ ":" ~ expr)
+	| expr
 }
 
 identifier = @{
-	!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | special_char)+
+	(ASCII_ALPHA | special_char) ~ (ASCII_ALPHANUMERIC | special_char)*
 }
 
 special_char = @{
