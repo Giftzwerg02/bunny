@@ -1,10 +1,10 @@
 (def mouth (x y w h) (
-    ; return a rect at (x,y) with width = w, height = h and a background-color of red
+    ; return a rect at x,y with width = w, height = h and a background-color of red
     (rect x y w h fill: #ff0000)
 ))
 
 (def eye (cx cy r) (
-    ; return a circle with center at (cx, cy) and radius = r and a background-color of red
+    ; return a circle with center at cx, cy and radius = r and a background-color of red
     (circle cx cy r fill: #ff0000)
 ))
 

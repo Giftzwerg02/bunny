@@ -5,21 +5,40 @@ line_comment = { ";" ~ (!"\n" ~ ANY)* }
 program = _{ SOI ~ func_call* ~ EOI }
 
 expr = { 
-	 int | float | string | array | map | func_call | color | identifier
+	 float 
+	 | int 
+	 | string 
+	 | array 
+	 | map 
+	 | func_def
+	 | func_call 
+	 | color 
+	 | identifier
 }
 
 map = {
-	"[" ~ expr ~ ":" ~ expr ~ "]"
+	"{" ~ map_assign* ~ "}"
+}
+
+map_assign = {
+	expr ~ ":" ~ expr
 }
 
 array = {
 	"[" ~ expr* ~ "]"
 }
 
+func_def = {
+	"(" ~ "def" ~ identifier ~ parameters? ~ "(" ~ expr ~ ")" ~ ")"
+}
+
+parameters = {
+	"(" ~ identifier* ~ ")"
+}
+
 func_call = {
 	"(" ~ identifier ~ argument* ~ ")"
-	| "(" ~ func_call+ ~ ")"
-	| "()"
+	| "(" ~ func_call* ~ ")"
 }
 
 argument = {
@@ -32,7 +51,7 @@ identifier = @{
 }
 
 special_char = @{
-	"+" | "-" | "*" | "/" | "$" | "^" | "§" | "$" | "%" | "&" | "=" | "`" | "<" | ">" | "|" | "_" | "@" | "~"
+	"+" | "-" | "*" | "/" | "$" | "^" | "§" | "%" | "&" | "=" | "`" | "<" | ">" | "|" | "_" | "@" | "~"
 }
 
 int = @{ ASCII_DIGIT+ }

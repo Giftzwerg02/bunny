@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use clap::{Parser, command};
 
-#[command(author, version, about, long_about = None)]
 #[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
 pub struct Cli {
     /// Activate debug mode
     #[arg(long)]
