@@ -238,189 +238,107 @@ mod tests {
     }
 
     mod expr {
-        use std::fmt::Display;
+        use std::fmt::{Debug, Display};
 
         use pest::iterators::Pair;
 
+        use crate::ast::{
+            AST, Expr,
+            expressions::{Argument, Color, FuncCall, Id, NamedArgument, NonEmptyFuncCall},
+        };
+
         use super::*;
 
-        #[derive(Clone, Debug, PartialEq, Eq)]
-        enum Expr {
-            Int(u64),
-            Float((u64, Option<u64>)),
-            String(String),
-            Color(Color),
-            Id(Id),
-            FuncCall(FuncCall),
-            Array(Vec<Expr>),
-            Map(Vec<(Expr, Expr)>),
+        #[derive(Clone, Debug, PartialEq)]
+        struct SimpleExpr {
+            inner: Box<AST<SimpleExpr>>,
         }
 
-        fn arb_expr(depth: u32) -> impl Strategy<Value = Expr> {
+        impl Expr for SimpleExpr {}
+
+        impl Display for SimpleExpr {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.inner)
+            }
+        }
+
+        impl SimpleExpr {
+            fn new(inner: AST<SimpleExpr>) -> Self {
+                Self {
+                    inner: Box::new(inner),
+                }
+            }
+        }
+
+        fn arb_expr(depth: u32) -> impl Strategy<Value = SimpleExpr> {
             if depth == 0 {
                 return prop_oneof![
-                    any::<u64>().prop_map(Expr::Int),
-                    any::<(u64, Option<u64>)>().prop_map(Expr::Float),
-                    "[^\"]{0,100}".prop_map(Expr::String),
-                    arb_color().prop_map(Expr::Color),
-                    arb_id().prop_map(Expr::Id),
-                ].boxed();
+                    any::<u64>().prop_map(AST::Int).prop_map(SimpleExpr::new),
+                    any::<f64>().prop_map(|f| f.abs()).prop_map(AST::Float).prop_map(SimpleExpr::new),
+                    "[^\"]{0,100}"
+                        .prop_map(AST::String)
+                        .prop_map(SimpleExpr::new),
+                    arb_color().prop_map(AST::Color).prop_map(SimpleExpr::new),
+                    arb_id().prop_map(AST::Id).prop_map(SimpleExpr::new),
+                ]
+                .boxed();
             }
 
             let leaf = prop_oneof![
-                any::<u64>().prop_map(Expr::Int),
-                any::<(u64, Option<u64>)>().prop_map(Expr::Float),
-                "[^\"]{0,100}".prop_map(Expr::String),
-                arb_color().prop_map(Expr::Color),
-                arb_id().prop_map(Expr::Id),
-                arb_funccall(depth - 1).prop_map(Expr::FuncCall),
+                any::<u64>().prop_map(AST::Int).prop_map(SimpleExpr::new),
+                any::<f64>().prop_map(|f| f.abs()).prop_map(AST::Float).prop_map(SimpleExpr::new),
+                "[^\"]{0,100}"
+                    .prop_map(AST::String)
+                    .prop_map(SimpleExpr::new),
+                arb_color().prop_map(AST::Color).prop_map(SimpleExpr::new),
+                arb_id().prop_map(AST::Id).prop_map(SimpleExpr::new),
+                arb_funccall(depth - 1)
+                    .prop_map(AST::FuncCall)
+                    .prop_map(SimpleExpr::new),
             ];
-            leaf.prop_recursive(
-                depth - 1,
-                25,
-                5,
-                |inner| {
+            leaf.prop_recursive(depth - 1, 25, 5, |inner| {
                 prop_oneof![
-                    prop::collection::vec(inner.clone(), 0..4).prop_map(Expr::Array),
+                    prop::collection::vec(inner.clone(), 0..4)
+                        .prop_map(AST::Array)
+                        .prop_map(SimpleExpr::new),
                     prop::collection::vec((inner.clone(), inner.clone()), 0..4)
-                        .prop_map(Expr::Map),
+                        .prop_map(AST::Dict)
+                        .prop_map(SimpleExpr::new),
                 ]
             })
             .boxed()
         }
 
-        impl Display for Expr {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-                    Expr::Int(int) => write!(f, "{int}"),
-                    Expr::Float((a, b)) => match b {
-                        Some(b) => write!(f, "{a}.{b}f"),
-                        None => write!(f, "{a}f"),
-                    },
-                    Expr::String(s) => write!(f, "\"{s}\""),
-                    Expr::Array(exprs) => {
-                        let str = exprs.iter().map(|e| format!("{e}")).collect::<Vec<_>>();
-                        let str = str.join(" ");
-                        write!(f, "[ {str} ]")
-                    }
-                    Expr::Map(items) => {
-                        let str = items
-                            .iter()
-                            .map(|(k, v)| format!("{k} : {v}"))
-                            .collect::<Vec<_>>();
-                        let str = str.join(" ");
-                        write!(f, "{{ {str} }}")
-                    }
-                    Expr::FuncCall(func_call) => {
-                        write!(f, "{func_call}")
-                    }
-                    Expr::Color(color) => {
-                        write!(f, "{color}")
-                    }
-                    Expr::Id(id) => write!(f, "{id}"),
-                }
-            }
-        }
-
-        #[derive(Clone, Debug, PartialEq, Eq)]
-        enum FuncCall {
-            Empty,
-            Nested(Vec<FuncCall>),
-            Single((Id, Vec<Argument>)),
-        }
-
-        fn arb_funccall(depth: u32) -> impl Strategy<Value = FuncCall> {
+        fn arb_funccall(depth: u32) -> impl Strategy<Value = FuncCall<SimpleExpr>> {
             if depth == 0 {
                 return Just(FuncCall::Empty).boxed();
             }
 
-            let leaf = prop_oneof![
+            prop_oneof![
                 Just(FuncCall::Empty),
                 (
                     arb_id(),
                     prop::collection::vec(arb_argument(depth - 1), 0..4)
                 )
-                    .prop_map(FuncCall::Single)
-            ];
-
-            leaf.prop_recursive(depth - 1, 25, 5, |inner| {
-                prop_oneof![prop::collection::vec(inner.clone(), 0..4).prop_map(FuncCall::Nested)]
-            }).boxed()
+                    .prop_map(|(id, args)| FuncCall::Call(NonEmptyFuncCall::new(id, args)))
+            ].boxed()
         }
 
-        impl Display for FuncCall {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-                    FuncCall::Empty => write!(f, "()"),
-                    FuncCall::Nested(func_calls) => {
-                        let str = func_calls
-                            .iter()
-                            .map(|f| format!("{f}"))
-                            .collect::<Vec<_>>();
-                        let str = str.join(" ");
-                        write!(f, "( {str} )")
-                    }
-                    FuncCall::Single((id, args)) => {
-                        let str = args.iter().map(|arg| format!("{arg}")).collect::<Vec<_>>();
-                        let str = str.join(" ");
-                        write!(f, "( {} {str} )", id.value)
-                    }
-                }
-            }
-        }
-
-        #[derive(Clone, Debug, PartialEq, Eq)]
-        enum Argument {
-            Named((Id, Expr)),
-            Unnamed(Expr),
-        }
-
-        fn arb_argument(depth: u32) -> impl Strategy<Value = Argument> {
+        fn arb_argument(depth: u32) -> impl Strategy<Value = Argument<SimpleExpr>> {
             if depth == 0 {
                 return arb_expr(0).prop_map(Argument::Unnamed).boxed();
             }
 
             prop_oneof![
-                (arb_id(), arb_expr(depth - 1)).prop_map(Argument::Named),
+                (arb_id(), arb_expr(depth - 1))
+                    .prop_map(|(id, expr)| Argument::Named(NamedArgument::new(id, expr))),
                 arb_expr(depth - 1).prop_map(Argument::Unnamed)
-            ].boxed()
-        }
-
-        impl Display for Argument {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-                    Argument::Named((id, expr)) => write!(f, "{id}: {expr}"),
-                    Argument::Unnamed(expr) => write!(f, "{expr}"),
-                }
-            }
-        }
-
-        #[derive(Clone, Debug, PartialEq, Eq)]
-        struct Color {
-            r: u8,
-            g: u8,
-            b: u8,
-        }
-
-        impl Display for Color {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
-            }
+            ]
+            .boxed()
         }
 
         fn arb_color() -> impl Strategy<Value = Color> {
-            any::<(u8, u8, u8)>().prop_map(|(r, g, b)| Color { r, g, b })
-        }
-
-        #[derive(Clone, Debug, PartialEq, Eq)]
-        struct Id {
-            value: String,
-        }
-
-        impl Display for Id {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self.value)
-            }
+            any::<(u8, u8, u8)>().prop_map(|(r, g, b)| Color::new(r, g, b))
         }
 
         fn arb_id() -> impl Strategy<Value = Id> {
@@ -431,7 +349,7 @@ mod tests {
             const IDENTIFIER_REGEX: &str =
                 formatcp!("[{LETTER}{SPECIAL}][{LETTER}{SPECIAL}{DIGIT}]*");
 
-            IDENTIFIER_REGEX.prop_map(|s| Id { value: s })
+            IDENTIFIER_REGEX.prop_map(Id::new)
         }
 
         proptest! {
@@ -444,7 +362,7 @@ mod tests {
             }
         }
 
-        fn check_argument_parse(arg: Argument, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
+        fn check_argument_parse(arg: Argument<SimpleExpr>, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
             let mut pairs = pair.into_inner();
             let pair = pairs.next().unwrap();
             if pair.as_rule() == Rule::expr {
@@ -459,30 +377,28 @@ mod tests {
             }
 
             if pair.as_rule() == Rule::identifier {
-                let Argument::Named((_id, expr)) = arg else {
+                let Argument::Named(named) = arg else {
                     prop_assert!(false);
                     return Ok(());
                 };
 
-                check_expr_parse(expr, pairs.next().unwrap())?;
+                check_expr_parse(named.expr, pairs.next().unwrap())?;
                 prop_assert!(pairs.next().is_none());
                 return Ok(());
-
             }
 
             prop_assert!(false);
             Ok(())
         }
 
-        fn check_funccall_parse(func: FuncCall, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
+        fn check_funccall_parse(func: FuncCall<SimpleExpr>, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
             let pairs_count = pair.clone().into_inner().count();
             if pairs_count == 0 {
                 match func {
-                    FuncCall::Empty => {},
-                    FuncCall::Nested(func_calls) if func_calls.len() == 0 => {},
+                    FuncCall::Empty => {}
                     _ => {
                         prop_assert!(false);
-                    },
+                    }
                 }
 
                 return Ok(());
@@ -492,30 +408,14 @@ mod tests {
             let first_pair = pairs.next().unwrap();
 
             if first_pair.as_rule() == Rule::identifier {
-                let FuncCall::Single((_id, args)) = func else { 
+                let FuncCall::Call(func) = func else {
                     prop_assert!(false);
                     return Ok(());
                 };
 
-                for arg in args {
+                for arg in func.args {
                     let p = pairs.next().unwrap();
                     check_argument_parse(arg, p)?;
-                }
-
-                prop_assert!(pairs.next().is_none());
-                return Ok(());
-            }
-
-            if first_pair.as_rule() == Rule::func_call {
-                let FuncCall::Nested(funcs) = func else {
-                    prop_assert!(false);
-                    return Ok(());
-                };
-
-                check_funccall_parse(funcs.first().unwrap().clone(), first_pair)?;
-
-                for f in &funcs[1..] {
-                    check_funccall_parse(f.clone(), pairs.next().unwrap())?;
                 }
 
                 prop_assert!(pairs.next().is_none());
@@ -526,35 +426,33 @@ mod tests {
             Ok(())
         }
 
-        fn check_expr_parse(expr: Expr, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
+        fn check_expr_parse(expr: SimpleExpr, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
             match pair.as_rule() {
-                Rule::EOI | Rule::WHITESPACE | Rule::COMMENT | Rule::line_comment | Rule::special_char => {
-                    Ok(())
-                },
+                Rule::EOI
+                | Rule::WHITESPACE
+                | Rule::COMMENT
+                | Rule::line_comment
+                | Rule::special_char => Ok(()),
                 Rule::program => {
                     prop_assert!(false, "should never happen");
                     Ok(())
-                },
+                }
                 Rule::expr => {
                     let mut pairs = pair.into_inner();
                     let next = pairs.next().unwrap();
                     check_expr_parse(expr, next)?;
                     prop_assert!(pairs.next().is_none());
                     Ok(())
-                },
-                Rule::func_def => {
-                    prop_assert!(false, "not checked");
-                    Ok(())
-                },
-                Rule::map => {
-                    let Expr::Map(map) = expr else {
+                }
+                Rule::dict => {
+                    let AST::Dict(dict) = *expr.inner else {
                         prop_assert!(false);
                         return Ok(());
                     };
 
                     let mut pairs = pair.into_inner();
 
-                    for (k,v) in map {
+                    for (k, v) in dict {
                         let mut map_assing = pairs.next().unwrap().into_inner();
                         let pair_key = map_assing.next().unwrap();
                         let pair_value = map_assing.next().unwrap();
@@ -568,13 +466,13 @@ mod tests {
 
                     prop_assert!(pairs.next().is_none());
                     Ok(())
-                },
-                Rule::map_assign => {
+                }
+                Rule::dict_assign => {
                     prop_assert!(false, "should not be checked here");
                     Ok(())
-                },
+                }
                 Rule::array => {
-                    let Expr::Array(array) = expr else {
+                    let AST::Array(array) = *expr.inner else {
                         prop_assert!(false);
                         return Ok(());
                     };
@@ -589,63 +487,59 @@ mod tests {
 
                     prop_assert!(pairs.next().is_none());
                     Ok(())
-                },
-                Rule::parameters => {
-                    prop_assert!(false, "not checked");
-                    Ok(())
-                },
+                }
                 Rule::func_call => {
-                    let Expr::FuncCall(func) = expr else {
+                    let AST::FuncCall(func) = *expr.inner else {
                         prop_assert!(false);
                         return Ok(());
                     };
                     check_funccall_parse(func, pair)
-                },
+                }
                 Rule::argument => {
                     prop_assert!(false, "should not be checked here");
                     Ok(())
-                },
+                }
                 Rule::identifier => {
-                    let Expr::Id(_) = expr else {
+                    let AST::Id(_) = *expr.inner else {
                         prop_assert!(false);
                         return Ok(());
                     };
-                    
+
                     Ok(())
-                },
+                }
                 Rule::int => {
-                    let Expr::Int(_) = expr else {
+                    let AST::Int(_) = *expr.inner else {
                         prop_assert!(false);
                         return Ok(());
                     };
-                    
+
                     Ok(())
-                },
+                }
                 Rule::float => {
-                    let Expr::Float(_) = expr else {
+                    let AST::Float(_) = *expr.inner else {
                         prop_assert!(false);
                         return Ok(());
                     };
-                    
+
                     Ok(())
-                },
+                }
                 Rule::string => {
-                    let Expr::String(_) = expr else {
+                    let AST::String(_) = *expr.inner else {
                         prop_assert!(false);
                         return Ok(());
                     };
-                    
+
                     Ok(())
-                },
+                }
                 Rule::color => {
-                    let Expr::Color(_) = expr else {
+                    let AST::Color(_) = *expr.inner else {
                         prop_assert!(false);
                         return Ok(());
                     };
-                    
+
                     Ok(())
-                },
-            } 
+                }
+            }
         }
     }
 

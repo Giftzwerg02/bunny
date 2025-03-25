@@ -9,31 +9,23 @@ expr = {
 	 | int 
 	 | string 
 	 | array 
-	 | map 
-	 | func_def
+	 | dict
 	 | func_call 
 	 | color 
 	 | identifier
 }
 
-map = {
-	"{" ~ map_assign* ~ "}"
+dict = {
+	"[" ~ ":" ~ "]"
+	| "[" ~ dict_assign* ~ "]"
 }
 
-map_assign = {
+dict_assign = {
 	expr ~ ":" ~ expr
 }
 
 array = {
 	"[" ~ expr* ~ "]"
-}
-
-func_def = {
-	"(" ~ "def" ~ identifier ~ parameters? ~ "(" ~ expr ~ ")" ~ ")"
-}
-
-parameters = {
-	"(" ~ identifier* ~ ")"
 }
 
 func_call = {
