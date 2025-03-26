@@ -136,6 +136,7 @@ dependencies = [
  "pest",
  "pest_derive",
  "proptest",
+ "text_trees",
 ]
 
 [[package]]
@@ -710,6 +711,12 @@ dependencies = [
  "rustix",
  "windows-sys",
 ]
+
+[[package]]
+name = "text_trees"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "419ea7ab2f07ffc59c5e9424bcb73677933940f8bdadbe21649c1584dc06d0cf"
 
 [[package]]
 name = "textwrap"

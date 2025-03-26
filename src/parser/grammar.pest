@@ -2,7 +2,7 @@ WHITESPACE = _{ " " | "\t" | NEWLINE }
 COMMENT = ${ line_comment }
 line_comment = { ";" ~ (!"\n" ~ ANY)* }
 
-program = _{ SOI ~ func_call* ~ EOI }
+program = _{ SOI ~ func_call ~ EOI }
 
 expr = { 
 	 float 

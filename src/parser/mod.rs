@@ -238,7 +238,7 @@ mod tests {
     }
 
     mod expr {
-        use std::fmt::{Debug, Display};
+        use std::{fmt::{Debug, Display}, fs};
 
         use pest::iterators::Pair;
 
@@ -254,7 +254,11 @@ mod tests {
             inner: Box<AST<SimpleExpr>>,
         }
 
-        impl Expr for SimpleExpr {}
+        impl Expr for SimpleExpr {
+            fn pretty_print(&self) -> text_trees::StringTreeNode {
+                todo!()
+            }
+        }
 
         impl Display for SimpleExpr {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -274,7 +278,10 @@ mod tests {
             if depth == 0 {
                 return prop_oneof![
                     any::<u64>().prop_map(AST::Int).prop_map(SimpleExpr::new),
-                    any::<f64>().prop_map(|f| f.abs()).prop_map(AST::Float).prop_map(SimpleExpr::new),
+                    any::<f64>()
+                        .prop_map(|f| f.abs())
+                        .prop_map(AST::Float)
+                        .prop_map(SimpleExpr::new),
                     "[^\"]{0,100}"
                         .prop_map(AST::String)
                         .prop_map(SimpleExpr::new),
@@ -286,7 +293,10 @@ mod tests {
 
             let leaf = prop_oneof![
                 any::<u64>().prop_map(AST::Int).prop_map(SimpleExpr::new),
-                any::<f64>().prop_map(|f| f.abs()).prop_map(AST::Float).prop_map(SimpleExpr::new),
+                any::<f64>()
+                    .prop_map(|f| f.abs())
+                    .prop_map(AST::Float)
+                    .prop_map(SimpleExpr::new),
                 "[^\"]{0,100}"
                     .prop_map(AST::String)
                     .prop_map(SimpleExpr::new),
@@ -314,14 +324,20 @@ mod tests {
                 return Just(FuncCall::Empty).boxed();
             }
 
-            prop_oneof![
+            let leaf = prop_oneof![
                 Just(FuncCall::Empty),
                 (
                     arb_id(),
                     prop::collection::vec(arb_argument(depth - 1), 0..4)
                 )
-                    .prop_map(|(id, args)| FuncCall::Call(NonEmptyFuncCall::new(id, args)))
-            ].boxed()
+                    .prop_map(|(id, args)| FuncCall::Single(NonEmptyFuncCall::new(id, args)))
+            ];
+
+            leaf.prop_recursive(depth - 1, 25, 5, |inner| {
+                prop::collection::vec(inner.clone(), 0..5)
+                    .prop_map(FuncCall::Multi)
+            })
+            .boxed()
         }
 
         fn arb_argument(depth: u32) -> impl Strategy<Value = Argument<SimpleExpr>> {
@@ -362,7 +378,10 @@ mod tests {
             }
         }
 
-        fn check_argument_parse(arg: Argument<SimpleExpr>, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
+        fn check_argument_parse(
+            arg: Argument<SimpleExpr>,
+            pair: Pair<'_, Rule>,
+        ) -> Result<(), TestCaseError> {
             let mut pairs = pair.into_inner();
             let pair = pairs.next().unwrap();
             if pair.as_rule() == Rule::expr {
@@ -391,11 +410,15 @@ mod tests {
             Ok(())
         }
 
-        fn check_funccall_parse(func: FuncCall<SimpleExpr>, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
+        fn check_funccall_parse(
+            func: FuncCall<SimpleExpr>,
+            pair: Pair<'_, Rule>,
+        ) -> Result<(), TestCaseError> {
             let pairs_count = pair.clone().into_inner().count();
             if pairs_count == 0 {
                 match func {
                     FuncCall::Empty => {}
+                    FuncCall::Multi(items) if items.len() == 0 => {}
                     _ => {
                         prop_assert!(false);
                     }
@@ -407,13 +430,30 @@ mod tests {
             let mut pairs = pair.into_inner();
             let first_pair = pairs.next().unwrap();
 
-            if first_pair.as_rule() == Rule::identifier {
-                let FuncCall::Call(func) = func else {
+            if first_pair.as_rule() == Rule::func_call {
+                let FuncCall::Multi(funcs) = func else {
                     prop_assert!(false);
                     return Ok(());
                 };
 
-                for arg in func.args {
+                check_funccall_parse(funcs[0].clone(), first_pair)?;
+
+                for call in &funcs[1..] {
+                    let p = pairs.next().unwrap();
+                    check_funccall_parse(call.clone(), p)?;
+                }
+
+                prop_assert!(pairs.next().is_none());
+                return Ok(());
+            }
+
+            if first_pair.as_rule() == Rule::identifier {
+                let FuncCall::Single(single) = func else {
+                    prop_assert!(false);
+                    return Ok(());
+                };
+
+                for arg in single.args {
                     let p = pairs.next().unwrap();
                     check_argument_parse(arg, p)?;
                 }
@@ -422,7 +462,7 @@ mod tests {
                 return Ok(());
             }
 
-            prop_assert!(false);
+            prop_assert!(false, "actual: {first_pair}");
             Ok(())
         }
 

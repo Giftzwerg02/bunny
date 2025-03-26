@@ -9,3 +9,4 @@ const_format = "0.2.34"
 pest = { version = "2.7.15", features = ["miette-error", "pretty-print"] }
 pest_derive = "2.7.15"
 proptest = "1.6.0"
+text_trees = "0.1.2"

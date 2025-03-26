@@ -1,5 +1,7 @@
 use std::fmt::{Debug, Display};
 
+use text_trees::StringTreeNode;
+
 use super::Expr;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,11 +43,31 @@ impl Display for Id {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FuncCall<TExpr: Expr> {
     Empty,
-    Call(NonEmptyFuncCall<TExpr>),
+    Single(NonEmptyFuncCall<TExpr>),
+    Multi(Vec<FuncCall<TExpr>>),
+}
+
+impl<TExpr: Expr> FuncCall<TExpr> {
+    pub fn pretty_print(&self) -> StringTreeNode {
+        match self {
+            FuncCall::Empty => StringTreeNode::new("empty funccall".to_string()),
+            FuncCall::Single(non_empty_func_call) => {
+                let mut childs = vec![StringTreeNode::new("id".to_string())];
+                for arg in non_empty_func_call.args.clone() {
+                    childs.push(arg.pretty_print());
+                }
+                StringTreeNode::with_child_nodes("single funccall".to_string(), childs.into_iter())
+            }
+            FuncCall::Multi(func_calls) => StringTreeNode::with_child_nodes(
+                "multi funccall".to_string(),
+                func_calls.into_iter().map(|f| f.pretty_print()),
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct NonEmptyFuncCall<TExpr: Clone + Debug + PartialEq> {
+pub struct NonEmptyFuncCall<TExpr: Expr> {
     pub id: Id,
     pub args: Vec<Argument<TExpr>>,
 }
@@ -56,14 +78,27 @@ impl<TExpr: Expr> NonEmptyFuncCall<TExpr> {
     }
 }
 
-impl <TExpr: Expr> Display for FuncCall<TExpr> {
+impl<TExpr: Expr> Display for FuncCall<TExpr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FuncCall::Empty => write!(f, "()"),
-            FuncCall::Call(func) => {
-                let str = func.args.iter().map(|arg| format!("{arg}")).collect::<Vec<_>>();
-                let str = str.join(" ");
-                write!(f, "( {} {str} )", func.id.value)
+            FuncCall::Single(func) => {
+                let args = func
+                    .args
+                    .iter()
+                    .map(|arg| format!("{arg}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+
+                write!(f, "( {} {args} )", func.id.value)
+            }
+            FuncCall::Multi(funcs) => {
+                let str = funcs
+                    .iter()
+                    .map(|f| format!("{f}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                write!(f, "( {str} )")
             }
         }
     }
@@ -75,10 +110,29 @@ pub enum Argument<TExpr> {
     Unnamed(TExpr),
 }
 
+impl<TExpr: Expr> Argument<TExpr> {
+    pub fn pretty_print(&self) -> StringTreeNode {
+        match self {
+            Argument::Named(named_argument) => StringTreeNode::with_child_nodes(
+                "arg:named".to_string(),
+                vec![
+                    StringTreeNode::new("id".to_string()),
+                    named_argument.expr.pretty_print(),
+                ]
+                .into_iter(),
+            ),
+            Argument::Unnamed(expr) => StringTreeNode::with_child_nodes(
+                "arg:unnamed".to_string(),
+                vec![expr.pretty_print()].into_iter(),
+            ),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct NamedArgument<TExpr> {
     pub id: Id,
-    pub expr: TExpr
+    pub expr: TExpr,
 }
 
 impl<TExpr> NamedArgument<TExpr> {
@@ -87,7 +141,7 @@ impl<TExpr> NamedArgument<TExpr> {
     }
 }
 
-impl <TExpr: Display> Display for Argument<TExpr> {
+impl<TExpr: Display> Display for Argument<TExpr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Argument::Named(named) => write!(f, "{}: {}", named.id, named.expr),

@@ -4,6 +4,7 @@ pub mod parser;
 
 use std::fs::{self};
 
+use ast::{filter_comments, parsed_expr_pass, Expr};
 #[allow(unused)]
 use clap::Parser as ClapParser;
 #[allow(unused)]
@@ -13,6 +14,10 @@ use pest::Parser;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = fs::read_to_string("src/parser/examples/simple.bny")?;
-    BunnyParser::parse(Rule::program, &input)?;
+    let mut pair = BunnyParser::parse(Rule::program, &input)?
+        .filter(filter_comments);
+    let pair = pair.next().expect("no program :(");
+    let ast = parsed_expr_pass(pair);
+    println!("{}", ast.pretty_print());
     Ok(())
 }
