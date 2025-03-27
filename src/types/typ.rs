@@ -36,6 +36,28 @@ impl Type {
             Type::IntArray | Type::FloatArray | Type::StringArray | Type::ColorArray | Type::OpaqueArray
         )
     }
+
+    pub fn to_array_type(&self) -> Type {
+        match self {
+            Type::Int => Type::IntArray,
+            Type::Float => Type::FloatArray,
+            Type::String => Type::StringArray,
+            Type::Color => Type::ColorArray,
+            Type::Opaque => Type::OpaqueArray,
+            _ => panic!("Tried to convert {:?} to array type", self),
+        }
+    }
+
+    pub fn to_dict_type(&self) -> Type {
+        match self {
+            Type::Int => Type::IntDict,
+            Type::Float => Type::FloatDict,
+            Type::String => Type::StringDict,
+            Type::Color => Type::ColorDict,
+            Type::Opaque => Type::OpaqueDict,
+            _ => panic!("Tried to convert {:?} to dict type", self),
+        }
+    }
 }
 
 impl Display for Type {

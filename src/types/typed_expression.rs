@@ -1,23 +1,23 @@
 use std::fmt::{Display, Formatter};
 use text_trees::StringTreeNode;
-use crate::ast::{Expr, ParsedExpr, AST};
+use crate::ast::{Expr, ScopedExpr, AST};
 use crate::types::typ::Type;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedExpr<'a> {
     pub(crate) value: Box<AST<TypedExpr<'a>>>,
-    pub(crate) expr: ParsedExpr<'a>,
+    pub(crate) inner: ScopedExpr<'a>,
     pub(crate) typ: Type
 }
 impl Display for TypedExpr<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}) {}", self.typ, self.expr)
+        write!(f, "({}) {}", self.typ, self.inner)
     }
 }
 
 impl Expr for TypedExpr<'_> {
     fn pretty_print(&self) -> StringTreeNode {
-        let parsed_expr = self.expr.pretty_print();
+        let parsed_expr = self.inner.pretty_print();
         let data = format!("({}) {}", self.typ, parsed_expr.data());
 
         match &*self.value {
