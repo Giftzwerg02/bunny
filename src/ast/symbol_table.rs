@@ -1,13 +1,9 @@
 use std::{collections::HashMap, fmt::Display};
+use crate::ast::expressions::Symbol;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SymbolTable<TExpr: Clone> {
     inner: HashMap<Symbol, TExpr>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Symbol {
-    id: String,
 }
 
 impl <TExpr: Display + Clone> SymbolTable<TExpr> {
@@ -23,13 +19,5 @@ impl <TExpr: Display + Clone> SymbolTable<TExpr> {
 
     pub fn contains(&self, sym: &Symbol) -> bool {
         self.inner.contains_key(sym)
-    }
-}
-
-impl Symbol {
-    pub fn new(id: String) -> Self {
-        Self {
-            id
-        }
     }
 }

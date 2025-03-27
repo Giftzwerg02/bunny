@@ -23,18 +23,18 @@ impl Display for Color {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Id {
-    value: String,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Symbol {
+    pub value: String,
 }
 
-impl Id {
+impl Symbol {
     pub fn new(value: String) -> Self {
         Self { value }
     }
 }
 
-impl Display for Id {
+impl Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)
     }
@@ -46,6 +46,7 @@ pub enum FuncCall<TExpr: Expr> {
     Single(NonEmptyFuncCall<TExpr>),
     Multi(Vec<FuncCall<TExpr>>),
 }
+
 
 impl<TExpr: Expr> FuncCall<TExpr> {
     pub fn pretty_print(&self) -> StringTreeNode {
@@ -68,12 +69,12 @@ impl<TExpr: Expr> FuncCall<TExpr> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NonEmptyFuncCall<TExpr: Expr> {
-    pub id: Id,
+    pub id: Symbol,
     pub args: Vec<Argument<TExpr>>,
 }
 
 impl<TExpr: Expr> NonEmptyFuncCall<TExpr> {
-    pub fn new(id: Id, args: Vec<Argument<TExpr>>) -> Self {
+    pub fn new(id: Symbol, args: Vec<Argument<TExpr>>) -> Self {
         Self { id, args }
     }
 }
@@ -131,12 +132,12 @@ impl<TExpr: Expr> Argument<TExpr> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NamedArgument<TExpr> {
-    pub id: Id,
+    pub id: Symbol,
     pub expr: TExpr,
 }
 
 impl<TExpr> NamedArgument<TExpr> {
-    pub fn new(id: Id, expr: TExpr) -> Self {
+    pub fn new(id: Symbol, expr: TExpr) -> Self {
         Self { id, expr }
     }
 }

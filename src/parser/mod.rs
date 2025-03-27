@@ -244,7 +244,7 @@ mod tests {
 
         use crate::ast::{
             AST, Expr,
-            expressions::{Argument, Color, FuncCall, Id, NamedArgument, NonEmptyFuncCall},
+            expressions::{Argument, Color, FuncCall, Symbol, NamedArgument, NonEmptyFuncCall},
         };
 
         use super::*;
@@ -357,7 +357,7 @@ mod tests {
             any::<(u8, u8, u8)>().prop_map(|(r, g, b)| Color::new(r, g, b))
         }
 
-        fn arb_id() -> impl Strategy<Value = Id> {
+        fn arb_id() -> impl Strategy<Value =Symbol> {
             const LETTER: &str = "a-zA-Z";
             const DIGIT: &str = "0-9";
             const SPECIAL: &str = "\\+\\-\\*/\\$\\^§%&=`<>\\|_@~";
@@ -365,7 +365,7 @@ mod tests {
             const IDENTIFIER_REGEX: &str =
                 formatcp!("[{LETTER}{SPECIAL}][{LETTER}{SPECIAL}{DIGIT}]*");
 
-            IDENTIFIER_REGEX.prop_map(Id::new)
+            IDENTIFIER_REGEX.prop_map(Symbol::new)
         }
 
         proptest! {
