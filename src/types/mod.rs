@@ -1,5 +1,5 @@
-mod typ;
-mod typed_expression;
+pub mod typ;
+pub mod typed_expression;
 
 use crate::ast::{Expr, ScopedExpr, AST};
 use std::fmt::Display;

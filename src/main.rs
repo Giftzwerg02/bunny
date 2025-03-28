@@ -1,6 +1,10 @@
 pub mod ast;
 pub mod cli;
 pub mod parser;
+mod library;
+
+mod types;
+mod runner;
 
 use std::fs::{self};
 
