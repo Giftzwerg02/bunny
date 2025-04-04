@@ -1,22 +1,23 @@
-use std::collections::HashMap;
+use im::HashMap;
+use im::Vector;
 use crate::ast::expressions::Color;
 use crate::types::typ::Type;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Int(u64),
+    Int(i64),
     Float(f64),
     String(String),
-    Color(u32),
+    Color(ColorValue),
     Opaque,
 
-    IntArray(Vec<u64>),
-    FloatArray(Vec<f64>),
-    StringArray(Vec<String>),
-    ColorArray(Vec<u32>),
+    IntArray(Vector<i64>),
+    FloatArray(Vector<f64>),
+    StringArray(Vector<String>),
+    ColorArray(Vector<ColorValue>),
     OpaqueArray,
 
-    IntDict(HashMap<String, u64>),
+    IntDict(HashMap<String, i64>),
     FloatDict(HashMap<String, f64>),
     StringDict(HashMap<String, String>),
     ColorDict(HashMap<String, Color>),
@@ -45,5 +46,18 @@ impl Value {
             Value::ColorDict(_) => Type::ColorDict,
             Value::OpaqueDict => Type::OpaqueDict,
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColorValue {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+impl ColorValue {
+    pub fn new(r: u8, g: u8, b: u8) -> ColorValue {
+        ColorValue { r, g, b }
     }
 }
