@@ -6,9 +6,8 @@ pub mod symbol_table;
 use std::fmt::{Debug, Display};
 use text_trees::StringTreeNode;
 
-use expressions::{Argument, Color, FuncCall, Symbol, NamedArgument, NonEmptyFuncCall};
+use expressions::{Argument, Color, FuncCall, NamedArgument, NonEmptyFuncCall, Symbol};
 use pest::iterators::Pair;
-use symbol_table::SymbolTable;
 
 use crate::parser::Rule;
 
@@ -22,7 +21,7 @@ pub enum AST<TExpr: Expr> {
     Float(f64),
     String(String),
     Color(Color),
-    Id(Symbol),
+    Symbol(Symbol),
     FuncCall(FuncCall<TExpr>),
     Argument(Argument<TExpr>),
     Array(Vec<TExpr>),
@@ -59,8 +58,8 @@ impl<TExpr: Expr> Display for AST<TExpr> {
             AST::Color(color) => {
                 write!(f, "{color}")
             }
-            AST::Id(id) => write!(f, "{id}"),
             AST::Argument(argument) => write!(f, "{argument}"),
+            AST::Symbol(symbol) => write!(f, "{symbol}"),
         }
     }
 }
@@ -72,6 +71,15 @@ pub struct ParsedExpr<'a> {
     pub token: Pair<'a, Rule>,
 }
 
+
+pub struct ASTExpr {
+    ast: AST<>
+}
+
+
+TypedExpr ( ScopedExpr ( ParsedExpr ( AST ) ) );
+
+
 impl Expr for ParsedExpr<'_> {
     fn pretty_print(&self) -> StringTreeNode {
         match &*self.value {
@@ -79,42 +87,23 @@ impl Expr for ParsedExpr<'_> {
             AST::Float(_) => StringTreeNode::new("float".to_string()),
             AST::String(_) => StringTreeNode::new("string".to_string()),
             AST::Color(_color) => StringTreeNode::new("color".to_string()),
-            AST::Id(_id) => StringTreeNode::new("id".to_string()),
+            AST::Symbol(_id) => StringTreeNode::new("id".to_string()),
             AST::FuncCall(func_call) => func_call.pretty_print(),
             AST::Argument(argument) => argument.pretty_print(),
             AST::Array(items) => StringTreeNode::with_child_nodes(
                 "array".to_string(),
-                items.into_iter().map(|i| i.pretty_print())
+                items.into_iter().map(|i| i.pretty_print()),
             ),
             AST::Dict(items) => StringTreeNode::with_child_nodes(
                 "dict".to_string(),
                 items.into_iter().map(|i| {
                     StringTreeNode::with_child_nodes(
                         "entry".to_string(),
-                        vec![i.0.pretty_print(), i.1.pretty_print()].into_iter()
+                        vec![i.0.pretty_print(), i.1.pretty_print()].into_iter(),
                     )
-                })
+                }),
             ),
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ScopedExpr<'a> {
-    syms: SymbolTable<ScopedExpr<'a>>,
-    value: Box<AST<ScopedExpr<'a>>>,
-    inner: ParsedExpr<'a>,
-}
-
-impl Expr for ScopedExpr<'_> {
-    fn pretty_print(&self) -> StringTreeNode {
-        todo!()
-    }
-}
-
-impl Display for ScopedExpr<'_> {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
     }
 }
 
@@ -132,8 +121,6 @@ impl Display for ParsedExpr<'_> {
         write!(f, "{}", self.value)
     }
 }
-
-// trait Pass<Src>: From<Src> + Into<Src> {}
 
 pub fn filter_comments(pair: &Pair<'_, Rule>) -> bool {
     match pair.as_rule() {
@@ -187,52 +174,43 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> ParsedExpr<'a> {
         }
         Rule::func_call => {
             let text = &text[1..len];
-            let func_call = if text.trim() == "" {
-                FuncCall::Empty
-            } else {
-                let mut pairs = pair.clone().into_inner().filter(filter_comments);
-                let next = pairs.next().expect(&format!("funccall id {pair}"));
+            if text.trim() == "" {
+                panic!("empty funccall not allowed");
+            }
 
-                match next.as_rule() {
-                    Rule::identifier => {
-                        let AST::Id(id) = *parsed_expr_pass(next.clone()).value else {
-                            panic!("funccall id {}", next.as_str());
-                        };
+            let mut pairs = pair.clone().into_inner().filter(filter_comments);
+            let next = pairs.next().expect(&format!("funccall id {pair}"));
 
-                        let args = pairs
-                            .map(|arg| {
-                                let AST::Argument(arg) = *parsed_expr_pass(arg).value else {
-                                    panic!("funccall arg");
-                                };
+            let func_call = match next.as_rule() {
+                Rule::identifier => {
+                    let id_expr = parsed_expr_pass(next.clone());
+                    let args = pairs
+                        .map(parsed_expr_pass)
+                        .collect();
 
-                                arg
-                            })
-                            .collect();
+                    let f = NonEmptyFuncCall::new(id_expr, args);
+                    FuncCall::Single(f)
+                }
+                Rule::func_call => {
+                    let mut nested: Vec<FuncCall<ParsedExpr>> = vec![];
 
-                        let f = NonEmptyFuncCall::new(id, args);
-                        FuncCall::Single(f)
-                    },
-                    Rule::func_call => {
-                        let mut nested: Vec<FuncCall<ParsedExpr>> = vec![];
+                    let AST::FuncCall(f) = *parsed_expr_pass(next).value else {
+                        panic!("funccall* f");
+                    };
 
-                        let AST::FuncCall(f) = *parsed_expr_pass(next).value else {
+                    nested.push(f);
+
+                    for pair in pairs {
+                        let AST::FuncCall(f) = *parsed_expr_pass(pair).value else {
                             panic!("funccall* f");
                         };
 
                         nested.push(f);
+                    }
 
-                        for pair in pairs {
-                            let AST::FuncCall(f) = *parsed_expr_pass(pair).value else {
-                                panic!("funccall* f");
-                            };
-
-                            nested.push(f);
-                        }
-                    
-                        FuncCall::Multi(nested)
-                    },
-                    _ => panic!("illegal funccall")
+                    FuncCall::Multi(nested)
                 }
+                _ => panic!("illegal funccall"),
             };
             ParsedExpr::new(AST::FuncCall(func_call), pair)
         }
@@ -243,10 +221,7 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> ParsedExpr<'a> {
 
             let argument = match second {
                 Some(second) => {
-                    let AST::Id(id) = *parsed_expr_pass(first).value else {
-                        panic!("argument name");
-                    };
-
+                    let id = parsed_expr_pass(first);
                     let expr = parsed_expr_pass(second);
                     Argument::Named(NamedArgument::new(id, expr))
                 }
@@ -260,7 +235,7 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> ParsedExpr<'a> {
         }
         Rule::identifier => {
             let id = Symbol::new(text.to_string());
-            ParsedExpr::new(AST::Id(id), pair)
+            ParsedExpr::new(AST::Symbol(id), pair)
         }
         Rule::int => {
             let int = text.parse().expect("int");
@@ -285,8 +260,3 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> ParsedExpr<'a> {
         _ => panic!("invalid pair {pair}"),
     }
 }
-
-// fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>, parent: &ParsedExpr<'a>) -> ParsedExpr<'a> {
-// fn named_expr_pass<'a>(element: ParsedExpr<'a>, parent: &NamedExpr<'a>) -> NamedExpr<'a> {
-//
-// }
