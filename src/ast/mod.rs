@@ -315,7 +315,7 @@ impl<I: StageInfo> PrettyPrintable for FuncCallSingle<I> {
 
         children.push(self.info.pretty_print());
 
-        StringTreeNode::with_child_nodes("func_call_single".to_string(), children.into_iter())
+        StringTreeNode::with_child_nodes(format!("func_call_single: {}", self.info).to_string(), children.into_iter())
     }
 }
 
