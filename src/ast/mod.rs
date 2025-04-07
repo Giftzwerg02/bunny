@@ -23,6 +23,46 @@ pub enum Expr<I: StageInfo> {
     Dict(Dict<I>),
 }
 
+impl<I: StageInfo> Expr<I> {
+    pub fn name(&self) -> String {
+        match self {
+            Expr::Int(_) => format!("int"),
+            Expr::Float(_) => format!("float"),
+            Expr::String(_) => format!("string"),
+            Expr::Color(_) => format!("color"),
+            Expr::Symbol(_) => format!("symbol"),
+            Expr::FuncCall(func_call) => {
+                match func_call {
+                    FuncCall::Single(f) => format!("func::single({})", f.id),
+                    FuncCall::List(f) => format!("func::list({})", f.calls.len()),
+                }
+            },
+            Expr::Argument(argument) => {
+                match argument {
+                    Argument::Positional(_) => format!("argument::pos"),
+                    Argument::Named(_) => format!("argument::named"),
+                }
+            },
+            Expr::Array(_) => format!("array"),
+            Expr::Dict(_) => format!("dict"),
+        }
+    }
+
+    pub fn info(&self) -> &I {
+        match self {
+            Expr::Int(int) => &int.info,
+            Expr::Float(float) => &float.info,
+            Expr::String(str) => &str.info,
+            Expr::Color(color) => &color.info,
+            Expr::Symbol(symbol) => &symbol.info,
+            Expr::FuncCall(func_call) => func_call.info(),
+            Expr::Argument(argument) => argument.info(),
+            Expr::Array(array) => &array.info,
+            Expr::Dict(dict) => &dict.info,
+        }
+    }
+}
+
 impl <I: StageInfo> PrettyPrintable for Expr<I> {
     fn pretty_print(&self) -> StringTreeNode {
         match self {
@@ -201,6 +241,15 @@ pub enum FuncCall<I: StageInfo> {
     List(FuncCallList<I>),
 }
 
+impl<I: StageInfo> FuncCall<I> {
+    pub fn info(&self) -> &I {
+        match self {
+            FuncCall::Single(func_call_single) => &func_call_single.info,
+            FuncCall::List(func_call_list) => &func_call_list.info,
+        }
+    }
+}
+
 impl<I: StageInfo> PrettyPrintable for FuncCall<I> {
     fn pretty_print(&self) -> StringTreeNode {
         match self {
@@ -299,6 +348,15 @@ impl <I: StageInfo> Display for FuncCall<I> {
 pub enum Argument<I: StageInfo> {
     Positional(PositionalArgument<I>),
     Named(NamedArgument<I>),
+}
+
+impl<I: StageInfo> Argument<I> {
+    pub fn info(&self) -> &I {
+        match self {
+            Argument::Positional(positional_argument) => &positional_argument.info,
+            Argument::Named(named_argument) => &named_argument.info,
+        }
+    }
 }
 
 impl<I: StageInfo> PrettyPrintable for Argument<I> {

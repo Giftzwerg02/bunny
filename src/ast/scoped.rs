@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use text_trees::StringTreeNode;
 
-use crate::ast::{Argument, FuncCallSingle, PositionalArgument};
+use crate::{ast::{Argument, FuncCallSingle, PositionalArgument}, timed};
 
 use super::{
     Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallList, Int, NamedArgument,
@@ -13,7 +13,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct ScopedStageInfo<'a> {
     inner: ParsedStageInfo<'a>,
-    syms: SymbolTable<ScopedStageInfo<'a>>,
+    pub syms: SymbolTable<ScopedStageInfo<'a>>,
 }
 
 impl<'a> ScopedStageInfo<'a> {
@@ -38,7 +38,13 @@ impl<'a> StageInfo for ScopedStageInfo<'a> {}
 
 #[derive(Clone, Debug)]
 pub struct SymbolTable<I: StageInfo> {
-    inner: HashMap<String, Expr<I>>,
+    pub inner: HashMap<String, Expr<I>>,
+}
+
+impl<I: StageInfo> SymbolTable<I> {
+    fn size_bytes(&self) -> usize {
+        std::mem::size_of::<Expr<I>>() * self.inner.capacity()
+    }
 }
 
 impl<I: StageInfo> Display for SymbolTable<I> {
@@ -143,7 +149,7 @@ pub fn scoped_expr_pass<'a>(
                         };
 
                         let mut inner_syms = syms.clone();
-                        let func_id = Symbol::new(new_id.value, info(new_id.info, syms.clone()));
+                        let func_id = Symbol::new(new_id.value.clone(), info(new_id.info.clone(), syms.clone()));
                         inner_syms.insert(func_id.clone().value, Expr::Symbol(func_id.clone()));
 
                         if func_call_single.args.len() == 2 {
@@ -152,22 +158,23 @@ pub fn scoped_expr_pass<'a>(
                                 panic!("invalid ast");
                             };
 
-                            let new_call = scoped_expr_pass(*new_call.clone().value, &inner_syms);
+                            let new_call = scoped_expr_pass(timed!(*new_call.clone().value), &inner_syms);
+                            //let new_call = Expr::Int(Int::new(5, info(func_call_single.args[1].info().clone(), inner_syms.clone())));
 
-                            new_syms.insert(func_id.value, new_call);
-
-                            dbg!("converting def constant");
-                            let mapped_args = func_call_single
-                                .args
-                                .into_iter()
-                                .map(|arg| scoped_expr_pass(Expr::Argument(arg), &inner_syms))
+                            new_syms.insert(func_id.value, timed!(new_call.clone()));
+                            let mapped_arg0 = argument_symbol(new_id, &inner_syms);
+                            let mapped_arg1 = Expr::Argument(Argument::Positional(PositionalArgument::new(
+                                new_call.clone(),
+                                info(func_call_single.args[1].info().clone(), inner_syms.clone())
+                            )));
+                            let mapped_args = vec![mapped_arg0, mapped_arg1].into_iter()
                                 .map(|arg| {
                                     let Expr::Argument(arg) = arg else {
                                         panic!("invalid ast");
                                     };
                                     arg
                                 })
-                                .collect::<Vec<_>>();
+                                .collect();
 
                             let ret = FuncCall::Single(FuncCallSingle::new(
                                 Symbol::new(
@@ -180,6 +187,7 @@ pub fn scoped_expr_pass<'a>(
 
                             Expr::FuncCall(ret)
                         } else if func_call_single.args.len() == 3 {
+                            panic!("not here");
                             let func_args = func_call_single.args[1].clone();
                             let Argument::Positional(func_args) = func_args else {
                                 panic!("invalid ast");
@@ -219,7 +227,6 @@ pub fn scoped_expr_pass<'a>(
 
                             new_syms.insert(func_id.value, new_call);
 
-                            dbg!("converting def function");
                             let mapped_args = func_call_single
                                 .args
                                 .into_iter()
@@ -259,29 +266,29 @@ pub fn scoped_expr_pass<'a>(
                         //     }
                         // }
 
-                        dbg!("converting normal function call");
-                        let mapped_args = func_call_single
-                            .args
-                            .into_iter()
-                            .map(|arg| scoped_expr_pass(Expr::Argument(arg), &syms))
-                            .map(|arg| {
-                                let Expr::Argument(arg) = arg else {
-                                    panic!("invalid ast");
-                                };
-                                arg
-                            })
-                            .collect::<Vec<_>>();
-
-                        let ret = FuncCall::Single(FuncCallSingle::new(
-                            Symbol::new(
-                                func_call_single.id.value,
-                                info(func_call_single.id.info, syms.clone()),
-                            ),
-                            mapped_args,
-                            info(func_call_single.info, syms.clone()),
-                        ));
-
-                        Expr::FuncCall(ret)
+                        // let mapped_args = func_call_single
+                        //     .args
+                        //     .into_iter()
+                        //     .map(|arg| scoped_expr_pass(Expr::Argument(arg), &syms))
+                        //     .map(|arg| {
+                        //         let Expr::Argument(arg) = arg else {
+                        //             panic!("invalid ast");
+                        //         };
+                        //         arg
+                        //     })
+                        //     .collect::<Vec<_>>();
+                        //
+                        // let ret = FuncCall::Single(FuncCallSingle::new(
+                        //     Symbol::new(
+                        //         func_call_single.id.value,
+                        //         info(func_call_single.id.info, syms.clone()),
+                        //     ),
+                        //     mapped_args,
+                        //     info(func_call_single.info, syms.clone()),
+                        // ));
+                        
+                        Expr::FuncCall(FuncCall::List(FuncCallList::new(vec![], info(func_call_single.id.info, syms.clone()))))
+                        // Expr::FuncCall(ret)
                     }
                 }
                 FuncCall::List(func_call_list) => {

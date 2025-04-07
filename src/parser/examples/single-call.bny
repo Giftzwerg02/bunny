@@ -1,6 +1,21 @@
 (
-	(def hi (x y) (
-		(+ x y)
+	(def hi (
+		(def bla (
+			(def blub (
+				(def a1 (
+					(def a2 (
+						(def a3 (
+							(+ 1 2)
+						))
+					))
+				))
+			))
+		))
 	))
-	(hi 3 "test")
+	;(def sussy (a b c) (
+	;	(def blub (
+	;		+ 6 2
+	;	))
+	;))
+	(hi)
 )
