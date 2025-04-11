@@ -61,6 +61,66 @@ impl<I: StageInfo> Expr<I> {
             Expr::Dict(dict) => &dict.info,
         }
     }
+
+    pub fn map_info<F, O: StageInfo>(self, mapping: F) -> Expr<F>
+        where F: Fn(Expr<I>, I) -> O
+    {
+        match self {
+            Expr::Int(Int { value, info }) =>
+                Expr::Int(Int::new(*value, mapping(self.clone(), info))),
+
+            Expr::Float(Float { value, info }) =>
+                Expr::Float(Float::new(*value, mapping(self.clone(), info))),
+
+            Expr::String(Str { value, info }) =>
+                Expr::String(Str::new(value, mapping(self.clone(), info))),
+
+            Expr::Color(Color { r, g, b, info }) =>
+                Expr::Color(Color::new(r, g, b, mapping(self.clone(), info))),
+
+            Expr::Symbol(Symbol { value, info }) =>
+                Expr::Symbol(Symbol::new(value, mapping(self.clone(), info))),
+
+            Expr::FuncCall(FuncCall::Single(FuncCallSingle { id, args, info })) =>
+                Expr::FuncCall(FuncCall::Single(FuncCallSingle::new(id, args, mapping(self.clone(), info)))),
+
+            Expr::FuncCall(FuncCall::List(FuncCallList { calls, info })) => {
+                let mapped_calls = calls.into_iter()
+                    .map(|call| Expr::FuncCall(call).map_info(mapping))
+                    .collect::<Vec<FuncCall<O>>>();
+
+                let call_list = FuncCallList::new(mapped_calls, mapping(self.clone(), info));
+
+                Expr::FuncCall(FuncCall::List(call_list))
+            },
+
+            Expr::Argument(Argument::Named(NamedArgument { name, value, info })) =>
+                Expr::Argument(Argument::Named(NamedArgument { name, value, info: mapping(self.clone(), info) })),
+
+            Expr::Argument(Argument::Positional(PositionalArgument { value, info })) =>
+                Expr::Argument(Argument::Positional(PositionalArgument {  value, info: mapping(self.clone(), info) })),
+
+            Expr::Array(Array { value, info }) => {
+                let mapped_elems = value.into_iter()
+                    .map(|elem| elem.map_info(mapping))
+                    .collect::<Vec<Expr<O>>>();
+
+                Expr::Array(Array::new(mapped_elems, mapping(self.clone(), info)))
+            },
+
+            Expr::Dict(Dict { value, info }) => {
+                let mapped_entries = value.into_iter()
+                    .map(|DictEntry { key, value, info}| DictEntry {
+                        key: key.map_info(mapping),
+                        value: value.map_info(mapping),
+                        info: mapping(self.clone(), info)
+                    })
+                    .collect::<Vec<DictEntry<O>>>();
+
+                Expr::Dict(Dict::new(mapped_entries, mapping(self.clone(), info)))
+            }
+        }
+    }
 }
 
 impl <I: StageInfo> PrettyPrintable for Expr<I> {

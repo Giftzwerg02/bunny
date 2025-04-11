@@ -12,7 +12,7 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub struct ScopedStageInfo<'a> {
-    inner: ParsedStageInfo<'a>,
+    pub inner: ParsedStageInfo<'a>,
     pub syms: SymbolTable<ScopedStageInfo<'a>>,
 }
 

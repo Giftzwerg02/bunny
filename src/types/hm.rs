@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::cmp::min;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::rc::Rc;
 
@@ -52,7 +53,7 @@ pub struct PolyType {
     pub typ: Type,
 }
 
-struct InferenceState {
+pub struct InferenceState {
     current_level: Level,
     current_typevar: TypeVarId
 }
@@ -271,6 +272,43 @@ impl Type {
 
             Type::Fn(a, b) =>
                 Self::occurs(a_id, a_level, a) || Self::occurs(a_id, a_level, b),
+        }
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::TVar(tv) =>
+                write!(f, "{}", tv),
+
+            Type::Basic(name) =>
+                write!(f, "{}", name),
+
+            Type::TApp(name, vars) => {
+              let vars_str = vars
+                  .iter()
+                  .map(|var| var.to_string())
+                  .collect::<Vec<String>>()
+                  .join(" ");
+
+                write!(f, "{}[{}]", name, vars_str)
+            },
+
+            Type::Fn(arg, ret) =>
+                write!(f, "{} -> {}", arg, ret)
+        }
+    }
+}
+
+impl Display for TypeVar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeVar::Bound(t) =>
+                write!(f, "<{}>", t),
+
+            TypeVar::Unbound(tv_id, _) =>
+                write!(f, "<'{}>", tv_id)
         }
     }
 }

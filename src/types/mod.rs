@@ -1,190 +1,211 @@
-pub mod typ;
-pub mod typed_expression;
+mod typed;
+mod hm;
 
-use crate::ast::{Expr, ScopedExpr, AST};
-use std::fmt::Display;
-use proptest::char::range;
-use crate::ast::expressions::{Argument, Color, FuncCall, NamedArgument, Symbol};
-use crate::ast::symbol_table::SymbolTable;
-use crate::types::typ::Type;
-use crate::types::typed_expression::TypedExpr;
+use im::HashMap;
+use crate::ast::{Argument, Array, Dict, DictEntry, Expr, FuncCall, FuncCallSingle, Symbol};
+use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
+use crate::types::hm::{InferenceState, PolyType, Type};
+use crate::types::typed::TypedStageInfo;
 
-pub fn typecheck(parsed_expr: ScopedExpr, symbols: &SymbolTable<TypedExpr>) -> TypedExpr {
-    match &*parsed_expr.value {
-        AST::Int(value) =>
-            create_int(*value, parsed_expr),
+pub fn typecheck_pass<'a>(
+    expr: Expr<ScopedStageInfo>,
+    symbol_table: SymbolTable<TypedStageInfo>
+) -> Expr<TypedStageInfo> {
+    let mut inference = InferenceState::new();
+    let type_assumtpions = HashMap::new();
 
-        AST::Float(value) =>
-            create_float(*value, parsed_expr),
+    // TODO This is inefficient as hell, isn't it? It visits all nodes n^2 times
+    expr.map_info::<
+        dyn Fn(Expr<ScopedStageInfo>, ScopedStageInfo) -> TypedStageInfo, TypedStageInfo
+    >(|expr, info| {
+        let typ = infer(&expr, type_assumtpions, &mut inference);
 
-        AST::String(value) =>
-            create_string(value.clone(), parsed_expr),
+        TypedStageInfo {
+            inner: info.inner,
+            typ,
+            syms: symbol_table // TODO Type assumptions go here somehow
+        }
+    })
+}
 
-        AST::Color(value) =>
-            create_color(value.clone(), parsed_expr),
+fn infer(
+    expr: &Expr<ScopedStageInfo>,
+    type_assumptions: HashMap<String, PolyType>,
+    inference: &mut InferenceState
+) -> Type {
+    match expr {
+        Expr::Int(_) =>
+            Type::Basic("int".to_owned()),
 
-        AST::Id(id) =>
-            typecheck_id(id.clone(), parsed_expr, symbols),
+        Expr::Float(_) =>
+            Type::Basic("float".to_owned()),
 
-        AST::FuncCall(call) =>
-            typecheck_func_call(call.clone(), parsed_expr, symbols),
+        Expr::String(_) =>
+            Type::Basic("string".to_owned()),
 
-        AST::Argument(argument) =>
-            typecheck_argument(argument.clone(), parsed_expr, symbols),
+        Expr::Color(_) =>
+            Type::Basic("color".to_owned()),
 
-        AST::Array(array) =>
-            typecheck_array(array.clone(), parsed_expr, symbols),
+        Expr::Symbol(sym) =>
+            infer_symbol(sym, type_assumptions, inference),
 
-        AST::Dict(dict) =>
-            typecheck_dict(dict.clone(), parsed_expr, symbols),
+        Expr::FuncCall(FuncCall::Single(call)) =>
+            infer_func_call(call, type_assumptions, inference),
+
+        Expr::FuncCall(_) => panic!("Func Call Lists should not exist at typechecking stage"),
+
+        Expr::Argument(arg) =>
+            infer_argument(arg, type_assumptions, inference),
+
+        Expr::Array(array) =>
+            infer_array(array, type_assumptions, inference),
+
+        Expr::Dict(dict) =>
+            infer_dict(dict, type_assumptions, inference)
     }
 }
 
-fn typecheck_id(
-    id: Symbol,
-    parsed_expr: ScopedExpr,
-    symbols: &SymbolTable<TypedExpr>
-) -> TypedExpr {
+/// Refer to https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L197
+fn infer_symbol(
+    sym: &Symbol<ScopedStageInfo>,
+    type_assumptions: HashMap<String, PolyType>,
+    inference: &mut InferenceState
+) -> Type {
+    let key = &sym.value;
 
-}
+    // defs are infered as let-binded vars:
+    // https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L241
+    let type_assumptions = if !type_assumptions.contains_key(key) {
+        inference.enter_level();
 
-fn typecheck_argument(
-    call: Argument<ScopedExpr>,
-    parsed_expr: ScopedExpr,
-    symbols: &SymbolTable<TypedExpr>
-) -> TypedExpr {
-    let (value, typ) = match call {
-        Argument::Named(NamedArgument { id, expr }) => {
-            let typed_expr = typecheck(expr, &symbols);
+        let scoped_expr = sym.info.syms.get(key)
+            .expect("The should be no undefined symbols in the type checking stage");
 
-            (
-                AST::Argument(
-                    Argument::Named(NamedArgument::new(id, typed_expr.clone()))),
-                typed_expr.typ
-            )
-        }
+        let typ = infer(scoped_expr, type_assumptions.clone(), inference);
+        let polytype = typ.generalize(inference);
 
-        Argument::Unnamed(expr) => {
-            let typed_expr = typecheck(expr, &symbols);
+        inference.exit_level();
 
-            (
-                AST::Argument(Argument::Unnamed(typed_expr.clone())),
-                typed_expr.typ
-            )
-        }
+        type_assumptions.update(key.clone(), polytype)
+    }
+    else {
+        type_assumptions
     };
 
-    TypedExpr {
-        inner: parsed_expr,
-        value: Box::new(value),
-        typ
+    let polytype = type_assumptions.get(key).unwrap();
+
+    polytype.inst(inference)
+}
+
+/// See: https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L210
+fn infer_func_call(
+    call: &FuncCallSingle<ScopedStageInfo>,
+    type_assumptions: HashMap<String, PolyType>,
+    inference: &mut InferenceState
+) -> Type {
+    let fn_typ = infer_symbol(&call.id, type_assumptions.clone(), inference);
+
+    // t0 in the paper
+    let mut current_typ = fn_typ;
+
+    // TODO We have to sort the function arguments here for this to work with named arguments
+    for arg in call.args {
+        // t1 in the paper
+        let current_arg_typ = infer_argument(&arg, type_assumptions.clone(), inference);
+        // t' in the paper
+        let ret_typ = inference.newvar();
+
+        current_typ.unify(
+            &Type::Fn(
+                Box::new(current_arg_typ),
+                Box::new(ret_typ.clone())
+            )
+        );
+
+        current_typ = ret_typ;
+    }
+
+    current_typ
+}
+
+fn infer_argument(
+    arg: &Argument<ScopedStageInfo>,
+    type_assumptions: HashMap<String, PolyType>,
+    inference: &mut InferenceState
+) -> Type {
+    match arg {
+        Argument::Positional(positional_arg) =>
+            infer(&*positional_arg.value, type_assumptions, inference),
+
+        // TODO Checking the name?
+        Argument::Named(named_arg) =>
+            infer(&*named_arg.value, type_assumptions, inference),
     }
 }
 
-fn typecheck_func_call(
-    call: FuncCall<ScopedExpr>,
-    parsed_expr: ScopedExpr,
-    symbols: &SymbolTable<TypedExpr>
-) -> TypedExpr {
+fn infer_array(
+    array: &Array<ScopedStageInfo>,
+    type_assumptions: HashMap<String, PolyType>,
+    inference: &mut InferenceState
+) -> Type {
+    let array_type_name = "array".to_owned();
 
+    // TODO InteliJ doesn't like this for some reason
+    /*if let Some(first) = array.value.first() else {
+        return Type::TApp(array_typ_name, vec![ inference.newvar() ])
+    }*/
+
+    if array.value.is_empty() {
+        return Type::TApp(array_type_name, vec![ inference.newvar() ])
+    }
+
+    let first = array.value.first().unwrap();
+    let element_type = infer(first, type_assumptions.clone(), inference);
+
+    for element in &array.value {
+        let current_element_type = infer(element, type_assumptions.clone(), inference);
+
+        if element_type != current_element_type {
+            panic!()
+        }
+    }
+
+    Type::TApp(array_type_name, vec![ element_type ])
 }
 
-fn typecheck_array(
-    array: Vec<ScopedExpr>,
-    parsed_expr: ScopedExpr,
-    symbols: &SymbolTable<TypedExpr>
-) -> TypedExpr {
-    if(array.is_empty()){
-        panic!("Cannot infer type of empty array");
+fn infer_dict(
+    dict: &Dict<ScopedStageInfo>,
+    type_assumptions: HashMap<String, PolyType>,
+    inference: &mut InferenceState
+) -> Type {
+    let dict_type_name = "dict".to_owned();
+
+    if dict.value.is_empty() {
+        return Type::TApp(dict_type_name, vec![ inference.newvar(), inference.newvar() ])
     }
 
-    let array_elem_type = typecheck(array[0].clone(), &symbols).typ;
-
-    let typed_elems: Vec<TypedExpr> = array
-        .into_iter()
-        .map(|elem| typecheck(elem.clone(), &symbols))
-        .collect();
-
-    let invalid_elem = typed_elems
-        .iter()
-        .find(|elem| elem.typ == array_elem_type);
-
-    if let Ok(elem) = invalid_elem {
-        panic!("{} element in {:?}", elem, typed_elems);
+    fn infer_dict_entry(
+        entry: &DictEntry<ScopedStageInfo>,
+        type_assumptions: HashMap<String, PolyType>,
+        inference: &mut InferenceState
+    ) -> (Type, Type) {
+        (
+            infer(&entry.key, type_assumptions.clone(), inference),
+            infer(&entry.value, type_assumptions, inference)
+        )
     }
 
-    TypedExpr {
-        value: Box::new(AST::Array(typed_elems)),
-        inner: parsed_expr,
-        typ: array_elem_type.to_array_type()
-    }
-}
+    let first = dict.value.first().unwrap();
+    let element_type = infer_dict_entry(first, type_assumptions.clone(), inference);
 
-fn typecheck_dict(
-    dict: Vec<(ScopedExpr, ScopedExpr)>,
-    parsed_expr: ScopedExpr,
-    symbols: &SymbolTable<TypedExpr>
-) -> TypedExpr {
-    if(dict.is_empty()){
-        panic!("Cannot infer type of empty dictionary");
+    for entry in &dict.value {
+        let current_entry_type = infer_dict_entry(entry, type_assumptions.clone(), inference);
+
+        if element_type != current_entry_type {
+            panic!()
+        }
     }
 
-    let (_, value) = dict.first().unwrap();
-    let dict_val_type = typecheck(value.clone(), &symbols).typ;
-
-    let typed_entries: Vec<(TypedExpr, TypedExpr)> = dict.into_iter()
-        .map(|(key, value)| {
-            let typed_key = typecheck(key.clone(), &symbols);
-            let typed_val = typecheck(value.clone(), &symbols);
-
-            if(typed_key.typ != Type::String){
-                panic!("Map with {} keys not allowed", typed_key.typ);
-            }
-
-            if(typed_val.typ != dict_val_type){
-                panic!("Element of typ {} in map of type {}", typed_val.typ, dict_val_type)
-            }
-
-            (typed_key, typed_val)
-        })
-        .collect();
-
-    TypedExpr {
-        value: Box::new(AST::Dict(typed_entries)),
-        inner: parsed_expr,
-        typ: dict_val_type.to_dict_type()
-    }
-}
-
-fn create_int(value: u64, parsed_expr: ScopedExpr) -> TypedExpr {
-    TypedExpr {
-        value: Box::new(AST::Int(value)),
-        inner: parsed_expr,
-        typ: Type::Int
-    }
-}
-
-
-pub fn create_float(value: f64, parsed_expr: ScopedExpr) -> TypedExpr {
-    TypedExpr {
-        value: Box::new(AST::Float(value)),
-        inner: parsed_expr,
-        typ: Type::Float,
-    }
-}
-
-pub fn create_string(value: String, parsed_expr: ScopedExpr) -> TypedExpr {
-    TypedExpr {
-        value: Box::new(AST::String(value)),
-        inner: parsed_expr,
-        typ: Type::String,
-    }
-}
-
-pub fn create_color(value: Color, parsed_expr: ScopedExpr) -> TypedExpr {
-    TypedExpr {
-        value: Box::new(AST::Color(value)),
-        inner: parsed_expr,
-        typ: Type::Color,
-    }
+    let (key_type, value_type) = element_type;
+    Type::TApp(dict_type_name, vec![ key_type, value_type ])
 }
