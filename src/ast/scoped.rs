@@ -308,13 +308,6 @@ pub fn scoped_expr_pass<'a>(
 
                         let decl_args = params(func_declaration);
 
-                        // TODO: 3.1 check number of args
-                        // TODO: I think this should be done at a type-check pass given functions
-                        // can have a variable number of arguments (?)
-                        // if dbg!(decl_args.len()) < func_call_single.args.len() {
-                        //     panic!("too many arguments");
-                        // }
-
                         let mut used = vec![];
                         for arg in &func_call_single.args {
                             if let Argument::Named(arg) = arg {
