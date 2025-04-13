@@ -73,6 +73,8 @@ impl<I: StageInfo> SymbolTable<I> {
     }
 }
 
+const FUNC_DEF_KEYWORD: &str = "def";
+
 pub fn scoped_expr_pass<'a>(
     src: Expr<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
@@ -127,7 +129,7 @@ pub fn scoped_expr_pass<'a>(
                     //  ^ id  ^ arg       ^ arg (optional)   ^ arg
                     //  i.e., 2 or 3 args
                     let mut new_syms = syms.clone();
-                    if &func_call_single.id.value == "def" {
+                    if &func_call_single.id.value == FUNC_DEF_KEYWORD {
                         // create a new sym-table entry with the newly defined value
                         let Argument::Positional(ref new_id) = func_call_single.args[0] else {
                             panic!("invalid ast");
@@ -138,7 +140,7 @@ pub fn scoped_expr_pass<'a>(
                         };
 
                         let mut inner_syms = syms.clone();
-                        let func_id = Symbol::new(new_id.value.clone(), einfo(new_id.info.clone()));
+                        let func_id = pass_symbol(new_id.clone());
                         inner_syms.insert(func_id.clone().value, Expr::Symbol(func_id.clone()));
 
                         if func_call_single.args.len() == 2 {
@@ -184,10 +186,7 @@ pub fn scoped_expr_pass<'a>(
                                 .collect();
 
                             let ret = FuncCall::Single(FuncCallSingle::new(
-                                Symbol::new(
-                                    func_call_single.id.value,
-                                    einfo(func_call_single.id.info),
-                                ),
+                                pass_symbol(func_call_single.id),
                                 mapped_args,
                                 info(func_call_single.info, new_syms.clone()),
                             ));
@@ -282,10 +281,7 @@ pub fn scoped_expr_pass<'a>(
                                 .collect();
 
                             let ret = FuncCall::Single(FuncCallSingle::new(
-                                Symbol::new(
-                                    func_call_single.id.value,
-                                    info(func_call_single.id.info, syms.clone()),
-                                ),
+                                pass_symbol(func_call_single.id),
                                 mapped_args,
                                 info(func_call_single.info, new_syms.clone()),
                             ));
@@ -353,7 +349,7 @@ pub fn scoped_expr_pass<'a>(
                             .collect::<Vec<_>>();
 
                         let ret = FuncCall::Single(FuncCallSingle::new(
-                            Symbol::new(func_call_single.id.value, einfo(func_call_single.id.info)),
+                            pass_symbol(func_call_single.id),
                             mapped_args,
                             info(func_call_single.info, syms.clone()),
                         ));
@@ -400,7 +396,7 @@ pub fn scoped_expr_pass<'a>(
                     ))
                 }
                 Argument::Named(named_argument) => {
-                    let name = Symbol::new(named_argument.name.value, einfo(named_argument.info.clone()));
+                    let name = pass_symbol(named_argument.name);
                     let passed = scoped_expr_pass(*named_argument.value, syms);
                     Argument::Named(NamedArgument::new(name, passed, einfo(named_argument.info)))
                 }
@@ -412,9 +408,13 @@ pub fn scoped_expr_pass<'a>(
             if !syms.contains(&symbol.value) {
                 panic!("undefined symbol: {}", symbol.value)
             }
-            Expr::Symbol(Symbol::new(symbol.value, einfo(symbol.info)))
-        },
+            Expr::Symbol(pass_symbol(symbol))
+        }
     }
+}
+
+fn pass_symbol<'a>(symbol: Symbol<ParsedStageInfo<'a>>) -> Symbol<ScopedStageInfo<'a>> {
+    Symbol::new(symbol.value.clone(), einfo(symbol.info.clone()))
 }
 
 // empty info, i.e., empty symbol table
@@ -440,8 +440,8 @@ fn argument_symbol<'a>(
     syms: &SymbolTable<ScopedStageInfo<'a>>,
 ) -> Expr<ScopedStageInfo<'a>> {
     Expr::Argument(Argument::Positional(PositionalArgument::new(
-        Expr::Symbol(Symbol::new(id.value, info(id.info.clone(), syms.clone()))),
-        info(id.info.clone(), syms.clone()),
+        Expr::Symbol(pass_symbol(id.clone())),
+        info(id.info, syms.clone()),
     )))
 }
 
@@ -450,7 +450,7 @@ fn arguments_symbol_list<'a>(
 ) -> Expr<ScopedStageInfo<'a>> {
     Expr::Argument(Argument::Positional(PositionalArgument::new(
         Expr::FuncCall(FuncCall::Single(FuncCallSingle::new(
-            Symbol::new(args.id.value, einfo(args.id.info)),
+            pass_symbol(args.id),
             args.args
                 .into_iter()
                 .map(|arg| {
@@ -461,8 +461,8 @@ fn arguments_symbol_list<'a>(
                     let Expr::Symbol(arg) = *arg.value else {
                         panic!("invalid ast");
                     };
-                    let info = arg.info;
-                    let arg = Expr::Symbol(Symbol::new(arg.value, einfo(info.clone())));
+                    let info = arg.info.clone();
+                    let arg = Expr::Symbol(pass_symbol(arg));
                     Argument::Positional(PositionalArgument::new(arg, einfo(info)))
                 })
                 .collect(),
@@ -507,9 +507,7 @@ mod tests {
     };
 
     use super::*;
-    use const_format::formatcp;
     use pest::Parser;
-    use proptest::prelude::*;
 
     fn empty_func<I: StageInfo>(info: I) -> ast::FuncCallSingle<I> {
         ast::FuncCallSingle::new(
@@ -594,50 +592,61 @@ mod tests {
 
     #[test]
     fn scoped_variables_cannot_be_referenced_out_of_scope() {
-        scoped_panic_test("(
+        scoped_panic_test(
+            "(
             (def a (
                 (def b 5)
             ))
             (b)
-        )"); 
+        )",
+        );
     }
 
     #[test]
     fn arguments_can_be_accessed_within_a_funccall() {
-        scoped_test("(
+        scoped_test(
+            "(
             (def a (x y z) (
                 (+ x y z)
             ))
-        )");
+        )",
+        );
     }
 
     #[test]
     fn arguments_cannot_be_accessed_outside_a_funccall() {
-        scoped_panic_test("(
+        scoped_panic_test(
+            "(
             (def a (x y z) (
                 (+ x y z)
             ))
             (x)
-        )");
+        )",
+        );
 
-        scoped_panic_test("(
+        scoped_panic_test(
+            "(
             (def a (x y z) (
                 (+ x y z)
             ))
             (y)
-        )");
+        )",
+        );
 
-        scoped_panic_test("(
+        scoped_panic_test(
+            "(
             (def a (x y z) (
                 (+ x y z)
             ))
             (z)
-        )");
+        )",
+        );
     }
 
     #[test]
     fn arguments_can_be_accessed_inside_a_nested_scope() {
-        scoped_test("(
+        scoped_test(
+            "(
             (def a (x y z) (
                 (def b (foo bar baz) (
                     (+ x y z foo bar baz)
@@ -645,12 +654,14 @@ mod tests {
                 (b 4 5 6)
             ))
             (a 1 2 3)
-        )");
+        )",
+        );
     }
 
     #[test]
     fn variables_can_be_accessed_inside_a_nested_scope() {
-        scoped_test("(
+        scoped_test(
+            "(
             (def foo (bar baz) (
                 (+ bar baz)
             ))
@@ -658,53 +669,121 @@ mod tests {
                 (+ x y z (foo 3 4))
             ))
             (a 1 2 3)
-        )");
+        )",
+        );
     }
 
     #[test]
     fn arguments_can_be_set_by_their_name() {
-        scoped_test("(
+        scoped_test(
+            "(
             (def a (foo bar baz) (
                 + foo bar baz
             ))
             (a foo: 1 bar: 2 baz: 3)
-        )");
+        )",
+        );
     }
 
     #[test]
     fn named_arguments_cannot_reference_not_defined_args() {
-        scoped_panic_test("(
+        scoped_panic_test(
+            "(
             (def a (foo bar baz) (
                 + foo bar baz
             ))
             (a foo: 1 bar: 2 does-not-exist: 3)
-        )");
+        )",
+        );
     }
 
     #[test]
     fn arguments_cannot_be_referenced_more_than_once() {
-        scoped_panic_test("(
+        scoped_panic_test(
+            "(
             (def a (some-arg) (
                 + 1 some-arg
             ))
             (a some-arg: 4 some-arg: 2)
-        )");
+        )",
+        );
     }
 
     #[test]
     fn defined_variables_can_be_used_as_return_values() {
-        scoped_test("(
+        scoped_test(
+            "(
             (def a 5)
             (def b a)
             (b)
-        )");
+        )",
+        );
     }
 
     #[test]
     fn undefined_variables_cannot_be_used_as_return_values() {
-        scoped_panic_test("(
+        scoped_panic_test(
+            "(
             (def b a)
             (b)
-        )");
+        )",
+        );
+    }
+
+    #[test]
+    fn variables_cannot_be_accessed_from_a_dynamic_successor() {
+        scoped_panic_test("
+            (
+                (def a (b) (
+                    (def inner 5) 
+                    (+ 1 b inner)
+                ))
+                (def foo (bar) (
+                    (+ 2 bar inner)
+                ))
+                (a (foo 3)) 
+            )
+        ");
+
+        scoped_panic_test("
+            (
+                (def a (b) (
+                    (def inner 5) 
+                    (+ 1 b inner)
+                ))
+                (def foo (bar) (
+                    (+ 2 bar b)
+                ))
+                (a (foo 3)) 
+            )
+        ");
+
+        scoped_panic_test("
+            (
+                (def foo (bar) (
+                    (def inner 5)
+                    (+ 1 2 inner bar)
+                ))
+                (def a (b) (
+                    (def res (foo 1)) 
+                    (+ inner res b)
+                ))
+                (a 4) 
+            )
+        ");
+
+        scoped_panic_test("
+            (
+                (def foo (bar) (
+                    (def inner 5)
+                    (+ 1 2 inner bar)
+                ))
+                (def a (b) (
+                    (def res (foo 1)) 
+                    (+ bar res b)
+                ))
+                (a 4) 
+            )
+        ");
     }
 }

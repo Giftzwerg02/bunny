@@ -10,7 +10,7 @@ pub mod debug;
 use std::fs::{self};
 
 use ast::{
-    parsed::{filter_comments, parsed_expr_pass, ParsedStageInfo}, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}, Expr, Int, PrettyPrintable, StageInfo
+    parsed::{filter_comments, parsed_expr_pass, ParsedStageInfo}, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}, Expr, PrettyPrintable, StageInfo
 };
 #[allow(unused)]
 use clap::Parser as ClapParser;
