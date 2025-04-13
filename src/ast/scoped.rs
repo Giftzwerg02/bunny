@@ -154,7 +154,6 @@ pub fn scoped_expr_pass<'a>(
                             // Therefore, the created function where the func_id should reference
                             // (in the symbol table) a function with a singular argument, that
                             // being the body of the function.
-
                             let f_to_insert = FuncCallSingle::new(
                                 func_id.clone(),
                                 vec![Argument::Positional(PositionalArgument::new(
@@ -239,7 +238,11 @@ pub fn scoped_expr_pass<'a>(
                             let new_call_args = arguments_list(func_args.clone())
                                 .into_iter()
                                 .map(|arg| {
-                                    let Expr::Argument(arg) = scoped_expr_pass(Expr::Argument(arg), &inner_syms) else { panic!("invalid ast"); };
+                                    let Expr::Argument(arg) =
+                                        scoped_expr_pass(Expr::Argument(arg), &inner_syms)
+                                    else {
+                                        panic!("invalid ast");
+                                    };
                                     arg
                                 })
                                 .collect();
@@ -251,8 +254,9 @@ pub fn scoped_expr_pass<'a>(
                                     vec![Argument::Positional(PositionalArgument::new(
                                         new_call.clone(),
                                         einfo(call_pos),
-                                    ))]
-                                ].concat(),
+                                    ))],
+                                ]
+                                .concat(),
                                 func_id.info,
                             );
 
@@ -396,11 +400,7 @@ pub fn scoped_expr_pass<'a>(
                     ))
                 }
                 Argument::Named(named_argument) => {
-                    let Expr::Symbol(name) =
-                        scoped_expr_pass(Expr::Symbol(named_argument.name), syms)
-                    else {
-                        panic!("invalid ast");
-                    };
+                    let name = Symbol::new(named_argument.name.value, einfo(named_argument.info.clone()));
                     let passed = scoped_expr_pass(*named_argument.value, syms);
                     Argument::Named(NamedArgument::new(name, passed, einfo(named_argument.info)))
                 }
@@ -408,7 +408,12 @@ pub fn scoped_expr_pass<'a>(
 
             Expr::Argument(arg)
         }
-        Expr::Symbol(symbol) => Expr::Symbol(Symbol::new(symbol.value, einfo(symbol.info))),
+        Expr::Symbol(symbol) => {
+            if !syms.contains(&symbol.value) {
+                panic!("undefined symbol: {}", symbol.value)
+            }
+            Expr::Symbol(Symbol::new(symbol.value, einfo(symbol.info)))
+        },
     }
 }
 
@@ -453,7 +458,9 @@ fn arguments_symbol_list<'a>(
                         panic!("invalid ast");
                     };
 
-                    let Expr::Symbol(arg) = *arg.value else { panic!("invalid ast"); };
+                    let Expr::Symbol(arg) = *arg.value else {
+                        panic!("invalid ast");
+                    };
                     let info = arg.info;
                     let arg = Expr::Symbol(Symbol::new(arg.value, einfo(info.clone())));
                     Argument::Positional(PositionalArgument::new(arg, einfo(info)))
@@ -465,10 +472,11 @@ fn arguments_symbol_list<'a>(
     )))
 }
 
-fn arguments_list<'a, I: StageInfo>(
-    args: FuncCallSingle<I>,
-) -> Vec<Argument<I>> {
-    let a0 = Argument::Positional(PositionalArgument::new(Expr::Symbol(args.id.clone()), args.id.info));
+fn arguments_list<'a, I: StageInfo>(args: FuncCallSingle<I>) -> Vec<Argument<I>> {
+    let a0 = Argument::Positional(PositionalArgument::new(
+        Expr::Symbol(args.id.clone()),
+        args.id.info,
+    ));
     let a_n = args.args;
     let mut res = vec![a0];
     for a in a_n {
@@ -489,4 +497,214 @@ fn params<'a, 'b>(
     }
 
     &args[0..args.len() - 1]
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ast::{self, parsed::parsed_expr_pass},
+        parser::{BunnyParser, Rule},
+    };
+
+    use super::*;
+    use const_format::formatcp;
+    use pest::Parser;
+    use proptest::prelude::*;
+
+    fn empty_func<I: StageInfo>(info: I) -> ast::FuncCallSingle<I> {
+        ast::FuncCallSingle::new(
+            ast::Symbol::new("".to_owned(), info.clone()),
+            vec![],
+            info.clone(),
+        )
+    }
+
+    fn empty_func_expr<I: StageInfo>(info: I) -> Expr<I> {
+        Expr::FuncCall(ast::FuncCall::Single(empty_func(info)))
+    }
+
+    fn scoped_test(code: &str) {
+        let pair = BunnyParser::parse(Rule::program, &code)
+            .unwrap()
+            .next()
+            .unwrap();
+
+        let mut syms = SymbolTable::new();
+        let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
+
+        syms.insert("def".to_string(), empty_func_expr(info.clone()));
+        syms.insert("+".to_string(), empty_func_expr(info.clone()));
+
+        let parsed_expr = parsed_expr_pass(pair);
+        scoped_expr_pass(parsed_expr, &syms);
+    }
+
+    fn scoped_panic_test(code: &str) {
+        let pair = BunnyParser::parse(Rule::program, &code)
+            .unwrap()
+            .next()
+            .unwrap();
+
+        let mut syms = SymbolTable::new();
+        let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
+
+        syms.insert("def".to_string(), empty_func_expr(info.clone()));
+        syms.insert("+".to_string(), empty_func_expr(info.clone()));
+
+        let parsed_expr = parsed_expr_pass(pair);
+        let result = std::panic::catch_unwind(|| scoped_expr_pass(parsed_expr, &syms));
+        assert!(result.is_err(), "expected code: {}\nto panic", code)
+    }
+
+    #[test]
+    fn defined_variables_can_be_referenced_later() {
+        scoped_test(
+            "
+            (
+                (def a 5)
+                (a)
+            )
+        ",
+        );
+    }
+
+    #[test]
+    fn defined_variables_cannot_be_referenced_earlier() {
+        scoped_panic_test(
+            "
+            (
+                (a)
+                (def a 5)
+            )
+        ",
+        );
+    }
+
+    #[test]
+    fn undefined_variables_cannot_be_referenced() {
+        scoped_panic_test(
+            "
+            (
+                (def b 5)
+                (a)
+            )
+        ",
+        );
+    }
+
+    #[test]
+    fn scoped_variables_cannot_be_referenced_out_of_scope() {
+        scoped_panic_test("(
+            (def a (
+                (def b 5)
+            ))
+            (b)
+        )"); 
+    }
+
+    #[test]
+    fn arguments_can_be_accessed_within_a_funccall() {
+        scoped_test("(
+            (def a (x y z) (
+                (+ x y z)
+            ))
+        )");
+    }
+
+    #[test]
+    fn arguments_cannot_be_accessed_outside_a_funccall() {
+        scoped_panic_test("(
+            (def a (x y z) (
+                (+ x y z)
+            ))
+            (x)
+        )");
+
+        scoped_panic_test("(
+            (def a (x y z) (
+                (+ x y z)
+            ))
+            (y)
+        )");
+
+        scoped_panic_test("(
+            (def a (x y z) (
+                (+ x y z)
+            ))
+            (z)
+        )");
+    }
+
+    #[test]
+    fn arguments_can_be_accessed_inside_a_nested_scope() {
+        scoped_test("(
+            (def a (x y z) (
+                (def b (foo bar baz) (
+                    (+ x y z foo bar baz)
+                ))
+                (b 4 5 6)
+            ))
+            (a 1 2 3)
+        )");
+    }
+
+    #[test]
+    fn variables_can_be_accessed_inside_a_nested_scope() {
+        scoped_test("(
+            (def foo (bar baz) (
+                (+ bar baz)
+            ))
+            (def a (x y z) (
+                (+ x y z (foo 3 4))
+            ))
+            (a 1 2 3)
+        )");
+    }
+
+    #[test]
+    fn arguments_can_be_set_by_their_name() {
+        scoped_test("(
+            (def a (foo bar baz) (
+                + foo bar baz
+            ))
+            (a foo: 1 bar: 2 baz: 3)
+        )");
+    }
+
+    #[test]
+    fn named_arguments_cannot_reference_not_defined_args() {
+        scoped_panic_test("(
+            (def a (foo bar baz) (
+                + foo bar baz
+            ))
+            (a foo: 1 bar: 2 does-not-exist: 3)
+        )");
+    }
+
+    #[test]
+    fn arguments_cannot_be_referenced_more_than_once() {
+        scoped_panic_test("(
+            (def a (some-arg) (
+                + 1 some-arg
+            ))
+            (a some-arg: 4 some-arg: 2)
+        )");
+    }
+
+    #[test]
+    fn defined_variables_can_be_used_as_return_values() {
+        scoped_test("(
+            (def a 5)
+            (def b a)
+            (b)
+        )");
+    }
+
+    #[test]
+    fn undefined_variables_cannot_be_used_as_return_values() {
+        scoped_panic_test("(
+            (def b a)
+            (b)
+        )");
+    }
 }

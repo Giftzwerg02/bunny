@@ -238,126 +238,142 @@ mod tests {
     }
 
     mod expr {
-        use std::{fmt::{Debug, Display}, fs};
+        use std::fmt::Display;
 
         use pest::iterators::Pair;
+        use text_trees::StringTreeNode;
 
         use crate::ast::{
-            AST, Expr,
-            expressions::{Argument, Color, FuncCall, Symbol, NamedArgument, NonEmptyFuncCall},
+            Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallList,
+            FuncCallSingle, Int, NamedArgument, PositionalArgument, PrettyPrintable, StageInfo,
+            Str, Symbol,
         };
 
         use super::*;
 
         #[derive(Clone, Debug, PartialEq)]
-        struct SimpleExpr {
-            inner: Box<AST<SimpleExpr>>,
-        }
+        struct EmptyStageInfo {}
 
-        impl Expr for SimpleExpr {
-            fn pretty_print(&self) -> text_trees::StringTreeNode {
-                todo!()
-            }
-        }
-
-        impl Display for SimpleExpr {
+        impl Display for EmptyStageInfo {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self.inner)
+                write!(f, "")
             }
         }
 
-        impl SimpleExpr {
-            fn new(inner: AST<SimpleExpr>) -> Self {
-                Self {
-                    inner: Box::new(inner),
-                }
+        impl PrettyPrintable for EmptyStageInfo {
+            fn pretty_print(&self) -> StringTreeNode {
+                StringTreeNode::new("".to_string())
             }
         }
 
-        fn arb_expr(depth: u32) -> impl Strategy<Value = SimpleExpr> {
+        impl StageInfo for EmptyStageInfo {}
+
+        fn arb_expr(depth: u32) -> impl Strategy<Value = Expr<EmptyStageInfo>> {
             if depth == 0 {
                 return prop_oneof![
-                    any::<u64>().prop_map(AST::Int).prop_map(SimpleExpr::new),
+                    any::<u64>()
+                        .prop_map(|i| Int::new(i, EmptyStageInfo {}))
+                        .prop_map(Expr::Int),
                     any::<f64>()
                         .prop_map(|f| f.abs())
-                        .prop_map(AST::Float)
-                        .prop_map(SimpleExpr::new),
+                        .prop_map(|f| Float::new(f, EmptyStageInfo {}))
+                        .prop_map(Expr::Float),
                     "[^\"]{0,100}"
-                        .prop_map(AST::String)
-                        .prop_map(SimpleExpr::new),
-                    arb_color().prop_map(AST::Color).prop_map(SimpleExpr::new),
-                    arb_id().prop_map(AST::Id).prop_map(SimpleExpr::new),
+                        .prop_map(|s| Str::new(s, EmptyStageInfo {}))
+                        .prop_map(Expr::String),
+                    arb_color().prop_map(Expr::Color),
+                    arb_id().prop_map(Expr::Symbol)
                 ]
                 .boxed();
             }
 
             let leaf = prop_oneof![
-                any::<u64>().prop_map(AST::Int).prop_map(SimpleExpr::new),
+                any::<u64>()
+                    .prop_map(|i| Int::new(i, EmptyStageInfo {}))
+                    .prop_map(Expr::Int),
                 any::<f64>()
                     .prop_map(|f| f.abs())
-                    .prop_map(AST::Float)
-                    .prop_map(SimpleExpr::new),
+                    .prop_map(|f| Float::new(f, EmptyStageInfo {}))
+                    .prop_map(Expr::Float),
                 "[^\"]{0,100}"
-                    .prop_map(AST::String)
-                    .prop_map(SimpleExpr::new),
-                arb_color().prop_map(AST::Color).prop_map(SimpleExpr::new),
-                arb_id().prop_map(AST::Id).prop_map(SimpleExpr::new),
-                arb_funccall(depth - 1)
-                    .prop_map(AST::FuncCall)
-                    .prop_map(SimpleExpr::new),
+                    .prop_map(|s| Str::new(s, EmptyStageInfo {}))
+                    .prop_map(Expr::String),
+                arb_color().prop_map(Expr::Color),
+                arb_id().prop_map(Expr::Symbol),
+                arb_funccall(depth - 1).prop_map(Expr::FuncCall)
             ];
             leaf.prop_recursive(depth - 1, 25, 5, |inner| {
                 prop_oneof![
                     prop::collection::vec(inner.clone(), 0..4)
-                        .prop_map(AST::Array)
-                        .prop_map(SimpleExpr::new),
+                        .prop_map(|a| Array::new(a, EmptyStageInfo {}))
+                        .prop_map(Expr::Array),
                     prop::collection::vec((inner.clone(), inner.clone()), 0..4)
-                        .prop_map(AST::Dict)
-                        .prop_map(SimpleExpr::new),
+                        .prop_map(|entries| {
+                            let entries = entries
+                                .into_iter()
+                                .map(|(k, v)| DictEntry::new(k, v, EmptyStageInfo {}))
+                                .collect::<Vec<_>>();
+                            Dict::new(entries, EmptyStageInfo {})
+                        })
+                        .prop_map(Expr::Dict)
                 ]
             })
             .boxed()
         }
 
-        fn arb_funccall(depth: u32) -> impl Strategy<Value = FuncCall<SimpleExpr>> {
+        fn empty_func() -> FuncCall<EmptyStageInfo> {
+            FuncCall::List(FuncCallList::new(vec![], EmptyStageInfo {}))
+        }
+
+        fn arb_funccall(depth: u32) -> impl Strategy<Value = FuncCall<EmptyStageInfo>> {
             if depth == 0 {
-                return Just(FuncCall::Empty).boxed();
+                return Just(empty_func()).boxed();
             }
 
-            let leaf = prop_oneof![
-                Just(FuncCall::Empty),
-                (
-                    arb_id(),
-                    prop::collection::vec(arb_argument(depth - 1), 0..4)
-                )
-                    .prop_map(|(id, args)| FuncCall::Single(NonEmptyFuncCall::new(id, args)))
-            ];
+            let leaf =
+                prop_oneof![
+                    Just(empty_func()),
+                    (
+                        arb_id(),
+                        prop::collection::vec(arb_argument(depth - 1), 0..4)
+                    )
+                        .prop_map(|(id, args)| FuncCall::Single(
+                            FuncCallSingle::new(id, args, EmptyStageInfo {})
+                        ))
+                ];
 
             leaf.prop_recursive(depth - 1, 25, 5, |inner| {
                 prop::collection::vec(inner.clone(), 0..5)
-                    .prop_map(FuncCall::Multi)
+                    .prop_map(|calls| FuncCall::List(FuncCallList::new(calls, EmptyStageInfo {})))
             })
             .boxed()
         }
 
-        fn arb_argument(depth: u32) -> impl Strategy<Value = Argument<SimpleExpr>> {
+        fn arb_argument(depth: u32) -> impl Strategy<Value = Argument<EmptyStageInfo>> {
             if depth == 0 {
-                return arb_expr(0).prop_map(Argument::Unnamed).boxed();
+                return arb_expr(0)
+                    .prop_map(|value| {
+                        Argument::Positional(PositionalArgument::new(value, EmptyStageInfo {}))
+                    })
+                    .boxed();
             }
 
             prop_oneof![
-                (arb_id(), arb_expr(depth - 1))
-                    .prop_map(|(id, expr)| Argument::Named(NamedArgument::new(id, expr))),
-                arb_expr(depth - 1).prop_map(Argument::Unnamed)
+                (arb_id(), arb_expr(depth - 1)).prop_map(|(id, expr)| Argument::Named(
+                    NamedArgument::new(id, expr, EmptyStageInfo {})
+                )),
+                arb_expr(depth - 1).prop_map(|value| Argument::Positional(
+                    PositionalArgument::new(value, EmptyStageInfo {})
+                ))
             ]
             .boxed()
         }
 
-        fn arb_color() -> impl Strategy<Value = Color> {
-            any::<(u8, u8, u8)>().prop_map(|(r, g, b)| Color::new(r, g, b))
+        fn arb_color() -> impl Strategy<Value = Color<EmptyStageInfo>> {
+            any::<(u8, u8, u8)>().prop_map(|(r, g, b)| Color::new(r, g, b, EmptyStageInfo {}))
         }
 
-        fn arb_id() -> impl Strategy<Value =Symbol> {
+        fn arb_id() -> impl Strategy<Value = Symbol<EmptyStageInfo>> {
             const LETTER: &str = "a-zA-Z";
             const DIGIT: &str = "0-9";
             const SPECIAL: &str = "\\+\\-\\*/\\$\\^§%&=`<>\\|_@~";
@@ -365,32 +381,32 @@ mod tests {
             const IDENTIFIER_REGEX: &str =
                 formatcp!("[{LETTER}{SPECIAL}][{LETTER}{SPECIAL}{DIGIT}]*");
 
-            IDENTIFIER_REGEX.prop_map(Symbol::new)
+            IDENTIFIER_REGEX.prop_map(|s| Symbol::new(s, EmptyStageInfo {}))
         }
 
         proptest! {
             #[test]
             fn valid_expr(expr in arb_expr(16)) {
                 // these 3 lines test more than you can ever imagine
-                let input = format!("{expr}");
+                let input = expr.as_code();
                 let mut pairs = prop_parse_valid(Rule::expr, &*input)?;
                 check_expr_parse(expr, pairs.next().unwrap())?;
             }
         }
 
         fn check_argument_parse(
-            arg: Argument<SimpleExpr>,
+            arg: Argument<EmptyStageInfo>,
             pair: Pair<'_, Rule>,
         ) -> Result<(), TestCaseError> {
             let mut pairs = pair.into_inner();
             let pair = pairs.next().unwrap();
             if pair.as_rule() == Rule::expr {
-                let Argument::Unnamed(expr) = arg else {
+                let Argument::Positional(expr) = arg else {
                     prop_assert!(false);
                     return Ok(());
                 };
 
-                check_expr_parse(expr, pair)?;
+                check_expr_parse(*expr.value, pair)?;
                 prop_assert!(pairs.next().is_none());
                 return Ok(());
             }
@@ -401,7 +417,7 @@ mod tests {
                     return Ok(());
                 };
 
-                check_expr_parse(named.expr, pairs.next().unwrap())?;
+                check_expr_parse(*named.value, pairs.next().unwrap())?;
                 prop_assert!(pairs.next().is_none());
                 return Ok(());
             }
@@ -411,14 +427,13 @@ mod tests {
         }
 
         fn check_funccall_parse(
-            func: FuncCall<SimpleExpr>,
+            func: FuncCall<EmptyStageInfo>,
             pair: Pair<'_, Rule>,
         ) -> Result<(), TestCaseError> {
             let pairs_count = pair.clone().into_inner().count();
             if pairs_count == 0 {
                 match func {
-                    FuncCall::Empty => {}
-                    FuncCall::Multi(items) if items.len() == 0 => {}
+                    FuncCall::List(list) if list.calls.len() == 0 => {}
                     _ => {
                         prop_assert!(false);
                     }
@@ -431,14 +446,14 @@ mod tests {
             let first_pair = pairs.next().unwrap();
 
             if first_pair.as_rule() == Rule::func_call {
-                let FuncCall::Multi(funcs) = func else {
+                let FuncCall::List(list) = func else {
                     prop_assert!(false);
                     return Ok(());
                 };
 
-                check_funccall_parse(funcs[0].clone(), first_pair)?;
+                check_funccall_parse(list.calls[0].clone(), first_pair)?;
 
-                for call in &funcs[1..] {
+                for call in &list.calls[1..] {
                     let p = pairs.next().unwrap();
                     check_funccall_parse(call.clone(), p)?;
                 }
@@ -452,9 +467,10 @@ mod tests {
                     prop_assert!(false);
                     return Ok(());
                 };
-
+                
+                let mut arg_pairs = pairs.next().expect("funcargs").into_inner();
                 for arg in single.args {
-                    let p = pairs.next().unwrap();
+                    let p = arg_pairs.next().unwrap();
                     check_argument_parse(arg, p)?;
                 }
 
@@ -466,7 +482,10 @@ mod tests {
             Ok(())
         }
 
-        fn check_expr_parse(expr: SimpleExpr, pair: Pair<'_, Rule>) -> Result<(), TestCaseError> {
+        fn check_expr_parse(
+            expr: Expr<EmptyStageInfo>,
+            pair: Pair<'_, Rule>,
+        ) -> Result<(), TestCaseError> {
             match pair.as_rule() {
                 Rule::EOI
                 | Rule::WHITESPACE
@@ -485,14 +504,14 @@ mod tests {
                     Ok(())
                 }
                 Rule::dict => {
-                    let AST::Dict(dict) = *expr.inner else {
+                    let Expr::Dict(dict) = expr else {
                         prop_assert!(false);
                         return Ok(());
                     };
 
                     let mut pairs = pair.into_inner();
 
-                    for (k, v) in dict {
+                    for entry in dict.value {
                         let mut map_assing = pairs.next().unwrap().into_inner();
                         let pair_key = map_assing.next().unwrap();
                         let pair_value = map_assing.next().unwrap();
@@ -500,8 +519,8 @@ mod tests {
                         prop_assert_eq!(pair_key.as_rule(), Rule::expr);
                         prop_assert_eq!(pair_value.as_rule(), Rule::expr);
 
-                        check_expr_parse(k, pair_key)?;
-                        check_expr_parse(v, pair_value)?;
+                        check_expr_parse(entry.key, pair_key)?;
+                        check_expr_parse(entry.value, pair_value)?;
                     }
 
                     prop_assert!(pairs.next().is_none());
@@ -512,14 +531,14 @@ mod tests {
                     Ok(())
                 }
                 Rule::array => {
-                    let AST::Array(array) = *expr.inner else {
-                        prop_assert!(false);
+                    let Expr::Array(array) = expr else {
+                        prop_assert!(false, "expected Array, but got {} for {}", expr.name(), pair.as_str());
                         return Ok(());
                     };
 
                     let mut pairs = pair.into_inner();
 
-                    for val in array {
+                    for val in array.value {
                         let pair_value = pairs.next().unwrap();
                         prop_assert_eq!(pair_value.as_rule(), Rule::expr);
                         check_expr_parse(val, pair_value)?;
@@ -529,42 +548,42 @@ mod tests {
                     Ok(())
                 }
                 Rule::func_call => {
-                    let AST::FuncCall(func) = *expr.inner else {
+                    let Expr::FuncCall(func) = expr else {
                         prop_assert!(false);
                         return Ok(());
                     };
                     check_funccall_parse(func, pair)
                 }
-                Rule::argument => {
+                Rule::func_arguments | Rule::named_argument | Rule::positional_argument => {
                     prop_assert!(false, "should not be checked here");
                     Ok(())
                 }
                 Rule::identifier => {
-                    let AST::Id(_) = *expr.inner else {
-                        prop_assert!(false);
+                    let Expr::Symbol(_) = expr else {
+                        prop_assert!(false, "expected Symbol, but got {} for {}", expr.name(), pair.as_str());
                         return Ok(());
                     };
 
                     Ok(())
                 }
                 Rule::int => {
-                    let AST::Int(_) = *expr.inner else {
-                        prop_assert!(false);
+                    let Expr::Int(_) = expr else {
+                        prop_assert!(false, "expected Int, but got {} for {}", expr.name(), pair.as_str());
                         return Ok(());
                     };
 
                     Ok(())
                 }
                 Rule::float => {
-                    let AST::Float(_) = *expr.inner else {
-                        prop_assert!(false);
+                    let Expr::Float(_) = expr else {
+                        prop_assert!(false, "expected Float, but got {} for {}", expr.name(), pair.as_str());
                         return Ok(());
                     };
 
                     Ok(())
                 }
                 Rule::string => {
-                    let AST::String(_) = *expr.inner else {
+                    let Expr::String(_) = expr else {
                         prop_assert!(false);
                         return Ok(());
                     };
@@ -572,7 +591,7 @@ mod tests {
                     Ok(())
                 }
                 Rule::color => {
-                    let AST::Color(_) = *expr.inner else {
+                    let Expr::Color(_) = expr else {
                         prop_assert!(false);
                         return Ok(());
                     };

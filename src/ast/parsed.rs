@@ -99,19 +99,14 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
                     let Expr::Symbol(id) = id else {
                         panic!("invalid ast");
                     };
+
+                    if let Some(args_pair) = pairs.next() {
+                        let args = extract_arguments(args_pair);
+                        Expr::FuncCall(FuncCall::Single(FuncCallSingle::new(id, args, info(pair))))
+                    } else {
+                        Expr::FuncCall(FuncCall::Single(FuncCallSingle::new(id, vec![], info(pair))))
+                    }
                     
-                    let args = pairs
-                        .map(parsed_expr_pass)
-
-                        .map(|arg_expr| {
-                            let Expr::Argument(arg) = arg_expr else {
-                                panic!("invalid ast");
-                            };
-                            arg
-                        })
-                        .collect();
-
-                    Expr::FuncCall(FuncCall::Single(FuncCallSingle::new(id, args, info(pair))))
                 }
 
                 // multi-funccall
@@ -138,7 +133,7 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
                 _ => panic!("illegal funccall"),
             }
         }
-        Rule::argument => {
+        Rule::named_argument | Rule::positional_argument => {
             let mut pairs = pair.clone().into_inner().filter(filter_comments);
             let first = pairs.next().expect("argument");
             let second = pairs.next();
@@ -188,4 +183,38 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
 
 fn info<'a>(p: Pair<'a, Rule>) -> ParsedStageInfo<'a> {
     ParsedStageInfo { token: p }
+}
+
+fn extract_arguments<'a>(p: Pair<'a, Rule>) -> Vec<Argument<ParsedStageInfo<'a>>> {
+    let pairs = p.into_inner();
+    let mut args = vec![];
+    let mut no_more_positional_args = false;
+
+    for pair in pairs {
+        let mut inner_pairs = pair.clone().into_inner();
+        let arg = match pair.as_rule() {
+            Rule::named_argument => {
+                no_more_positional_args = true;
+
+                let symbol = parsed_expr_pass(inner_pairs.next().expect("symbol"));
+                let Expr::Symbol(symbol) = symbol else {
+                    panic!("illegal parse-tree");
+                };
+                let expr = parsed_expr_pass(inner_pairs.next().expect("expr"));
+                Argument::Named(NamedArgument::new(symbol, expr, info(pair)))
+            },
+            Rule::positional_argument => {
+                if no_more_positional_args {
+                    panic!("positonal arguments not allowed after any named arguments");
+                }
+
+                let expr = parsed_expr_pass(inner_pairs.next().expect("expr"));
+                Argument::Positional(PositionalArgument::new(expr, info(pair)))
+            },
+            _ => panic!("illegal argument rule: {}", pair)
+        };
+        args.push(arg);
+    }
+
+    args
 }
