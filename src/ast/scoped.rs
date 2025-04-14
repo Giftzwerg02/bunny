@@ -1,7 +1,8 @@
 use core::panic;
-use std::{any::type_name_of_val, collections::HashMap, fmt::Display};
+use std::{any::type_name_of_val, fmt::Display};
 
 use text_trees::StringTreeNode;
+use im::HashMap;
 
 use crate::ast::{Argument, FuncCallSingle, PositionalArgument};
 
@@ -43,7 +44,7 @@ pub struct SymbolTable<I: StageInfo> {
 
 impl<I: StageInfo> Display for SymbolTable<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.inner.keys())
+        write!(f, "{:?}", self.inner.keys().map(|k| k.to_string()).collect::<Vec<_>>())
     }
 }
 
@@ -80,12 +81,12 @@ pub fn scoped_expr_pass<'a>(
     syms: &SymbolTable<ScopedStageInfo<'a>>,
 ) -> Expr<ScopedStageInfo<'a>> {
     match src {
-        Expr::Int(int) => Expr::Int(Int::new(int.value, einfo(int.info))),
-        Expr::Float(float) => Expr::Float(Float::new(float.value, einfo(float.info))),
-        Expr::String(str) => Expr::String(Str::new(str.value, einfo(str.info))),
-        Expr::Color(color) => Expr::Color(Color::new(color.r, color.g, color.b, einfo(color.info))),
+        Expr::Int(int) => Expr::Int(Int::new(int.value, info(int.info, syms.clone()))),
+        Expr::Float(float) => Expr::Float(Float::new(float.value, info(float.info, syms.clone()))),
+        Expr::String(str) => Expr::String(Str::new(str.value, info(str.info, syms.clone()))),
+        Expr::Color(color) => Expr::Color(Color::new(color.r, color.g, color.b, info(color.info, syms.clone()))),
         Expr::Array(array) => {
-            let info = einfo(array.info);
+            let info = info(array.info, syms.clone());
             let array = array
                 .value
                 .into_iter()
@@ -95,14 +96,14 @@ pub fn scoped_expr_pass<'a>(
             Expr::Array(Array::new(array, info))
         }
         Expr::Dict(dict) => {
-            let dict_info = einfo(dict.info);
+            let dict_info = info(dict.info, syms.clone());
             let dict = dict
                 .value
                 .into_iter()
                 .map(|e| {
                     let k = scoped_expr_pass(e.key, syms);
                     let v = scoped_expr_pass(e.value, syms);
-                    let dict_entry_info = einfo(e.info);
+                    let dict_entry_info = info(e.info, syms.clone());
                     DictEntry::new(k, v, dict_entry_info)
                 })
                 .collect();
@@ -140,7 +141,7 @@ pub fn scoped_expr_pass<'a>(
                         };
 
                         let mut inner_syms = syms.clone();
-                        let func_id = pass_symbol(new_id.clone());
+                        let func_id = pass_symbol(new_id.clone(), inner_syms.clone());
                         inner_syms.insert(func_id.clone().value, Expr::Symbol(func_id.clone()));
 
                         if func_call_single.args.len() == 2 {
@@ -186,7 +187,7 @@ pub fn scoped_expr_pass<'a>(
                                 .collect();
 
                             let ret = FuncCall::Single(FuncCallSingle::new(
-                                pass_symbol(func_call_single.id),
+                                pass_symbol(func_call_single.id, new_syms.clone()),
                                 mapped_args,
                                 info(func_call_single.info, new_syms.clone()),
                             ));
@@ -264,7 +265,7 @@ pub fn scoped_expr_pass<'a>(
                             new_syms.insert(func_id.value, f_to_insert);
 
                             let mapped_arg0 = argument_symbol(new_id, &inner_syms);
-                            let mapped_arg1 = arguments_symbol_list(func_args);
+                            let mapped_arg1 = arguments_symbol_list(func_args, inner_syms);
                             let mapped_arg2 =
                                 Expr::Argument(Argument::Positional(PositionalArgument::new(
                                     new_call.clone(),
@@ -281,7 +282,7 @@ pub fn scoped_expr_pass<'a>(
                                 .collect();
 
                             let ret = FuncCall::Single(FuncCallSingle::new(
-                                pass_symbol(func_call_single.id),
+                                pass_symbol(func_call_single.id, new_syms.clone()),
                                 mapped_args,
                                 info(func_call_single.info, new_syms.clone()),
                             ));
@@ -349,7 +350,7 @@ pub fn scoped_expr_pass<'a>(
                             .collect::<Vec<_>>();
 
                         let ret = FuncCall::Single(FuncCallSingle::new(
-                            pass_symbol(func_call_single.id),
+                            pass_symbol(func_call_single.id, new_syms.clone()),
                             mapped_args,
                             info(func_call_single.info, syms.clone()),
                         ));
@@ -396,7 +397,7 @@ pub fn scoped_expr_pass<'a>(
                     ))
                 }
                 Argument::Named(named_argument) => {
-                    let name = pass_symbol(named_argument.name);
+                    let name = pass_symbol(named_argument.name, syms.clone());
                     let passed = scoped_expr_pass(*named_argument.value, syms);
                     Argument::Named(NamedArgument::new(name, passed, einfo(named_argument.info)))
                 }
@@ -405,16 +406,17 @@ pub fn scoped_expr_pass<'a>(
             Expr::Argument(arg)
         }
         Expr::Symbol(symbol) => {
+            let s = Symbol::new(symbol.value.clone(), info(symbol.info, syms.clone()));
             if !syms.contains(&symbol.value) {
                 panic!("undefined symbol: {}", symbol.value)
             }
-            Expr::Symbol(pass_symbol(symbol))
+            Expr::Symbol(s)
         }
     }
 }
 
-fn pass_symbol<'a>(symbol: Symbol<ParsedStageInfo<'a>>) -> Symbol<ScopedStageInfo<'a>> {
-    Symbol::new(symbol.value.clone(), einfo(symbol.info.clone()))
+fn pass_symbol<'a>(symbol: Symbol<ParsedStageInfo<'a>>, table: SymbolTable<ScopedStageInfo<'a>>) -> Symbol<ScopedStageInfo<'a>> {
+    Symbol::new(symbol.value.clone(), info(symbol.info.clone(), table))
 }
 
 // empty info, i.e., empty symbol table
@@ -440,17 +442,18 @@ fn argument_symbol<'a>(
     syms: &SymbolTable<ScopedStageInfo<'a>>,
 ) -> Expr<ScopedStageInfo<'a>> {
     Expr::Argument(Argument::Positional(PositionalArgument::new(
-        Expr::Symbol(pass_symbol(id.clone())),
+        Expr::Symbol(pass_symbol(id.clone(), syms.clone())),
         info(id.info, syms.clone()),
     )))
 }
 
 fn arguments_symbol_list<'a>(
     args: FuncCallSingle<ParsedStageInfo<'a>>,
+    table: SymbolTable<ScopedStageInfo<'a>>,
 ) -> Expr<ScopedStageInfo<'a>> {
     Expr::Argument(Argument::Positional(PositionalArgument::new(
         Expr::FuncCall(FuncCall::Single(FuncCallSingle::new(
-            pass_symbol(args.id),
+            pass_symbol(args.id, table.clone()),
             args.args
                 .into_iter()
                 .map(|arg| {
@@ -461,9 +464,9 @@ fn arguments_symbol_list<'a>(
                     let Expr::Symbol(arg) = *arg.value else {
                         panic!("invalid ast");
                     };
-                    let info = arg.info.clone();
-                    let arg = Expr::Symbol(pass_symbol(arg));
-                    Argument::Positional(PositionalArgument::new(arg, einfo(info)))
+                    let inf = arg.info.clone();
+                    let arg = Expr::Symbol(pass_symbol(arg, table.clone()));
+                    Argument::Positional(PositionalArgument::new(arg, info(inf, table.clone())))
                 })
                 .collect(),
             einfo(args.info.clone()),
