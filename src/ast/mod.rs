@@ -31,17 +31,13 @@ impl<I: StageInfo> Expr<I> {
             Expr::String(_) => format!("string"),
             Expr::Color(_) => format!("color"),
             Expr::Symbol(_) => format!("symbol"),
-            Expr::FuncCall(func_call) => {
-                match func_call {
-                    FuncCall::Single(f) => format!("func::single({})", f.id),
-                    FuncCall::List(f) => format!("func::list({})", f.calls.len()),
-                }
+            Expr::FuncCall(func_call) => match func_call {
+                FuncCall::Single(f) => format!("func::single({})", f.id),
+                FuncCall::List(f) => format!("func::list({})", f.calls.len()),
             },
-            Expr::Argument(argument) => {
-                match argument {
-                    Argument::Positional(_) => format!("argument::pos"),
-                    Argument::Named(_) => format!("argument::named"),
-                }
+            Expr::Argument(argument) => match argument {
+                Argument::Positional(_) => format!("argument::pos"),
+                Argument::Named(_) => format!("argument::named"),
             },
             Expr::Array(_) => format!("array"),
             Expr::Dict(_) => format!("dict"),
@@ -62,68 +58,22 @@ impl<I: StageInfo> Expr<I> {
         }
     }
 
-    pub fn map_info<F, O: StageInfo>(self, mapping: F) -> Expr<F>
-        where F: Fn(Expr<I>, I) -> O
-    {
+    pub fn as_code(&self) -> String {
         match self {
-            Expr::Int(Int { value, info }) =>
-                Expr::Int(Int::new(*value, mapping(self.clone(), info))),
-
-            Expr::Float(Float { value, info }) =>
-                Expr::Float(Float::new(*value, mapping(self.clone(), info))),
-
-            Expr::String(Str { value, info }) =>
-                Expr::String(Str::new(value, mapping(self.clone(), info))),
-
-            Expr::Color(Color { r, g, b, info }) =>
-                Expr::Color(Color::new(r, g, b, mapping(self.clone(), info))),
-
-            Expr::Symbol(Symbol { value, info }) =>
-                Expr::Symbol(Symbol::new(value, mapping(self.clone(), info))),
-
-            Expr::FuncCall(FuncCall::Single(FuncCallSingle { id, args, info })) =>
-                Expr::FuncCall(FuncCall::Single(FuncCallSingle::new(id, args, mapping(self.clone(), info)))),
-
-            Expr::FuncCall(FuncCall::List(FuncCallList { calls, info })) => {
-                let mapped_calls = calls.into_iter()
-                    .map(|call| Expr::FuncCall(call).map_info(mapping))
-                    .collect::<Vec<FuncCall<O>>>();
-
-                let call_list = FuncCallList::new(mapped_calls, mapping(self.clone(), info));
-
-                Expr::FuncCall(FuncCall::List(call_list))
-            },
-
-            Expr::Argument(Argument::Named(NamedArgument { name, value, info })) =>
-                Expr::Argument(Argument::Named(NamedArgument { name, value, info: mapping(self.clone(), info) })),
-
-            Expr::Argument(Argument::Positional(PositionalArgument { value, info })) =>
-                Expr::Argument(Argument::Positional(PositionalArgument {  value, info: mapping(self.clone(), info) })),
-
-            Expr::Array(Array { value, info }) => {
-                let mapped_elems = value.into_iter()
-                    .map(|elem| elem.map_info(mapping))
-                    .collect::<Vec<Expr<O>>>();
-
-                Expr::Array(Array::new(mapped_elems, mapping(self.clone(), info)))
-            },
-
-            Expr::Dict(Dict { value, info }) => {
-                let mapped_entries = value.into_iter()
-                    .map(|DictEntry { key, value, info}| DictEntry {
-                        key: key.map_info(mapping),
-                        value: value.map_info(mapping),
-                        info: mapping(self.clone(), info)
-                    })
-                    .collect::<Vec<DictEntry<O>>>();
-
-                Expr::Dict(Dict::new(mapped_entries, mapping(self.clone(), info)))
-            }
+            Expr::Int(int) => int.as_code(),
+            Expr::Float(float) => float.as_code(),
+            Expr::String(str) => str.as_code(),
+            Expr::Color(color) => color.as_code(),
+            Expr::Symbol(symbol) => symbol.as_code(),
+            Expr::FuncCall(func_call) => func_call.as_code(),
+            Expr::Argument(argument) => argument.as_code(),
+            Expr::Array(array) => array.as_code(),
+            Expr::Dict(dict) => dict.as_code(),
         }
     }
 }
 
-impl <I: StageInfo> PrettyPrintable for Expr<I> {
+impl<I: StageInfo> PrettyPrintable for Expr<I> {
     fn pretty_print(&self) -> StringTreeNode {
         match self {
             Expr::Int(int) => int.pretty_print(),
@@ -139,36 +89,36 @@ impl <I: StageInfo> PrettyPrintable for Expr<I> {
     }
 }
 
-impl <I: StageInfo> Display for Expr<I> {
+impl<I: StageInfo> Display for Expr<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expr::Int(int) => {
                 write!(f, "{int}")
-            },
+            }
             Expr::Float(float) => {
                 write!(f, "{float}")
-            },
+            }
             Expr::String(str) => {
                 write!(f, "{str}")
-            },
+            }
             Expr::Color(color) => {
                 write!(f, "{color}")
-            },
+            }
             Expr::Symbol(symbol) => {
                 write!(f, "{symbol}")
-            },
+            }
             Expr::FuncCall(func_call_list) => {
                 write!(f, "{func_call_list}")
-            },
+            }
             Expr::Argument(argument) => {
                 write!(f, "{argument}")
-            },
+            }
             Expr::Array(array) => {
                 write!(f, "{array}")
-            },
+            }
             Expr::Dict(dict) => {
                 write!(f, "{dict}")
-            },
+            }
         }
     }
 }
@@ -189,9 +139,13 @@ impl<I: StageInfo> Int<I> {
     pub fn new(value: u64, info: I) -> Self {
         Self { value, info }
     }
+
+    pub fn as_code(&self) -> String {
+        format!("{}", self.value)
+    }
 }
 
-impl <I: StageInfo> Display for Int<I> {
+impl<I: StageInfo> Display for Int<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Int({}, {})", self.value, self.info)
     }
@@ -213,9 +167,13 @@ impl<I: StageInfo> Float<I> {
     pub fn new(value: f64, info: I) -> Self {
         Self { value, info }
     }
+
+    pub fn as_code(&self) -> String {
+        format!("{}f", self.value)
+    }
 }
 
-impl <I: StageInfo> Display for Float<I> {
+impl<I: StageInfo> Display for Float<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Float({}, {})", self.value, self.info)
     }
@@ -237,9 +195,13 @@ impl<I: StageInfo> Str<I> {
     pub fn new(value: String, info: I) -> Self {
         Self { value, info }
     }
+
+    pub fn as_code(&self) -> String {
+        format!("\"{}\"", self.value)
+    }
 }
 
-impl <I: StageInfo> Display for Str<I> {
+impl<I: StageInfo> Display for Str<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Str({}, {})", self.value, self.info)
     }
@@ -263,11 +225,19 @@ impl<I: StageInfo> Color<I> {
     pub fn new(r: u8, g: u8, b: u8, info: I) -> Self {
         Self { r, g, b, info }
     }
+
+    pub fn as_code(&self) -> String {
+        format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
+    }
 }
 
-impl <I: StageInfo> Display for Color<I> {
+impl<I: StageInfo> Display for Color<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Color(#{:02x}{:02x}{:02x}, {})", self.r, self.g, self.b, self.info)
+        write!(
+            f,
+            "Color(#{:02x}{:02x}{:02x}, {})",
+            self.r, self.g, self.b, self.info
+        )
     }
 }
 
@@ -287,9 +257,13 @@ impl<I: StageInfo> Symbol<I> {
     pub fn new(value: String, info: I) -> Self {
         Self { value, info }
     }
+
+    pub fn as_code(&self) -> String {
+        format!("{}", self.value)
+    }
 }
 
-impl <I: StageInfo> Display for Symbol<I> {
+impl<I: StageInfo> Display for Symbol<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Symbol({}, {})", self.value, self.info)
     }
@@ -308,17 +282,26 @@ impl<I: StageInfo> FuncCall<I> {
             FuncCall::List(func_call_list) => &func_call_list.info,
         }
     }
+
+    pub fn as_code(&self) -> String {
+        match self {
+            FuncCall::Single(func_call_single) => func_call_single.as_code(),
+            FuncCall::List(func_call_list) => func_call_list.as_code(),
+        }
+    }
 }
 
 impl<I: StageInfo> PrettyPrintable for FuncCall<I> {
     fn pretty_print(&self) -> StringTreeNode {
         match self {
-            FuncCall::Single(func_call_single) => {
-                StringTreeNode::with_child_nodes("func_call".to_string(), vec![func_call_single.pretty_print()].into_iter()) 
-            },
-            FuncCall::List(func_call_list) => {
-                StringTreeNode::with_child_nodes("func_call".to_string(), vec![func_call_list.pretty_print()].into_iter()) 
-            },
+            FuncCall::Single(func_call_single) => StringTreeNode::with_child_nodes(
+                "func_call".to_string(),
+                vec![func_call_single.pretty_print()].into_iter(),
+            ),
+            FuncCall::List(func_call_list) => StringTreeNode::with_child_nodes(
+                "func_call".to_string(),
+                vec![func_call_list.pretty_print()].into_iter(),
+            ),
         }
     }
 }
@@ -338,10 +321,7 @@ impl<I: StageInfo> PrettyPrintable for FuncCallList<I> {
             children.push(call.pretty_print());
         }
 
-        StringTreeNode::with_child_nodes(
-            "func_call_list".to_string(),
-            children.into_iter()
-        ) 
+        StringTreeNode::with_child_nodes("func_call_list".to_string(), children.into_iter())
     }
 }
 
@@ -349,9 +329,19 @@ impl<I: StageInfo> FuncCallList<I> {
     pub fn new(calls: Vec<FuncCall<I>>, info: I) -> Self {
         Self { calls, info }
     }
+
+    pub fn as_code(&self) -> String {
+        let calls = self
+            .calls
+            .iter()
+            .map(|call| call.as_code())
+            .collect::<Vec<String>>()
+            .join("\n");
+        format!("(\n{calls}\n)")
+    }
 }
 
-impl <I: StageInfo> Display for FuncCallList<I> {
+impl<I: StageInfo> Display for FuncCallList<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "FuncCallList({:?}, {})", self.calls, self.info)
     }
@@ -368,20 +358,27 @@ impl<I: StageInfo> PrettyPrintable for FuncCallSingle<I> {
     fn pretty_print(&self) -> StringTreeNode {
         let mut children = vec![];
         children.push(self.id.pretty_print());
-        
+
         for arg in &self.args {
             children.push(arg.pretty_print());
         }
 
         children.push(self.info.pretty_print());
 
-        StringTreeNode::with_child_nodes(format!("func_call_single: {}", self.info).to_string(), children.into_iter())
+        StringTreeNode::with_child_nodes(
+            format!("func_call_single: {}", self.info).to_string(),
+            children.into_iter(),
+        )
     }
 }
 
-impl <I: StageInfo> Display for FuncCallSingle<I> {
+impl<I: StageInfo> Display for FuncCallSingle<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "FuncCallSingle({}, {:?}, {})", self.id, self.args, self.info)
+        write!(
+            f,
+            "FuncCallSingle({}, {:?}, {})",
+            self.id, self.args, self.info
+        )
     }
 }
 
@@ -389,9 +386,19 @@ impl<I: StageInfo> FuncCallSingle<I> {
     pub fn new(id: Symbol<I>, args: Vec<Argument<I>>, info: I) -> Self {
         Self { id, args, info }
     }
+
+    pub fn as_code(&self) -> String {
+        let args = self
+            .args
+            .iter()
+            .map(|arg| arg.as_code())
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!("({} {})", self.id.as_code(), args)
+    }
 }
 
-impl <I: StageInfo> Display for FuncCall<I> {
+impl<I: StageInfo> Display for FuncCall<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FuncCall::Single(func_call_single) => {
@@ -399,7 +406,7 @@ impl <I: StageInfo> Display for FuncCall<I> {
             }
             FuncCall::List(func_call_list) => {
                 write!(f, "FuncCall::List({func_call_list})")
-            },
+            }
         }
     }
 }
@@ -417,30 +424,39 @@ impl<I: StageInfo> Argument<I> {
             Argument::Named(named_argument) => &named_argument.info,
         }
     }
+
+    pub fn as_code(&self) -> String {
+        match self {
+            Argument::Positional(positional_argument) => positional_argument.as_code(),
+            Argument::Named(named_argument) => named_argument.as_code(),
+        }
+    }
 }
 
 impl<I: StageInfo> PrettyPrintable for Argument<I> {
     fn pretty_print(&self) -> StringTreeNode {
         match self {
-            Argument::Positional(positional_argument) => {
-                StringTreeNode::with_child_nodes("argument".to_string(), vec![positional_argument.pretty_print()].into_iter()) 
-            },
-            Argument::Named(named_argument) => {
-                StringTreeNode::with_child_nodes("argument".to_string(), vec![named_argument.pretty_print()].into_iter()) 
-            },
+            Argument::Positional(positional_argument) => StringTreeNode::with_child_nodes(
+                "argument".to_string(),
+                vec![positional_argument.pretty_print()].into_iter(),
+            ),
+            Argument::Named(named_argument) => StringTreeNode::with_child_nodes(
+                "argument".to_string(),
+                vec![named_argument.pretty_print()].into_iter(),
+            ),
         }
     }
 }
 
-impl <I: StageInfo> Display for Argument<I> {
+impl<I: StageInfo> Display for Argument<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Argument::Positional(positional_argument) => {
                 write!(f, "{positional_argument}")
-            },
+            }
             Argument::Named(named_argument) => {
                 write!(f, "{named_argument}")
-            },
+            }
         }
     }
 }
@@ -462,11 +478,18 @@ impl<I: StageInfo> PrettyPrintable for PositionalArgument<I> {
 
 impl<I: StageInfo> PositionalArgument<I> {
     pub fn new(value: Expr<I>, info: I) -> Self {
-        Self { value: Box::new(value), info }
+        Self {
+            value: Box::new(value),
+            info,
+        }
+    }
+
+    pub fn as_code(&self) -> String {
+        self.value.as_code()
     }
 }
 
-impl <I: StageInfo> Display for PositionalArgument<I> {
+impl<I: StageInfo> Display for PositionalArgument<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "PositionalArgument({}, {})", self.value, self.info)
     }
@@ -491,13 +514,25 @@ impl<I: StageInfo> PrettyPrintable for NamedArgument<I> {
 
 impl<I: StageInfo> NamedArgument<I> {
     pub fn new(name: Symbol<I>, value: Expr<I>, info: I) -> Self {
-        Self { name, value: Box::new(value), info }
+        Self {
+            name,
+            value: Box::new(value),
+            info,
+        }
+    }
+
+    pub fn as_code(&self) -> String {
+        format!("{}: {}", self.name.as_code(), self.value.as_code())
     }
 }
 
-impl <I: StageInfo> Display for NamedArgument<I> {
+impl<I: StageInfo> Display for NamedArgument<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "NamedArgument({}, {}, {})", self.name, self.value, self.info)
+        write!(
+            f,
+            "NamedArgument({}, {}, {})",
+            self.name, self.value, self.info
+        )
     }
 }
 
@@ -519,9 +554,20 @@ impl<I: StageInfo> Array<I> {
     pub fn new(value: Vec<Expr<I>>, info: I) -> Self {
         Self { value, info }
     }
+
+    pub fn as_code(&self) -> String {
+        let entries = self
+            .value
+            .iter()
+            .map(|e| e.as_code())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        format!("[{entries}]")
+    }
 }
 
-impl <I: StageInfo> Display for Array<I> {
+impl<I: StageInfo> Display for Array<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Array({:?}, {})", self.value, self.info)
     }
@@ -545,9 +591,24 @@ impl<I: StageInfo> Dict<I> {
     pub fn new(value: Vec<DictEntry<I>>, info: I) -> Self {
         Self { value, info }
     }
+
+    pub fn as_code(&self) -> String {
+        if self.value.len() == 0 {
+            return "[:]".to_owned();
+        }
+
+        let entries = self
+            .value
+            .iter()
+            .map(|e| e.as_code())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        format!("[{entries}]")
+    }
 }
 
-impl <I: StageInfo> Display for Dict<I> {
+impl<I: StageInfo> Display for Dict<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Dict({:?}, {})", self.value, self.info)
     }
@@ -563,13 +624,18 @@ pub struct DictEntry<I: StageInfo> {
 impl<I: StageInfo> PrettyPrintable for DictEntry<I> {
     fn pretty_print(&self) -> StringTreeNode {
         let mut children = vec![];
-        children.push(StringTreeNode::with_child_nodes("key".to_string(), vec![self.key.pretty_print()].into_iter()));
-        children.push(
-            StringTreeNode::with_child_nodes("value".to_string(), vec![self.value.pretty_print()].into_iter())
-        );
-        children.push(
-            StringTreeNode::with_child_nodes("info".to_string(), vec![self.info.pretty_print()].into_iter())
-        );
+        children.push(StringTreeNode::with_child_nodes(
+            "key".to_string(),
+            vec![self.key.pretty_print()].into_iter(),
+        ));
+        children.push(StringTreeNode::with_child_nodes(
+            "value".to_string(),
+            vec![self.value.pretty_print()].into_iter(),
+        ));
+        children.push(StringTreeNode::with_child_nodes(
+            "info".to_string(),
+            vec![self.info.pretty_print()].into_iter(),
+        ));
         StringTreeNode::with_child_nodes("dict_entry".to_string(), children.into_iter())
     }
 }
@@ -578,9 +644,13 @@ impl<I: StageInfo> DictEntry<I> {
     pub fn new(key: Expr<I>, value: Expr<I>, info: I) -> Self {
         Self { key, value, info }
     }
+
+    pub fn as_code(&self) -> String {
+        format!("{}: {}", self.key.as_code(), self.value.as_code())
+    }
 }
 
-impl <I: StageInfo> Display for DictEntry<I> {
+impl<I: StageInfo> Display for DictEntry<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "DictEntry({}, {}, {})", self.key, self.value, self.info)
     }

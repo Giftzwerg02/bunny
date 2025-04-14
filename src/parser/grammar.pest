@@ -29,13 +29,21 @@ array = {
 }
 
 func_call = {
-	"(" ~ identifier ~ argument* ~ ")"
+	"(" ~ identifier ~ func_arguments ~ ")"
 	| "(" ~ func_call* ~ ")"
 }
 
-argument = {
-	(identifier ~ ":" ~ expr)
-	| expr
+// maybe ensure positonal-args preceed named-args at parse-time?
+func_arguments = {
+	(named_argument | positional_argument)*
+}
+
+named_argument = {
+	identifier ~ ":" ~ expr
+}
+
+positional_argument = {
+	expr
 }
 
 identifier = @{
