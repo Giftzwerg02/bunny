@@ -21,7 +21,7 @@ use parser::{BunnyParser, Rule};
 use pest::Parser;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let input = fs::read_to_string("src/parser/examples/func-return.bny")?;
+    let input = fs::read_to_string("src/parser/examples/single-call.bny")?;
     let mut pair = BunnyParser::parse(Rule::program, &input)?.filter(filter_comments);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());
