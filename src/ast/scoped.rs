@@ -334,31 +334,26 @@ pub fn scoped_expr_pass<'a>(
                     }
                 }
                 FuncCall::List(func_call_list) => {
-                    let mut funcs = vec![];
+                    assert!(func_call_list.calls.len() > 0, "empty func-call-lists are not allowed");
+
                     let mut new_syms = syms.clone();
-                    for call in func_call_list.calls {
+                    let mut out_func: Option<FuncCall<_>> = None;
+
+                    for (i, call) in func_call_list.calls.iter().enumerate() {
                         let Expr::FuncCall(passed_call) =
-                            scoped_expr_pass(Expr::FuncCall(call), &new_syms)
+                            scoped_expr_pass(Expr::FuncCall(call.clone()), &new_syms)
                         else {
                             panic!("invalid ast");
                         };
 
-                        match passed_call {
-                            FuncCall::Single(ref f) => {
-                                new_syms = f.info.syms.clone();
-                            }
-                            FuncCall::List(ref f) => {
-                                new_syms = f.info.syms.clone();
-                            }
-                        }
+                        new_syms = passed_call.info().syms.clone();
 
-                        funcs.push(passed_call);
+                        if i == func_call_list.calls.len() - 1 {
+                            out_func = Some(passed_call);
+                        }
                     }
 
-                    Expr::FuncCall(FuncCall::List(FuncCallList::new(
-                        funcs,
-                        info(func_call_list.info, syms.clone()),
-                    )))
+                    Expr::FuncCall(out_func.unwrap())
                 }
             }
         }
