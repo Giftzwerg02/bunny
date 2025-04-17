@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::hash::Hash;
 use std::rc::Rc;
 
 /**
@@ -53,6 +52,7 @@ pub struct PolyType {
     pub typ: Type,
 }
 
+#[derive(Debug, Clone)]
 pub struct HMState {
     current_level: Level,
     current_typevar: TypeVarId
@@ -280,7 +280,7 @@ impl Display for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::TVar(tv) =>
-                write!(f, "{}", tv),
+                write!(f, "{}", tv.borrow()),
 
             Type::Basic(name) =>
                 write!(f, "{}", name),

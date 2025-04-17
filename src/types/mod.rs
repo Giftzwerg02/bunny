@@ -3,20 +3,29 @@ mod hm;
 mod util;
 
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
-use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, NamedArgument, PositionalArgument, PrettyPrintable, Str, Symbol};
+use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, NamedArgument, Str, Symbol};
 use crate::types::hm::{HMState, Type};
 use crate::types::typed::{PolyTypedStageInfo, TypedStageInfo};
 use crate::types::util::{array_type, color_type, dict_type, float_type, int_type, pair_type, string_type};
 
-struct InferenceState<'a> {
+pub struct InferenceState<'a> {
     type_assumptions: SymbolTable<PolyTypedStageInfo<'a>>,
     hm: HMState
 }
 
-fn infer(
-    expr: &Expr<ScopedStageInfo>,
-    state: &mut InferenceState
-) -> Expr<TypedStageInfo> {
+impl InferenceState<'_> {
+    pub fn new() -> Self {
+        InferenceState {
+            type_assumptions: SymbolTable::new(),
+            hm: HMState::new()
+        }
+    }
+}
+
+pub fn typecheck_pass<'a>(
+    expr: &Expr<ScopedStageInfo<'a>>,
+    state: &mut InferenceState<'a>
+) -> Expr<TypedStageInfo<'a>> {
     match expr {
         Expr::Int(Int { value, info }) =>
             Expr::Int(
@@ -67,11 +76,11 @@ fn infer(
     }
 }
 
-fn type_stage_info(
-    info: &ScopedStageInfo,
+fn type_stage_info<'a>(
+    info: &ScopedStageInfo<'a>,
     typ: Type,
-    state: &mut InferenceState
-) -> TypedStageInfo {
+    state: &mut InferenceState<'a>
+) -> TypedStageInfo<'a> {
     TypedStageInfo {
         inner: info.inner.clone(),
         typ,
@@ -80,10 +89,10 @@ fn type_stage_info(
 }
 
 /// Refer to https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L197
-fn infer_symbol(
-    sym: &Symbol<ScopedStageInfo>,
-    state: &mut InferenceState
-) -> Symbol<TypedStageInfo> {
+fn infer_symbol<'a>(
+    sym: &Symbol<ScopedStageInfo<'a>>,
+    state: &mut InferenceState<'a>
+) -> Symbol<TypedStageInfo<'a>> {
     let key = &sym.value;
 
     // defs are infered as let-binded vars:
@@ -94,26 +103,36 @@ fn infer_symbol(
 
         state.hm.enter_level();
 
-        let expr = infer(scoped_expr, state);
-        //let polytype = expr.typ().generalize(&state.hm);
-        // TODO: Generalize the whole expr tree, not just the type of expr itself
+        let expr = typecheck_pass(scoped_expr, state);
+        let poly_expr = expr.map_stage(
+            &mut |typed_info: TypedStageInfo| typed_info.generalize(&state.hm)
+        );
 
         state.hm.exit_level();
 
 
-        state.type_assumptions.insert(key.clone(), expr);
+        state.type_assumptions.insert(key.clone(), poly_expr);
     }
 
-    let polytype = state.type_assumptions.get(key).unwrap();
+    let symbol_type: Type = state.type_assumptions
+        .get(key)
+        .unwrap()
+        .clone()
+        .map_stage(&mut |poly_typed_info: PolyTypedStageInfo| poly_typed_info.inst(&mut state.hm))
+        .typ()
+        .clone(); // TODO Clean Mess
 
-    polytype.inst(&mut state.hm)
+    Symbol::new(
+        sym.value.clone(),
+        type_stage_info(&sym.info, symbol_type, state)
+    )
 }
 
 /// See: https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L210
-fn infer_single_func_call(
-    call: &FuncCallSingle<ScopedStageInfo>,
-    state: &mut InferenceState
-) -> FuncCallSingle<TypedStageInfo> {
+fn infer_single_func_call<'a>(
+    call: &FuncCallSingle<ScopedStageInfo<'a>>,
+    state: &mut InferenceState<'a>
+) -> FuncCallSingle<TypedStageInfo<'a>> {
     let fn_sym = infer_symbol(&call.id, state);
 
     // t0 in the paper
@@ -151,20 +170,15 @@ fn infer_single_func_call(
     )
 }
 
-fn infer_argument(
-    arg: &Argument<ScopedStageInfo>,
-    state: &mut InferenceState
-) -> Argument<TypedStageInfo> {
+fn infer_argument<'a>(
+    arg: &Argument<ScopedStageInfo<'a>>,
+    state: &mut InferenceState<'a>
+) -> Argument<TypedStageInfo<'a>> {
     match arg {
-        Argument::Positional(PositionalArgument { value, info }) => {
-            let expr = infer(value, state);
+        Argument::Positional(scoped_expr) => {
+            let typed_expr = typecheck_pass(scoped_expr, state);
 
-            Argument::Positional(
-                PositionalArgument::new(
-                    expr.clone(),
-                    expr.info().clone()
-                )
-            )
+            Argument::Positional(typed_expr)
         },
 
         // TODO Checking the name?
@@ -172,7 +186,7 @@ fn infer_argument(
             NamedArgument { name: Symbol { value: name, .. },
                 value: scoped_expr, .. }
         ) => {
-            let expr = infer(scoped_expr, state);
+            let expr = typecheck_pass(scoped_expr, state);
 
             Argument::Named(
                 NamedArgument::new(
@@ -185,10 +199,10 @@ fn infer_argument(
     }
 }
 
-fn infer_array(
-    array: &Array<ScopedStageInfo>,
-    state: &mut InferenceState
-) -> Array<TypedStageInfo> {
+fn infer_array<'a>(
+    array: &Array<ScopedStageInfo<'a>>,
+    state: &mut InferenceState<'a>
+) -> Array<TypedStageInfo<'a>> {
 
     // TODO InteliJ doesn't like this for some reason
     /*if let Some(first) = array.value.first() else {
@@ -204,14 +218,15 @@ fn infer_array(
 
     let cloned_values = array.value.clone();
     let first = cloned_values.first().unwrap();
-    let element_type = infer(first, state).typ();
+
+    let elem = typecheck_pass(first, state);
 
     let typed_values = cloned_values
         .into_iter()
-        .map(|element| infer(&element, state))
+        .map(|element| typecheck_pass(&element, state))
         .collect::<Vec<Expr<TypedStageInfo>>>();
 
-    if typed_values.iter().any(|current| current.typ() != element_type) {
+    if typed_values.iter().any(|current| current.typ() != elem.typ()) {
         panic!();
     }
 
@@ -219,16 +234,16 @@ fn infer_array(
         typed_values,
         type_stage_info(
             &array.info,
-            array_type(element_type.clone()),
+            array_type(elem.typ().clone()),
             state
         )
     )
 }
 
-fn infer_dict(
-    dict: &Dict<ScopedStageInfo>,
-    state: &mut InferenceState
-) -> Dict<TypedStageInfo> {
+fn infer_dict<'a>(
+    dict: &Dict<ScopedStageInfo<'a>>,
+    state: &mut InferenceState<'a>
+) -> Dict<TypedStageInfo<'a>> {
 
     if dict.value.is_empty() {
         return Dict::new(
@@ -241,12 +256,12 @@ fn infer_dict(
         )
     }
 
-    fn infer_dict_entry(
-        entry: &DictEntry<ScopedStageInfo>,
-        state: &mut InferenceState
-    ) -> DictEntry<TypedStageInfo> {
-        let key = infer(&entry.key, state);
-        let value = infer(&entry.value, state);
+    fn infer_dict_entry<'a>(
+        entry: &DictEntry<ScopedStageInfo<'a>>,
+        state: &mut InferenceState<'a>
+    ) -> DictEntry<TypedStageInfo<'a>> {
+        let key = typecheck_pass(&entry.key, state);
+        let value = typecheck_pass(&entry.value, state);
 
         DictEntry::new(
             key.clone(),
@@ -291,4 +306,9 @@ fn infer_dict(
             state
         )
     )
+}
+
+#[cfg(test)]
+mod tests {
+
 }

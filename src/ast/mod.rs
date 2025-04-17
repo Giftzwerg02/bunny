@@ -67,6 +67,24 @@ impl<I: StageInfo> Expr<I> {
             Expr::Dict(dict) => dict.as_code(),
         }
     }
+
+    /// Recursively maps the StageInfo of this expression and all its children
+    /// from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> Expr<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        match self {
+            Expr::Int(int) => Expr::Int(int.map_stage(f)),
+            Expr::Float(float) => Expr::Float(float.map_stage(f)),
+            Expr::String(str) => Expr::String(str.map_stage(f)),
+            Expr::Color(color) => Expr::Color(color.map_stage(f)),
+            Expr::Symbol(symbol) => Expr::Symbol(symbol.map_stage(f)),
+            Expr::FuncCall(func_call) => Expr::FuncCall(func_call.map_stage(f)),
+            Expr::Array(array) => Expr::Array(array.map_stage(f)),
+            Expr::Dict(dict) => Expr::Dict(dict.map_stage(f)),
+        }
+    }
 }
 
 impl<I: StageInfo> PrettyPrintable for Expr<I> {
@@ -135,6 +153,15 @@ impl<I: StageInfo> Int<I> {
     pub fn as_code(&self) -> String {
         format!("{}", self.value)
     }
+
+    /// Maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F: FnMut(I) -> O>(self, f: &mut F) -> Int<O> {
+        Int {
+            value: self.value,
+            // Apply the mapping function f to the StageInfo
+            info: f(self.info),
+        }
+    }
 }
 
 impl<I: StageInfo> Display for Int<I> {
@@ -163,6 +190,15 @@ impl<I: StageInfo> Float<I> {
     pub fn as_code(&self) -> String {
         format!("{}f", self.value)
     }
+
+    /// Maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F: FnMut(I) -> O>(self, f: &mut F) -> Float<O> {
+        Float {
+            value: self.value,
+            // Apply the mapping function f to the StageInfo
+            info: f(self.info),
+        }
+    }
 }
 
 impl<I: StageInfo> Display for Float<I> {
@@ -190,6 +226,15 @@ impl<I: StageInfo> Str<I> {
 
     pub fn as_code(&self) -> String {
         format!("\"{}\"", self.value)
+    }
+
+    /// Maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F: FnMut(I) -> O>(self, f: &mut F) -> Str<O> {
+        Str {
+            value: self.value,
+            // Apply the mapping function f to the StageInfo
+            info: f(self.info),
+        }
     }
 }
 
@@ -220,6 +265,17 @@ impl<I: StageInfo> Color<I> {
 
     pub fn as_code(&self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
+    }
+
+    /// Maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F: FnMut(I) -> O>(self, f: &mut F) -> Color<O> {
+        Color {
+            r: self.r,
+            g: self.g,
+            b: self.b,
+            // Apply the mapping function f to the StageInfo
+            info: f(self.info),
+        }
     }
 }
 
@@ -253,6 +309,15 @@ impl<I: StageInfo> Symbol<I> {
     pub fn as_code(&self) -> String {
         format!("{}", self.value)
     }
+
+    /// Maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F: FnMut(I) -> O>(self, f: &mut F) -> Symbol<O> {
+        Symbol {
+            value: self.value,
+            // Apply the mapping function f to the StageInfo
+            info: f(self.info),
+        }
+    }
 }
 
 impl<I: StageInfo> Display for Symbol<I> {
@@ -279,6 +344,17 @@ impl<I: StageInfo> FuncCall<I> {
         match self {
             FuncCall::Single(func_call_single) => func_call_single.as_code(),
             FuncCall::List(func_call_list) => func_call_list.as_code(),
+        }
+    }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> FuncCall<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        match self {
+            FuncCall::Single(func_call_single) => FuncCall::Single(func_call_single.map_stage(f)),
+            FuncCall::List(func_call_list) => FuncCall::List(func_call_list.map_stage(f)),
         }
     }
 }
@@ -330,6 +406,26 @@ impl<I: StageInfo> FuncCallList<I> {
             .collect::<Vec<String>>()
             .join("\n");
         format!("(\n{calls}\n)")
+    }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> FuncCallList<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        // Recursively map the StageInfo in each function call
+        let new_calls = self
+            .calls
+            .into_iter()
+            .map(|call| call.map_stage(f))
+            .collect();
+        // Apply the mapping function f to the StageInfo of this node
+        let new_info = f(self.info);
+
+        FuncCallList {
+            calls: new_calls,
+            info: new_info,
+        }
     }
 }
 
@@ -396,6 +492,29 @@ impl<I: StageInfo> FuncCallSingle<I> {
     pub fn is_lambda(&self) -> bool {
         return self.id.value == FUNC_LAMBDA_KEYWORD;
     }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> FuncCallSingle<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        // Recursively map the StageInfo in the function identifier
+        let new_id = self.id.map_stage(f);
+        // Recursively map the StageInfo in each argument
+        let new_args = self
+            .args
+            .into_iter()
+            .map(|arg| arg.map_stage(f))
+            .collect();
+        // Apply the mapping function f to the StageInfo of this node
+        let new_info = f(self.info);
+
+        FuncCallSingle {
+            id: new_id,
+            args: new_args,
+            info: new_info,
+        }
+    }
 }
 
 impl<I: StageInfo> Display for FuncCall<I> {
@@ -431,6 +550,17 @@ impl<I: StageInfo> Argument<I> {
             Argument::Named(named_argument) => named_argument.as_code(),
         }
     }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> Argument<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        match self {
+            Argument::Positional(expr) => Argument::Positional(expr.map_stage(f)),
+            Argument::Named(named_argument) => Argument::Named(named_argument.map_stage(f)),
+        }
+    }
 }
 
 impl<I: StageInfo> PrettyPrintable for Argument<I> {
@@ -462,40 +592,6 @@ impl<I: StageInfo> Display for Argument<I> {
 }
 
 #[derive(Debug, Clone)]
-pub struct PositionalArgument<I: StageInfo> {
-    pub value: Box<Expr<I>>,
-    pub info: I,
-}
-
-impl<I: StageInfo> PrettyPrintable for PositionalArgument<I> {
-    fn pretty_print(&self) -> StringTreeNode {
-        let mut children = vec![];
-        children.push(self.value.pretty_print());
-        children.push(self.info.pretty_print());
-        StringTreeNode::with_child_nodes("positional_argument".to_string(), children.into_iter())
-    }
-}
-
-impl<I: StageInfo> PositionalArgument<I> {
-    pub fn new(value: Expr<I>, info: I) -> Self {
-        Self {
-            value: Box::new(value),
-            info,
-        }
-    }
-
-    pub fn as_code(&self) -> String {
-        self.value.as_code()
-    }
-}
-
-impl<I: StageInfo> Display for PositionalArgument<I> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PositionalArgument({}, {})", self.value, self.info)
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct NamedArgument<I: StageInfo> {
     pub name: Symbol<I>,
     pub value: Box<Expr<I>>,
@@ -523,6 +619,25 @@ impl<I: StageInfo> NamedArgument<I> {
 
     pub fn as_code(&self) -> String {
         format!("{}: {}", self.name.as_code(), self.value.as_code())
+    }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> NamedArgument<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        // Recursively map the StageInfo in the argument name
+        let new_name = self.name.map_stage(f);
+        // Recursively map the StageInfo in the argument value
+        let new_value = Box::new(self.value.map_stage(f));
+        // Apply the mapping function f to the StageInfo of this node
+        let new_info = f(self.info);
+
+        NamedArgument {
+            name: new_name,
+            value: new_value,
+            info: new_info,
+        }
     }
 }
 
@@ -565,6 +680,26 @@ impl<I: StageInfo> Array<I> {
 
         format!("[{entries}]")
     }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> Array<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        // Recursively map the StageInfo in each element
+        let new_value = self
+            .value
+            .into_iter()
+            .map(|expr| expr.map_stage(f))
+            .collect();
+        // Apply the mapping function f to the StageInfo of this node
+        let new_info = f(self.info);
+
+        Array {
+            value: new_value,
+            info: new_info,
+        }
+    }
 }
 
 impl<I: StageInfo> Display for Array<I> {
@@ -605,6 +740,26 @@ impl<I: StageInfo> Dict<I> {
             .join(" ");
 
         format!("[{entries}]")
+    }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> Dict<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        // Recursively map the StageInfo in each entry
+        let new_value = self
+            .value
+            .into_iter()
+            .map(|entry| entry.map_stage(f))
+            .collect();
+        // Apply the mapping function f to the StageInfo of this node
+        let new_info = f(self.info);
+
+        Dict {
+            value: new_value,
+            info: new_info,
+        }
     }
 }
 
@@ -648,6 +803,25 @@ impl<I: StageInfo> DictEntry<I> {
     pub fn as_code(&self) -> String {
         format!("{}: {}", self.key.as_code(), self.value.as_code())
     }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> DictEntry<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        // Recursively map the StageInfo in the key
+        let new_key = self.key.map_stage(f);
+        // Recursively map the StageInfo in the value
+        let new_value = self.value.map_stage(f);
+        // Apply the mapping function f to the StageInfo of this node
+        let new_info = f(self.info);
+
+        DictEntry {
+            key: new_key,
+            value: new_value,
+            info: new_info,
+        }
+    }
 }
 
 impl<I: StageInfo> Display for DictEntry<I> {
@@ -655,3 +829,4 @@ impl<I: StageInfo> Display for DictEntry<I> {
         write!(f, "DictEntry({}, {}, {})", self.key, self.value, self.info)
     }
 }
+ 

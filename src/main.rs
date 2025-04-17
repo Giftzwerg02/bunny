@@ -2,10 +2,9 @@ pub mod ast;
 pub mod cli;
 pub mod parser;
 pub mod debug;
+mod types;
 // mod types;
 // mod library;
-
-// mod types;
 // mod runner;
 
 use std::fs::{self};
@@ -19,6 +18,7 @@ use clap::Parser as ClapParser;
 use cli::Cli;
 use parser::{BunnyParser, Rule};
 use pest::Parser;
+use crate::types::{typecheck_pass, InferenceState};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = fs::read_to_string("src/parser/examples/single-call.bny")?;
@@ -41,6 +41,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let ast = timed!(scoped_expr_pass(ast, &syms));
     println!("{}", ast.pretty_print());
+
+    //let mut inference_state = InferenceState::new();
+    //let typ = typecheck_pass(&ast, &mut inference_state);
+    //println!("{:?}", typ);
+
     Ok(())
 }
 
