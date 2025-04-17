@@ -413,14 +413,14 @@ impl<I: StageInfo> Display for FuncCall<I> {
 
 #[derive(Debug, Clone)]
 pub enum Argument<I: StageInfo> {
-    Positional(PositionalArgument<I>),
+    Positional(Expr<I>),
     Named(NamedArgument<I>),
 }
 
 impl<I: StageInfo> Argument<I> {
     pub fn info(&self) -> &I {
         match self {
-            Argument::Positional(positional_argument) => &positional_argument.info,
+            Argument::Positional(expr) => expr.info(),
             Argument::Named(named_argument) => &named_argument.info,
         }
     }

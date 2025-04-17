@@ -5,7 +5,7 @@ use text_trees::StringTreeNode;
 
 use crate::parser::Rule;
 
-use super::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallList, FuncCallSingle, Int, NamedArgument, PositionalArgument, PrettyPrintable, StageInfo, Str, Symbol};
+use super::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallList, FuncCallSingle, Int, NamedArgument, PrettyPrintable, StageInfo, Str, Symbol};
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub struct ParsedStageInfo<'a> {
@@ -189,7 +189,7 @@ fn extract_arguments<'a>(p: Pair<'a, Rule>) -> Vec<Argument<ParsedStageInfo<'a>>
                 }
 
                 let expr = parsed_expr_pass(inner_pairs.next().expect("expr"));
-                Argument::Positional(PositionalArgument::new(expr, info(pair)))
+                Argument::Positional(expr)
             },
             _ => panic!("illegal argument rule: {}", pair)
         };

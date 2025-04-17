@@ -212,7 +212,7 @@ mod tests {
             }
 
             #[test]
-            fn invalid_illegal(s in formatcp!("[\\(\\)\\\\:{DIGIT}\\[\\]]+")) {
+            fn invalid_illegal(s in formatcp!(r"[\(\):{DIGIT}\[\]]+")) {
                 prop_parse_invalid(Rule::identifier, &*s)?;
             }
         }
@@ -245,7 +245,7 @@ mod tests {
 
         use crate::ast::{
             Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallList,
-            FuncCallSingle, Int, NamedArgument, PositionalArgument, PrettyPrintable, StageInfo,
+            FuncCallSingle, Int, NamedArgument, PrettyPrintable, StageInfo,
             Str, Symbol,
         };
 
@@ -352,9 +352,7 @@ mod tests {
         fn arb_argument(depth: u32) -> impl Strategy<Value = Argument<EmptyStageInfo>> {
             if depth == 0 {
                 return arb_expr(0)
-                    .prop_map(|value| {
-                        Argument::Positional(PositionalArgument::new(value, EmptyStageInfo {}))
-                    })
+                    .prop_map(Argument::Positional)
                     .boxed();
             }
 
@@ -362,9 +360,7 @@ mod tests {
                 (arb_id(), arb_expr(depth - 1)).prop_map(|(id, expr)| Argument::Named(
                     NamedArgument::new(id, expr, EmptyStageInfo {})
                 )),
-                arb_expr(depth - 1).prop_map(|value| Argument::Positional(
-                    PositionalArgument::new(value, EmptyStageInfo {})
-                ))
+                arb_expr(depth - 1).prop_map(Argument::Positional)
             ]
             .boxed()
         }
@@ -406,7 +402,7 @@ mod tests {
                     return Ok(());
                 };
 
-                check_expr_parse(*expr.value, pair)?;
+                check_expr_parse(expr, pair)?;
                 prop_assert!(pairs.next().is_none());
                 return Ok(());
             }
