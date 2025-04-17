@@ -53,14 +53,14 @@ pub struct PolyType {
     pub typ: Type,
 }
 
-pub struct InferenceState {
+pub struct HMState {
     current_level: Level,
     current_typevar: TypeVarId
 }
 
-impl InferenceState {
-    pub fn new() -> InferenceState {
-        InferenceState {
+impl HMState {
+    pub fn new() -> HMState {
+        HMState {
             current_level: 1,
             current_typevar: 0
         }
@@ -90,7 +90,7 @@ impl PolyType {
     /// with fresh monomorphic type variables.
     /// This “copies” the type, substituting the unbound (monomorphic) variable
     /// consistently.
-    pub fn inst(&self, state: &mut InferenceState) -> Type {
+    pub fn inst(&self, state: &mut HMState) -> Type {
         // A hash map from typevar id to new type.
         let mut replacements: HashMap<TypeVarId, Type> = HashMap::new();
 
@@ -145,7 +145,7 @@ impl Type {
     /// Walks over a type and collects type variable ids for unbound type variables
     /// that are deeper than the current level. Then wraps the type in a PolyType.
     /// This corresponds to the generalization of a let-binding.
-    pub fn generalize(&self, state: &InferenceState) -> PolyType {
+    pub fn generalize(&self, state: &HMState) -> PolyType {
         let mut tvs = vec![];
 
         // Helper function that recursively collects unbound type variables.
