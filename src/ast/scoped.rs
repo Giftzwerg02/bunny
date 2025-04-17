@@ -7,7 +7,7 @@ use im::HashMap;
 use crate::ast::{Argument, FuncCallSingle, PositionalArgument};
 
 use super::{
-    Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallList, Int, NamedArgument,
+    Array, Color, Dict, DictEntry, Expr, Float, FuncCall, Int, NamedArgument,
     PrettyPrintable, StageInfo, Str, Symbol, parsed::ParsedStageInfo,
 };
 
@@ -161,7 +161,7 @@ pub fn scoped_expr_pass<'a>(
                                 func_id.clone(),
                                 vec![Argument::Positional(PositionalArgument::new(
                                     new_call.clone(),
-                                    einfo(call_pos),
+                                    info(call_pos, inner_syms.clone()),
                                 ))],
                                 func_id.info,
                             );
@@ -174,7 +174,7 @@ pub fn scoped_expr_pass<'a>(
                             let mapped_arg1 =
                                 Argument::Positional(PositionalArgument::new(
                                     new_call.clone(),
-                                    einfo(func_call_single.args[1].info().clone()),
+                                    info(func_call_single.args[1].info().clone(), inner_syms.clone()),
                                 ));
                             let mapped_args = vec![mapped_arg0, mapped_arg1];
 
@@ -242,7 +242,7 @@ pub fn scoped_expr_pass<'a>(
                                     new_call_args,
                                     vec![Argument::Positional(PositionalArgument::new(
                                         new_call.clone(),
-                                        einfo(call_pos),
+                                        info(call_pos, inner_syms.clone()),
                                     ))],
                                 ]
                                 .concat(),
@@ -254,11 +254,11 @@ pub fn scoped_expr_pass<'a>(
                             new_syms.insert(func_id.value, f_to_insert);
 
                             let mapped_arg0 = argument_symbol(new_id, &inner_syms);
-                            let mapped_arg1 = arguments_symbol_list(func_args, inner_syms);
+                            let mapped_arg1 = arguments_symbol_list(func_args, inner_syms.clone());
                             let mapped_arg2 =
                                 Argument::Positional(PositionalArgument::new(
                                     new_call.clone(),
-                                    einfo(func_call_single.args[2].info().clone()),
+                                    info(func_call_single.args[2].info().clone(), inner_syms.clone()),
                                 ));
                             let mapped_args = vec![mapped_arg0, mapped_arg1, mapped_arg2];
 
@@ -371,14 +371,6 @@ fn pass_symbol<'a>(symbol: Symbol<ParsedStageInfo<'a>>, table: SymbolTable<Scope
     Symbol::new(symbol.value.clone(), info(symbol.info.clone(), table))
 }
 
-// empty info, i.e., empty symbol table
-fn einfo<'a>(parsed: ParsedStageInfo<'a>) -> ScopedStageInfo<'a> {
-    ScopedStageInfo {
-        inner: parsed,
-        syms: SymbolTable::new(),
-    }
-}
-
 fn info<'a>(
     parsed: ParsedStageInfo<'a>,
     syms: SymbolTable<ScopedStageInfo<'a>>,
@@ -421,9 +413,9 @@ fn arguments_symbol_list<'a>(
                     Argument::Positional(PositionalArgument::new(arg, info(inf, table.clone())))
                 })
                 .collect(),
-            einfo(args.info.clone()),
+            info(args.info.clone(), table.clone()),
         ))),
-        einfo(args.info),
+        info(args.info, table.clone()),
     ))
 }
 
