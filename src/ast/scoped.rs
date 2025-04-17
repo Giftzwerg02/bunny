@@ -172,19 +172,11 @@ pub fn scoped_expr_pass<'a>(
 
                             let mapped_arg0 = argument_symbol(new_id, &inner_syms);
                             let mapped_arg1 =
-                                Expr::Argument(Argument::Positional(PositionalArgument::new(
+                                Argument::Positional(PositionalArgument::new(
                                     new_call.clone(),
                                     einfo(func_call_single.args[1].info().clone()),
-                                )));
-                            let mapped_args = vec![mapped_arg0, mapped_arg1]
-                                .into_iter()
-                                .map(|arg| {
-                                    let Expr::Argument(arg) = arg else {
-                                        panic!("invalid ast");
-                                    };
-                                    arg
-                                })
-                                .collect();
+                                ));
+                            let mapped_args = vec![mapped_arg0, mapped_arg1];
 
                             let ret = FuncCall::Single(FuncCallSingle::new(
                                 pass_symbol(func_call_single.id, new_syms.clone()),
@@ -208,11 +200,15 @@ pub fn scoped_expr_pass<'a>(
                             // Therefore, the created function where the func_id should reference
                             // (in the symbol table) a function with n+1 arguments, that being the
                             // n arguments + the body of the function.
+
+                            // Insert the first argument as a symbol 
+                            // (which is the "id" of the arguments-list)
                             inner_syms.insert(
                                 func_args.id.value.clone(),
-                                argument_symbol(func_args.id.clone(), &inner_syms),
+                                Expr::Symbol(pass_symbol(func_args.id.clone(), inner_syms.clone())),
                             );
 
+                            // Insert the rest of the arguments as symbols
                             for next_arg in &func_args.args {
                                 let Argument::Positional(next_arg) = next_arg else {
                                     panic!("invalid ast");
@@ -224,7 +220,7 @@ pub fn scoped_expr_pass<'a>(
 
                                 inner_syms.insert(
                                     next_arg.value.clone(),
-                                    argument_symbol(next_arg.clone(), &inner_syms),
+                                    Expr::Symbol(pass_symbol(next_arg.clone(), inner_syms.clone())),
                                 );
                             }
 
@@ -237,14 +233,7 @@ pub fn scoped_expr_pass<'a>(
                             let new_call = scoped_expr_pass(*new_call.value.clone(), &inner_syms);
                             let new_call_args = arguments_list(func_args.clone())
                                 .into_iter()
-                                .map(|arg| {
-                                    let Expr::Argument(arg) =
-                                        scoped_expr_pass(Expr::Argument(arg), &inner_syms)
-                                    else {
-                                        panic!("invalid ast");
-                                    };
-                                    arg
-                                })
+                                .map(|arg| pass_arg(arg, &inner_syms))
                                 .collect();
 
                             let f_to_insert = FuncCallSingle::new(
@@ -267,19 +256,11 @@ pub fn scoped_expr_pass<'a>(
                             let mapped_arg0 = argument_symbol(new_id, &inner_syms);
                             let mapped_arg1 = arguments_symbol_list(func_args, inner_syms);
                             let mapped_arg2 =
-                                Expr::Argument(Argument::Positional(PositionalArgument::new(
+                                Argument::Positional(PositionalArgument::new(
                                     new_call.clone(),
                                     einfo(func_call_single.args[2].info().clone()),
-                                )));
-                            let mapped_args = vec![mapped_arg0, mapped_arg1, mapped_arg2]
-                                .into_iter()
-                                .map(|arg| {
-                                    let Expr::Argument(arg) = arg else {
-                                        panic!("invalid ast");
-                                    };
-                                    arg
-                                })
-                                .collect();
+                                ));
+                            let mapped_args = vec![mapped_arg0, mapped_arg1, mapped_arg2];
 
                             let ret = FuncCall::Single(FuncCallSingle::new(
                                 pass_symbol(func_call_single.id, new_syms.clone()),
@@ -340,13 +321,7 @@ pub fn scoped_expr_pass<'a>(
                         let mapped_args = func_call_single
                             .args
                             .into_iter()
-                            .map(|arg| scoped_expr_pass(Expr::Argument(arg), &syms))
-                            .map(|arg| {
-                                let Expr::Argument(arg) = arg else {
-                                    panic!("invalid ast");
-                                };
-                                arg
-                            })
+                            .map(|arg| pass_arg(arg, syms))
                             .collect::<Vec<_>>();
 
                         let ret = FuncCall::Single(FuncCallSingle::new(
@@ -387,24 +362,6 @@ pub fn scoped_expr_pass<'a>(
                 }
             }
         }
-        Expr::Argument(argument) => {
-            let arg = match argument {
-                Argument::Positional(positional_argument) => {
-                    let passed = scoped_expr_pass(*positional_argument.value, syms);
-                    Argument::Positional(PositionalArgument::new(
-                        passed,
-                        einfo(positional_argument.info),
-                    ))
-                }
-                Argument::Named(named_argument) => {
-                    let name = pass_symbol(named_argument.name, syms.clone());
-                    let passed = scoped_expr_pass(*named_argument.value, syms);
-                    Argument::Named(NamedArgument::new(name, passed, einfo(named_argument.info)))
-                }
-            };
-
-            Expr::Argument(arg)
-        }
         Expr::Symbol(symbol) => {
             let s = Symbol::new(symbol.value.clone(), info(symbol.info, syms.clone()));
             if !syms.contains(&symbol.value) {
@@ -440,18 +397,18 @@ fn info<'a>(
 fn argument_symbol<'a>(
     id: Symbol<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Expr<ScopedStageInfo<'a>> {
-    Expr::Argument(Argument::Positional(PositionalArgument::new(
+) -> Argument<ScopedStageInfo<'a>> {
+    Argument::Positional(PositionalArgument::new(
         Expr::Symbol(pass_symbol(id.clone(), syms.clone())),
         info(id.info, syms.clone()),
-    )))
+    ))
 }
 
 fn arguments_symbol_list<'a>(
     args: FuncCallSingle<ParsedStageInfo<'a>>,
     table: SymbolTable<ScopedStageInfo<'a>>,
-) -> Expr<ScopedStageInfo<'a>> {
-    Expr::Argument(Argument::Positional(PositionalArgument::new(
+) -> Argument<ScopedStageInfo<'a>> {
+    Argument::Positional(PositionalArgument::new(
         Expr::FuncCall(FuncCall::Single(FuncCallSingle::new(
             pass_symbol(args.id, table.clone()),
             args.args
@@ -472,7 +429,7 @@ fn arguments_symbol_list<'a>(
             einfo(args.info.clone()),
         ))),
         einfo(args.info),
-    )))
+    ))
 }
 
 fn arguments_list<'a, I: StageInfo>(args: FuncCallSingle<I>) -> Vec<Argument<I>> {
@@ -500,6 +457,22 @@ fn params<'a, 'b>(
     }
 
     &args[0..args.len() - 1]
+}
+
+fn pass_arg<'a>(arg: Argument<ParsedStageInfo<'a>>, syms: &SymbolTable<ScopedStageInfo<'a>>) -> Argument<ScopedStageInfo<'a>> {
+    match arg {
+        Argument::Positional(positional_argument) => {
+            let expr = *positional_argument.value;
+            let expr = scoped_expr_pass(expr, syms);
+            Argument::Positional(PositionalArgument::new(expr.clone(), info(expr.info().inner.clone(), syms.clone())))
+        },
+        Argument::Named(named_argument) => {
+            let name = pass_symbol(named_argument.name, syms.clone());
+            let expr = *named_argument.value;
+            let expr = scoped_expr_pass(expr, syms);
+            Argument::Named(NamedArgument::new(name, expr.clone(), info(expr.info().inner.clone(), syms.clone())))
+        },
+    }
 }
 
 #[cfg(test)]

@@ -134,27 +134,7 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
             }
         }
         Rule::named_argument | Rule::positional_argument => {
-            let mut pairs = pair.clone().into_inner().filter(filter_comments);
-            let first = pairs.next().expect("argument");
-            let second = pairs.next();
-
-            let argument = match second {
-                Some(second) => {
-                    let id = parsed_expr_pass(first);
-                    let Expr::Symbol(id) = id else {
-                        panic!("invalid ast");
-                    };
-
-                    let expr = parsed_expr_pass(second.clone());
-                    Argument::Named(NamedArgument::new(id, expr, info(second)))
-                }
-                None => {
-                    let expr = parsed_expr_pass(first.clone());
-                    Argument::Positional(PositionalArgument::new(expr, info(first)))
-                }
-            };
-
-            Expr::Argument(argument)
+            panic!("Rule::arg shouldn't be called");
         }
         Rule::identifier => {
             Expr::Symbol(Symbol::new(text.to_string(), info(pair)))

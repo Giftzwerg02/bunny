@@ -18,7 +18,6 @@ pub enum Expr<I: StageInfo> {
     Color(Color<I>),
     Symbol(Symbol<I>),
     FuncCall(FuncCall<I>),
-    Argument(Argument<I>),
     Array(Array<I>),
     Dict(Dict<I>),
 }
@@ -35,10 +34,6 @@ impl<I: StageInfo> Expr<I> {
                 FuncCall::Single(f) => format!("func::single({})", f.id),
                 FuncCall::List(f) => format!("func::list({})", f.calls.len()),
             },
-            Expr::Argument(argument) => match argument {
-                Argument::Positional(_) => format!("argument::pos"),
-                Argument::Named(_) => format!("argument::named"),
-            },
             Expr::Array(_) => format!("array"),
             Expr::Dict(_) => format!("dict"),
         }
@@ -52,7 +47,6 @@ impl<I: StageInfo> Expr<I> {
             Expr::Color(color) => &color.info,
             Expr::Symbol(symbol) => &symbol.info,
             Expr::FuncCall(func_call) => func_call.info(),
-            Expr::Argument(argument) => argument.info(),
             Expr::Array(array) => &array.info,
             Expr::Dict(dict) => &dict.info,
         }
@@ -66,7 +60,6 @@ impl<I: StageInfo> Expr<I> {
             Expr::Color(color) => color.as_code(),
             Expr::Symbol(symbol) => symbol.as_code(),
             Expr::FuncCall(func_call) => func_call.as_code(),
-            Expr::Argument(argument) => argument.as_code(),
             Expr::Array(array) => array.as_code(),
             Expr::Dict(dict) => dict.as_code(),
         }
@@ -82,7 +75,6 @@ impl<I: StageInfo> PrettyPrintable for Expr<I> {
             Expr::Color(color) => color.pretty_print(),
             Expr::Symbol(symbol) => symbol.pretty_print(),
             Expr::FuncCall(func_call) => func_call.pretty_print(),
-            Expr::Argument(argument) => argument.pretty_print(),
             Expr::Array(array) => array.pretty_print(),
             Expr::Dict(dict) => dict.pretty_print(),
         }
@@ -109,9 +101,6 @@ impl<I: StageInfo> Display for Expr<I> {
             }
             Expr::FuncCall(func_call_list) => {
                 write!(f, "{func_call_list}")
-            }
-            Expr::Argument(argument) => {
-                write!(f, "{argument}")
             }
             Expr::Array(array) => {
                 write!(f, "{array}")
