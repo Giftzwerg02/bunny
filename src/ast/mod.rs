@@ -10,6 +10,9 @@ pub trait PrettyPrintable {
 }
 pub trait StageInfo: Display + Debug + Clone + PrettyPrintable {}
 
+pub const FUNC_DEF_KEYWORD: &str = "def";
+pub const FUNC_LAMBDA_KEYWORD: &str = "\\";
+
 #[derive(Debug, Clone)]
 pub enum Expr<I: StageInfo> {
     Int(Int<I>),
@@ -384,6 +387,14 @@ impl<I: StageInfo> FuncCallSingle<I> {
             .collect::<Vec<_>>()
             .join(" ");
         format!("({} {})", self.id.as_code(), args)
+    }
+
+    pub fn is_def(&self) -> bool {
+        return self.id.value == FUNC_DEF_KEYWORD;
+    }
+
+    pub fn is_lambda(&self) -> bool {
+        return self.id.value == FUNC_LAMBDA_KEYWORD;
     }
 }
 

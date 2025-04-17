@@ -1,14 +1,15 @@
 use core::panic;
 use std::{any::type_name_of_val, fmt::Display};
+use rand::{distr::Alphanumeric, Rng};
 
-use text_trees::StringTreeNode;
 use im::HashMap;
+use text_trees::StringTreeNode;
 
 use crate::ast::{Argument, FuncCallSingle, PositionalArgument};
 
 use super::{
-    Array, Color, Dict, DictEntry, Expr, Float, FuncCall, Int, NamedArgument,
-    PrettyPrintable, StageInfo, Str, Symbol, parsed::ParsedStageInfo,
+    Array, Color, Dict, DictEntry, Expr, Float, FuncCall, Int, NamedArgument, PrettyPrintable,
+    StageInfo, Str, Symbol, parsed::ParsedStageInfo,
 };
 
 #[derive(Debug, Clone)]
@@ -44,7 +45,11 @@ pub struct SymbolTable<I: StageInfo> {
 
 impl<I: StageInfo> Display for SymbolTable<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.inner.keys().map(|k| k.to_string()).collect::<Vec<_>>())
+        write!(
+            f,
+            "{:?}",
+            self.inner.keys().map(|k| k.to_string()).collect::<Vec<_>>()
+        )
     }
 }
 
@@ -74,8 +79,6 @@ impl<I: StageInfo> SymbolTable<I> {
     }
 }
 
-const FUNC_DEF_KEYWORD: &str = "def";
-
 pub fn scoped_expr_pass<'a>(
     src: Expr<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
@@ -84,7 +87,12 @@ pub fn scoped_expr_pass<'a>(
         Expr::Int(int) => Expr::Int(Int::new(int.value, info(int.info, syms.clone()))),
         Expr::Float(float) => Expr::Float(Float::new(float.value, info(float.info, syms.clone()))),
         Expr::String(str) => Expr::String(Str::new(str.value, info(str.info, syms.clone()))),
-        Expr::Color(color) => Expr::Color(Color::new(color.r, color.g, color.b, info(color.info, syms.clone()))),
+        Expr::Color(color) => Expr::Color(Color::new(
+            color.r,
+            color.g,
+            color.b,
+            info(color.info, syms.clone()),
+        )),
         Expr::Array(array) => {
             let info = info(array.info, syms.clone());
             let array = array
@@ -129,212 +137,78 @@ pub fn scoped_expr_pass<'a>(
                     //
                     //  ^ id  ^ arg       ^ arg (optional)   ^ arg
                     //  i.e., 2 or 3 args
-                    let mut new_syms = syms.clone();
-                    if &func_call_single.id.value == FUNC_DEF_KEYWORD {
-                        // create a new sym-table entry with the newly defined value
-                        let Argument::Positional(ref new_id) = func_call_single.args[0] else {
-                            panic!("invalid ast");
-                        };
-
-                        let Expr::Symbol(new_id) = *new_id.clone().value else {
-                            panic!("invalid ast");
-                        };
-
-                        let mut inner_syms = syms.clone();
-                        let func_id = pass_symbol(new_id.clone(), inner_syms.clone());
-                        inner_syms.insert(func_id.clone().value, Expr::Symbol(func_id.clone()));
-
-                        if func_call_single.args.len() == 2 {
-                            let Argument::Positional(ref new_call) = func_call_single.args[1]
-                            else {
-                                panic!("invalid ast");
-                            };
-
-                            let call_pos = new_call.info.clone();
-                            let new_call = scoped_expr_pass(*new_call.clone().value, &inner_syms);
-
-                            // We just created a "constant" function, i.e., with no arguments
-                            // Therefore, the created function where the func_id should reference
-                            // (in the symbol table) a function with a singular argument, that
-                            // being the body of the function.
-                            let f_to_insert = FuncCallSingle::new(
-                                func_id.clone(),
-                                vec![Argument::Positional(PositionalArgument::new(
-                                    new_call.clone(),
-                                    info(call_pos, inner_syms.clone()),
-                                ))],
-                                func_id.info,
-                            );
-
-                            let f_to_insert = Expr::FuncCall(FuncCall::Single(f_to_insert));
-
-                            new_syms.insert(func_id.value, f_to_insert);
-
-                            let mapped_arg0 = argument_symbol(new_id, &inner_syms);
-                            let mapped_arg1 =
-                                Argument::Positional(PositionalArgument::new(
-                                    new_call.clone(),
-                                    info(func_call_single.args[1].info().clone(), inner_syms.clone()),
-                                ));
-                            let mapped_args = vec![mapped_arg0, mapped_arg1];
-
-                            let ret = FuncCall::Single(FuncCallSingle::new(
-                                pass_symbol(func_call_single.id, new_syms.clone()),
-                                mapped_args,
-                                info(func_call_single.info, new_syms.clone()),
-                            ));
-
-                            Expr::FuncCall(ret)
-                        } else if func_call_single.args.len() == 3 {
-                            let func_args = func_call_single.args[1].clone();
-                            let Argument::Positional(func_args) = func_args else {
-                                panic!("invalid ast");
-                            };
-
-                            let Expr::FuncCall(FuncCall::Single(func_args)) = *func_args.value
-                            else {
-                                panic!("invalid ast");
-                            };
-
-                            // We just created a parametric function, i.e., with n >= 1 arguments.
-                            // Therefore, the created function where the func_id should reference
-                            // (in the symbol table) a function with n+1 arguments, that being the
-                            // n arguments + the body of the function.
-
-                            // Insert the first argument as a symbol 
-                            // (which is the "id" of the arguments-list)
-                            inner_syms.insert(
-                                func_args.id.value.clone(),
-                                Expr::Symbol(pass_symbol(func_args.id.clone(), inner_syms.clone())),
-                            );
-
-                            // Insert the rest of the arguments as symbols
-                            for next_arg in &func_args.args {
-                                let Argument::Positional(next_arg) = next_arg else {
-                                    panic!("invalid ast");
-                                };
-
-                                let Expr::Symbol(ref next_arg) = *next_arg.value else {
-                                    panic!("invalid ast");
-                                };
-
-                                inner_syms.insert(
-                                    next_arg.value.clone(),
-                                    Expr::Symbol(pass_symbol(next_arg.clone(), inner_syms.clone())),
-                                );
-                            }
-
-                            let Argument::Positional(ref new_call) = func_call_single.args[2]
-                            else {
-                                panic!("invalid ast");
-                            };
-
-                            let call_pos = new_call.info.clone();
-                            let new_call = scoped_expr_pass(*new_call.value.clone(), &inner_syms);
-                            let new_call_args = arguments_list(func_args.clone())
-                                .into_iter()
-                                .map(|arg| pass_arg(arg, &inner_syms))
-                                .collect();
-
-                            let f_to_insert = FuncCallSingle::new(
-                                func_id.clone(),
-                                vec![
-                                    new_call_args,
-                                    vec![Argument::Positional(PositionalArgument::new(
-                                        new_call.clone(),
-                                        info(call_pos, inner_syms.clone()),
-                                    ))],
-                                ]
-                                .concat(),
-                                func_id.info,
-                            );
-
-                            let f_to_insert = Expr::FuncCall(FuncCall::Single(f_to_insert));
-
-                            new_syms.insert(func_id.value, f_to_insert);
-
-                            let mapped_arg0 = argument_symbol(new_id, &inner_syms);
-                            let mapped_arg1 = arguments_symbol_list(func_args, inner_syms.clone());
-                            let mapped_arg2 =
-                                Argument::Positional(PositionalArgument::new(
-                                    new_call.clone(),
-                                    info(func_call_single.args[2].info().clone(), inner_syms.clone()),
-                                ));
-                            let mapped_args = vec![mapped_arg0, mapped_arg1, mapped_arg2];
-
-                            let ret = FuncCall::Single(FuncCallSingle::new(
-                                pass_symbol(func_call_single.id, new_syms.clone()),
-                                mapped_args,
-                                info(func_call_single.info, new_syms.clone()),
-                            ));
-
-                            Expr::FuncCall(ret)
-                        } else {
-                            panic!("invalid ast");
-                        }
-                    } else {
-                        // 3. it is not a def function -> check the inserted symbols
-                        let Some(func_declaration) = syms.get(&func_call_single.id.value) else {
-                            panic!("not defined: {}: {}", &func_call_single.id.value, syms);
-                        };
-
-                        let Expr::FuncCall(FuncCall::Single(func_declaration)) = func_declaration
-                        else {
-                            panic!(
-                                "({}): symbol is not a function: {}: {}",
-                                func_call_single.id.value,
-                                type_name_of_val(&func_declaration),
-                                func_declaration.name()
-                            );
-                        };
-
-                        let decl_args = params(func_declaration);
-
-                        let mut used = vec![];
-                        for arg in &func_call_single.args {
-                            if let Argument::Named(arg) = arg {
-                                let name = &arg.name;
-
-                                let mut found = false;
-                                for decl_arg in decl_args {
-                                    let Argument::Positional(decl_arg) = decl_arg else {
-                                        panic!("invalid ast");
-                                    };
-                                    let Expr::Symbol(ref decl_arg) = *decl_arg.value else {
-                                        panic!("invalid ast:\n{}", decl_arg.value.pretty_print());
-                                    };
-                                    if decl_arg.value == name.value {
-                                        found = true;
-                                        if used.contains(&name.value) {
-                                            panic!("used named argument twice");
-                                        }
-                                        used.push(name.value.clone());
-                                    }
-                                }
-
-                                if !found {
-                                    panic!("named argument references unknown parameter: {}", name);
-                                }
-                            }
-                        }
-
-                        let mapped_args = func_call_single
-                            .args
-                            .into_iter()
-                            .map(|arg| pass_arg(arg, syms))
-                            .collect::<Vec<_>>();
-
-                        let ret = FuncCall::Single(FuncCallSingle::new(
-                            pass_symbol(func_call_single.id, new_syms.clone()),
-                            mapped_args,
-                            info(func_call_single.info, syms.clone()),
-                        ));
-
-                        Expr::FuncCall(ret)
+                    if func_call_single.is_def() {
+                        return Expr::FuncCall(handle_def(func_call_single, syms));
                     }
+
+                    if func_call_single.is_lambda() {
+                        return Expr::FuncCall(handle_lambda(func_call_single, syms));
+                    }
+
+                    // 3. it is not a def or lambda function -> check the inserted symbols
+                    let Some(func_declaration) = syms.get(&func_call_single.id.value) else {
+                        panic!("not defined: {}: {}", &func_call_single.id.value, syms);
+                    };
+
+                    let Expr::FuncCall(FuncCall::Single(func_declaration)) = func_declaration
+                    else {
+                        panic!(
+                            "({}): symbol is not a function: {}: {}",
+                            func_call_single.id.value,
+                            type_name_of_val(&func_declaration),
+                            func_declaration.name()
+                        );
+                    };
+
+                    let decl_args = params(func_declaration);
+
+                    let mut used = vec![];
+                    for arg in &func_call_single.args {
+                        if let Argument::Named(arg) = arg {
+                            let name = &arg.name;
+
+                            let mut found = false;
+                            for decl_arg in decl_args {
+                                let Argument::Positional(decl_arg) = decl_arg else {
+                                    panic!("invalid ast");
+                                };
+                                let Expr::Symbol(ref decl_arg) = *decl_arg.value else {
+                                    panic!("invalid ast:\n{}", decl_arg.value.pretty_print());
+                                };
+                                if decl_arg.value == name.value {
+                                    found = true;
+                                    if used.contains(&name.value) {
+                                        panic!("used named argument twice");
+                                    }
+                                    used.push(name.value.clone());
+                                }
+                            }
+
+                            if !found {
+                                panic!("named argument references unknown parameter: {}", name);
+                            }
+                        }
+                    }
+
+                    let mapped_args = func_call_single
+                        .args
+                        .into_iter()
+                        .map(|arg| pass_arg(arg, syms))
+                        .collect::<Vec<_>>();
+
+                    let ret = FuncCall::Single(FuncCallSingle::new(
+                        pass_symbol(func_call_single.id, syms.clone()),
+                        mapped_args,
+                        info(func_call_single.info, syms.clone()),
+                    ));
+
+                    Expr::FuncCall(ret)
                 }
                 FuncCall::List(func_call_list) => {
-                    assert!(func_call_list.calls.len() > 0, "empty func-call-lists are not allowed");
+                    assert!(
+                        func_call_list.calls.len() > 0,
+                        "empty func-call-lists are not allowed"
+                    );
 
                     let mut new_syms = syms.clone();
                     let mut out_func: Option<FuncCall<_>> = None;
@@ -367,7 +241,10 @@ pub fn scoped_expr_pass<'a>(
     }
 }
 
-fn pass_symbol<'a>(symbol: Symbol<ParsedStageInfo<'a>>, table: SymbolTable<ScopedStageInfo<'a>>) -> Symbol<ScopedStageInfo<'a>> {
+fn pass_symbol<'a>(
+    symbol: Symbol<ParsedStageInfo<'a>>,
+    table: SymbolTable<ScopedStageInfo<'a>>,
+) -> Symbol<ScopedStageInfo<'a>> {
     Symbol::new(symbol.value.clone(), info(symbol.info.clone(), table))
 }
 
@@ -446,20 +323,272 @@ fn params<'a, 'b>(
     &args[0..args.len() - 1]
 }
 
-fn pass_arg<'a>(arg: Argument<ParsedStageInfo<'a>>, syms: &SymbolTable<ScopedStageInfo<'a>>) -> Argument<ScopedStageInfo<'a>> {
+fn pass_arg<'a>(
+    arg: Argument<ParsedStageInfo<'a>>,
+    syms: &SymbolTable<ScopedStageInfo<'a>>,
+) -> Argument<ScopedStageInfo<'a>> {
     match arg {
         Argument::Positional(positional_argument) => {
             let expr = *positional_argument.value;
             let expr = scoped_expr_pass(expr, syms);
-            Argument::Positional(PositionalArgument::new(expr.clone(), info(expr.info().inner.clone(), syms.clone())))
-        },
+            Argument::Positional(PositionalArgument::new(
+                expr.clone(),
+                info(expr.info().inner.clone(), syms.clone()),
+            ))
+        }
         Argument::Named(named_argument) => {
             let name = pass_symbol(named_argument.name, syms.clone());
             let expr = *named_argument.value;
             let expr = scoped_expr_pass(expr, syms);
-            Argument::Named(NamedArgument::new(name, expr.clone(), info(expr.info().inner.clone(), syms.clone())))
-        },
+            Argument::Named(NamedArgument::new(
+                name,
+                expr.clone(),
+                info(expr.info().inner.clone(), syms.clone()),
+            ))
+        }
     }
+}
+
+fn handle_def<'a>(
+    def: FuncCallSingle<ParsedStageInfo<'a>>,
+    syms: &SymbolTable<ScopedStageInfo<'a>>,
+) -> FuncCall<ScopedStageInfo<'a>> {
+    // create a new sym-table entry with the newly defined value
+    let mut new_syms = syms.clone();
+    let Argument::Positional(ref new_id) = def.args[0] else {
+        panic!("invalid ast");
+    };
+
+    let Expr::Symbol(new_id) = *new_id.clone().value else {
+        panic!("invalid ast");
+    };
+
+    let mut inner_syms = syms.clone();
+    let func_id = pass_symbol(new_id.clone(), inner_syms.clone());
+    inner_syms.insert(func_id.clone().value, Expr::Symbol(func_id.clone()));
+
+    if def.args.len() == 2 {
+        let Argument::Positional(ref new_call) = def.args[1] else {
+            panic!("invalid ast");
+        };
+
+        let call_pos = new_call.info.clone();
+        let new_call = scoped_expr_pass(*new_call.clone().value, &inner_syms);
+
+        // We just created a "constant" function, i.e., with no arguments
+        // Therefore, the created function where the func_id should reference
+        // (in the symbol table) a function with a singular argument, that
+        // being the body of the function.
+        let f_to_insert = FuncCallSingle::new(
+            func_id.clone(),
+            vec![Argument::Positional(PositionalArgument::new(
+                new_call.clone(),
+                info(call_pos, inner_syms.clone()),
+            ))],
+            func_id.info,
+        );
+
+        let f_to_insert = Expr::FuncCall(FuncCall::Single(f_to_insert));
+
+        new_syms.insert(func_id.value, f_to_insert);
+
+        let mapped_arg0 = argument_symbol(new_id, &inner_syms);
+        let mapped_arg1 = Argument::Positional(PositionalArgument::new(
+            new_call.clone(),
+            info(def.args[1].info().clone(), inner_syms.clone()),
+        ));
+        let mapped_args = vec![mapped_arg0, mapped_arg1];
+
+        FuncCall::Single(FuncCallSingle::new(
+            pass_symbol(def.id, new_syms.clone()),
+            mapped_args,
+            info(def.info, new_syms.clone()),
+        ))
+    } else if def.args.len() == 3 {
+        let func_args = def.args[1].clone();
+        let Argument::Positional(func_args) = func_args else {
+            panic!("invalid ast");
+        };
+
+        let Expr::FuncCall(FuncCall::Single(func_args)) = *func_args.value else {
+            panic!("invalid ast");
+        };
+
+        // We just created a parametric function, i.e., with n >= 1 arguments.
+        // Therefore, the created function where the func_id should reference
+        // (in the symbol table) a function with n+1 arguments, that being the
+        // n arguments + the body of the function.
+
+        // Insert the first argument as a symbol
+        // (which is the "id" of the arguments-list)
+        inner_syms.insert(
+            func_args.id.value.clone(),
+            Expr::Symbol(pass_symbol(func_args.id.clone(), inner_syms.clone())),
+        );
+
+        // Insert the rest of the arguments as symbols
+        for next_arg in &func_args.args {
+            let Argument::Positional(next_arg) = next_arg else {
+                panic!("invalid ast");
+            };
+
+            let Expr::Symbol(ref next_arg) = *next_arg.value else {
+                panic!("invalid ast");
+            };
+
+            inner_syms.insert(
+                next_arg.value.clone(),
+                Expr::Symbol(pass_symbol(next_arg.clone(), inner_syms.clone())),
+            );
+        }
+
+        let Argument::Positional(ref new_call) = def.args[2] else {
+            panic!("invalid ast");
+        };
+
+        let call_pos = new_call.info.clone();
+        let new_call = scoped_expr_pass(*new_call.value.clone(), &inner_syms);
+        let new_call_args = arguments_list(func_args.clone())
+            .into_iter()
+            .map(|arg| pass_arg(arg, &inner_syms))
+            .collect();
+
+        let f_to_insert = FuncCallSingle::new(
+            func_id.clone(),
+            vec![
+                new_call_args,
+                vec![Argument::Positional(PositionalArgument::new(
+                    new_call.clone(),
+                    info(call_pos, inner_syms.clone()),
+                ))],
+            ]
+            .concat(),
+            func_id.info,
+        );
+
+        let f_to_insert = Expr::FuncCall(FuncCall::Single(f_to_insert));
+
+        new_syms.insert(func_id.value, f_to_insert);
+
+        let mapped_arg0 = argument_symbol(new_id, &inner_syms);
+        let mapped_arg1 = arguments_symbol_list(func_args, inner_syms.clone());
+        let mapped_arg2 = Argument::Positional(PositionalArgument::new(
+            new_call.clone(),
+            info(def.args[2].info().clone(), inner_syms.clone()),
+        ));
+        let mapped_args = vec![mapped_arg0, mapped_arg1, mapped_arg2];
+
+        FuncCall::Single(FuncCallSingle::new(
+            pass_symbol(def.id, new_syms.clone()),
+            mapped_args,
+            info(def.info, new_syms.clone()),
+        ))
+    } else {
+        panic!("invalid ast");
+    }
+}
+
+// A lambda is a function call in the form of: (\ (args...) (body))
+// Meaning there are two cases:
+//  1. (\ (body)) -> 1 argument which is just the function body
+//  2. (\ (args...) (body)) -> 2 arguments, the first is the parameter-list, the second is the
+//     function body
+// Note: There is no `new_syms` like in the handle_def function since a lambda does not have a name!
+fn handle_lambda<'a>(
+    lambda: FuncCallSingle<ParsedStageInfo<'a>>,
+    syms: &SymbolTable<ScopedStageInfo<'a>>,
+) -> FuncCall<ScopedStageInfo<'a>> {
+    // Case 1: Only function body
+    if lambda.args.len() == 1 {
+        let Argument::Positional(ref new_call) = lambda.args[0] else {
+            panic!("invalid ast");
+        };
+
+        let new_call = scoped_expr_pass(*new_call.clone().value, syms);
+
+        let mapped_arg0 = Argument::Positional(PositionalArgument::new(
+            new_call.clone(),
+            info(lambda.args[0].info().clone(), syms.clone()),
+        ));
+        let mapped_args = vec![mapped_arg0];
+
+        FuncCall::Single(FuncCallSingle::new(
+            lambda_symbol(syms, lambda.info.clone()),
+            mapped_args,
+            info(lambda.info, syms.clone()),
+        ))
+    }
+    // Case 2: Parameters and Function-Body
+    else if lambda.args.len() == 2 {
+        let mut inner_syms = syms.clone();
+        let func_args = lambda.args[0].clone();
+        let Argument::Positional(func_args) = func_args else {
+            panic!("invalid ast");
+        };
+
+        let Expr::FuncCall(FuncCall::Single(func_args)) = *func_args.value else {
+            panic!("invalid ast");
+        };
+
+        // We just created a parametric lambda, i.e., with n >= 1 arguments.
+        // Therefore, the created function where the func_id should reference
+        // (in the symbol table) a function with n+1 arguments, that being the
+        // n arguments + the body of the function.
+
+        // Insert the first argument as a symbol
+        // (which is the "id" of the arguments-list)
+        inner_syms.insert(
+            func_args.id.value.clone(),
+            Expr::Symbol(pass_symbol(func_args.id.clone(), inner_syms.clone())),
+        );
+
+        // Insert the rest of the arguments as symbols
+        for next_arg in &func_args.args {
+            let Argument::Positional(next_arg) = next_arg else {
+                panic!("invalid ast");
+            };
+
+            let Expr::Symbol(ref next_arg) = *next_arg.value else {
+                panic!("invalid ast");
+            };
+
+            inner_syms.insert(
+                next_arg.value.clone(),
+                Expr::Symbol(pass_symbol(next_arg.clone(), inner_syms.clone())),
+            );
+        }
+
+        let Argument::Positional(ref new_call) = lambda.args[1] else {
+            panic!("invalid ast");
+        };
+
+        let new_call = scoped_expr_pass(*new_call.value.clone(), &inner_syms);
+
+        let mapped_arg0 = arguments_symbol_list(func_args, inner_syms.clone());
+        let mapped_arg1 = Argument::Positional(PositionalArgument::new(
+            new_call.clone(),
+            info(lambda.args[1].info().clone(), inner_syms.clone()),
+        ));
+        let mapped_args = vec![mapped_arg0, mapped_arg1];
+
+        FuncCall::Single(FuncCallSingle::new(
+            lambda_symbol(syms, lambda.info.clone()),
+            mapped_args,
+            info(lambda.info, syms.clone()),
+        ))
+    } else {
+        panic!("invalid ast");
+    }
+}
+
+fn lambda_symbol<'a>(syms: &SymbolTable<ScopedStageInfo<'a>>, dummy_stage_info: ParsedStageInfo<'a>) -> Symbol<ScopedStageInfo<'a>> {
+    let rand_string = rand::rng()
+        .sample_iter(&Alphanumeric)
+        .take(30)
+        .map(char::from)
+        .collect();
+
+    Symbol::new(rand_string, info(dummy_stage_info, syms.clone())) 
 }
 
 #[cfg(test)]
@@ -494,6 +623,7 @@ mod tests {
         let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
 
         syms.insert("def".to_string(), empty_func_expr(info.clone()));
+        syms.insert(r"\".to_string(), empty_func_expr(info.clone()));
         syms.insert("+".to_string(), empty_func_expr(info.clone()));
 
         let parsed_expr = parsed_expr_pass(pair);
@@ -510,6 +640,7 @@ mod tests {
         let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
 
         syms.insert("def".to_string(), empty_func_expr(info.clone()));
+        syms.insert(r"\".to_string(), empty_func_expr(info.clone()));
         syms.insert("+".to_string(), empty_func_expr(info.clone()));
 
         let parsed_expr = parsed_expr_pass(pair);
@@ -604,6 +735,33 @@ mod tests {
             (z)
         )",
         );
+
+        scoped_panic_test(
+            "(
+            (x)
+            (def a (x y z) (
+                (+ x y z)
+            ))
+        )",
+        );
+
+        scoped_panic_test(
+            "(
+            (y)
+            (def a (x y z) (
+                (+ x y z)
+            ))
+        )",
+        );
+
+        scoped_panic_test(
+            "(
+            (z)
+            (def a (x y z) (
+                (+ x y z)
+            ))
+        )",
+        );
     }
 
     #[test]
@@ -695,7 +853,8 @@ mod tests {
 
     #[test]
     fn variables_cannot_be_accessed_from_a_dynamic_successor() {
-        scoped_panic_test("
+        scoped_panic_test(
+            "
             (
                 (def a (b) (
                     (def inner 5) 
@@ -706,9 +865,11 @@ mod tests {
                 ))
                 (a (foo 3)) 
             )
-        ");
+        ",
+        );
 
-        scoped_panic_test("
+        scoped_panic_test(
+            "
             (
                 (def a (b) (
                     (def inner 5) 
@@ -719,9 +880,11 @@ mod tests {
                 ))
                 (a (foo 3)) 
             )
-        ");
+        ",
+        );
 
-        scoped_panic_test("
+        scoped_panic_test(
+            "
             (
                 (def foo (bar) (
                     (def inner 5)
@@ -733,9 +896,11 @@ mod tests {
                 ))
                 (a 4) 
             )
-        ");
+        ",
+        );
 
-        scoped_panic_test("
+        scoped_panic_test(
+            "
             (
                 (def foo (bar) (
                     (def inner 5)
@@ -747,6 +912,119 @@ mod tests {
                 ))
                 (a 4) 
             )
-        ");
+        ",
+        );
+    }
+
+    #[test]
+    fn lambda_arguments_can_be_accessed_within_a_funccall() {
+        scoped_test(
+            r"(
+            (\ (x y z) (
+                (+ x y z)
+            ))
+        )",
+        );
+    }
+
+    #[test]
+    fn lambda_arguments_cannot_be_accessed_outside_a_funccall() {
+        scoped_panic_test(
+            r"(
+            (\ (x y z) (
+                (+ x y z)
+            ))
+            (x)
+        )",
+        );
+
+        scoped_panic_test(
+            r"(
+            (\ (x y z) (
+                (+ x y z)
+            ))
+            (y)
+        )",
+        );
+
+        scoped_panic_test(
+            r"(
+            (\ (x y z) (
+                (+ x y z)
+            ))
+            (z)
+        )",
+        );
+
+        scoped_panic_test(
+            r"(
+            (x)
+            (\ (x y z) (
+                (+ x y z)
+            ))
+        )",
+        );
+
+        scoped_panic_test(
+            r"(
+            (y)
+            (\ (x y z) (
+                (+ x y z)
+            ))
+        )",
+        );
+
+        scoped_panic_test(
+            r"(
+            (z)
+            (\ (x y z) (
+                (+ x y z)
+            ))
+        )",
+        );
+    }
+
+    #[test]
+    fn lambda_arguments_can_be_accessed_inside_a_nested_scope() {
+        scoped_test(
+            r"(
+            (\ (x y z) (
+                (\ (foo bar baz) (
+                    (+ x y z foo bar baz)
+                ))
+            ))
+        )",
+        );
+    }
+
+    #[test]
+    fn previous_defs_can_be_used_inside_lambdas() {
+        scoped_test(
+            r"
+            (
+                (def a 5)
+                (\ (b) (
+                    + a b
+                ))
+            )
+            ",
+        )
+    }
+
+    #[test]
+    fn defs_and_lambdas_can_be_nested_together() {
+        scoped_test(
+            r"
+            (
+                (def a (x y z) (
+                    (\ (foo bar baz) (
+                        (def test 5)
+                        (+ test x y z foo bar baz)
+                    ))
+                )) 
+                (a 1 2 3)
+            )
+        ",
+        );
     }
 }
