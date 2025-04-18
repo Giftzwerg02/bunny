@@ -81,24 +81,24 @@ mod tests {
 
                 #[test]
                 fn ascii_letter_string_is_not_int(s in "[a-zA-Z]+") {
-                    prop_parse_invalid(Rule::int, &*s)?;
+                    prop_parse_invalid(Rule::int, &s)?;
                 }
 
                 #[test]
                 fn num_with_invalid_prefix_is_not_int(s in "[a-zA-Z]+", num: u64) {
                     let p = format!("{s}{num}");
-                    prop_parse_invalid(Rule::int, &*p)?;
+                    prop_parse_invalid(Rule::int, &p)?;
                 }
 
                 #[test]
                 fn negation_is_not_int(num: u64) {
                     let negated = format!("-{num}");
-                    prop_parse_invalid(Rule::int, &*negated)?;
+                    prop_parse_invalid(Rule::int, &negated)?;
                 }
 
                 #[test]
                 fn empty_is_not_int(s in "\\s*") {
-                    prop_parse_invalid(Rule::int, &*s)?;
+                    prop_parse_invalid(Rule::int, &s)?;
                 }
             }
         }
@@ -203,17 +203,17 @@ mod tests {
 
             #[test]
             fn invalid_start_with_digit(s in formatcp!("{DIGIT}{IDENTIFIER_REGEX}")) {
-                prop_parse_invalid(Rule::identifier, &*s)?;
+                prop_parse_invalid(Rule::identifier, &s)?;
             }
 
             #[test]
             fn invalid_empty(s in "\\s*") {
-                prop_parse_invalid(Rule::identifier, &*s)?;
+                prop_parse_invalid(Rule::identifier, &s)?;
             }
 
             #[test]
             fn invalid_illegal(s in formatcp!(r"[\(\):{DIGIT}\[\]]+")) {
-                prop_parse_invalid(Rule::identifier, &*s)?;
+                prop_parse_invalid(Rule::identifier, &s)?;
             }
         }
     }
@@ -429,7 +429,7 @@ mod tests {
             let pairs_count = pair.clone().into_inner().count();
             if pairs_count == 0 {
                 match func {
-                    FuncCall::List(list) if list.calls.len() == 0 => {}
+                    FuncCall::List(list) if list.calls.is_empty() => {}
                     _ => {
                         prop_assert!(false);
                     }
@@ -614,7 +614,7 @@ mod tests {
             // parsing-failure
 
             let input = include_str!("./examples/simple.bny");
-            let parens = vec!['(', ')'];
+            let parens = ['(', ')'];
 
             let to_remove_opts = input
                 .char_indices()

@@ -1,5 +1,4 @@
 use core::panic;
-use rand::{Rng, distr::Alphanumeric};
 use std::{any::type_name_of_val, fmt::Display};
 
 use im::HashMap;
@@ -24,19 +23,19 @@ impl<'a> ScopedStageInfo<'a> {
     }
 }
 
-impl<'a> PrettyPrintable for ScopedStageInfo<'a> {
+impl PrettyPrintable for ScopedStageInfo<'_> {
     fn pretty_print(&self) -> StringTreeNode {
-        StringTreeNode::new(format!(""))
+        StringTreeNode::new(String::new())
     }
 }
 
-impl<'a> Display for ScopedStageInfo<'a> {
+impl Display for ScopedStageInfo<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{ syms: {}, inner: {} }}", self.syms, self.inner)
     }
 }
 
-impl<'a> StageInfo for ScopedStageInfo<'a> {}
+impl StageInfo for ScopedStageInfo<'_> {}
 
 #[derive(Clone, Debug)]
 pub enum SymbolValue<I: StageInfo> {
@@ -61,9 +60,9 @@ pub struct FunctionDefinition<I: StageInfo> {
     pub info: I,
 }
 
-impl<I: StageInfo> Into<SymbolValue<I>> for FunctionDefinition<I> {
-    fn into(self) -> SymbolValue<I> {
-        SymbolValue::FunctionDefinition(self)
+impl<I: StageInfo> From<FunctionDefinition<I>> for SymbolValue<I> {
+    fn from(val: FunctionDefinition<I>) -> Self {
+        SymbolValue::FunctionDefinition(val)
     }
 }
 
@@ -81,7 +80,7 @@ impl<I: StageInfo> FunctionDefinition<I> {
     }
 
     fn name(&self) -> String {
-        format!("funcdef",)
+        format!("funcdef(body: {})", self.body.name())
     }
 }
 
@@ -100,6 +99,12 @@ impl<I: StageInfo> Display for SymbolTable<I> {
                 .map(|(k, v)| format!("({} -> {})", k, v.name()))
                 .collect::<Vec<_>>()
         )
+    }
+}
+
+impl<I: StageInfo> Default for SymbolTable<I> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -264,7 +269,7 @@ pub fn scoped_expr_pass<'a>(
                 }
                 FuncCall::List(func_call_list) => {
                     assert!(
-                        func_call_list.calls.len() > 0,
+                        !func_call_list.calls.is_empty(),
                         "empty func-call-lists are not allowed"
                     );
 
@@ -291,7 +296,7 @@ pub fn scoped_expr_pass<'a>(
             }
             Expr::Symbol(s)
         }
-        Expr::Lambda(lambda) => todo!("scoped_expr_pass::Lambda"),
+        Expr::Lambda(_) => panic!("shouldn't exist here"),
     }
 }
 
@@ -343,7 +348,7 @@ fn arguments_symbol_list<'a>(
     ))))
 }
 
-fn arguments_list<'a, I: StageInfo>(args: FuncCallSingle<I>) -> Vec<Symbol<I>> {
+fn arguments_list<I: StageInfo>(args: FuncCallSingle<I>) -> Vec<Symbol<I>> {
     let a0 = args.id.clone();
     let a_n = args.args;
     let mut res = vec![a0];
@@ -546,19 +551,6 @@ fn handle_lambda<'a>(
     }
 }
 
-fn lambda_symbol<'a>(
-    syms: &SymbolTable<ScopedStageInfo<'a>>,
-    dummy_stage_info: ParsedStageInfo<'a>,
-) -> Symbol<ScopedStageInfo<'a>> {
-    let rand_string = rand::rng()
-        .sample_iter(&Alphanumeric)
-        .take(30)
-        .map(char::from)
-        .collect();
-
-    Symbol::new(rand_string, info(dummy_stage_info, syms.clone()))
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -582,7 +574,7 @@ mod tests {
     }
 
     fn scoped_test(code: &str) {
-        let pair = BunnyParser::parse(Rule::program, &code)
+        let pair = BunnyParser::parse(Rule::program, code)
             .unwrap()
             .next()
             .unwrap();
@@ -600,7 +592,7 @@ mod tests {
     }
 
     fn scoped_panic_test(code: &str) {
-        let pair = BunnyParser::parse(Rule::program, &code)
+        let pair = BunnyParser::parse(Rule::program, code)
             .unwrap()
             .next()
             .unwrap();

@@ -11,7 +11,7 @@ use std::fs::{self};
 
 use ast::{
     Expr, PrettyPrintable, StageInfo,
-    parsed::{ParsedStageInfo, filter_comments, parsed_expr_pass},
+    parsed::{ParsedStageInfo, is_not_comment, parsed_expr_pass},
     scoped::{ScopedStageInfo, SymbolTable, scoped_expr_pass},
 };
 #[allow(unused)]
@@ -24,7 +24,7 @@ use pest::Parser;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = fs::read_to_string("src/parser/examples/single-call.bny")?;
-    let mut pair = BunnyParser::parse(Rule::program, &input)?.filter(filter_comments);
+    let mut pair = BunnyParser::parse(Rule::program, &input)?.filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());
 

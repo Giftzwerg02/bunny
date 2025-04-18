@@ -18,27 +18,28 @@ impl<'a> ParsedStageInfo<'a> {
     }
 }
 
-impl <'a> PrettyPrintable for ParsedStageInfo<'a> {
+impl  PrettyPrintable for ParsedStageInfo<'_> {
     fn pretty_print(&self) -> StringTreeNode {
         // StringTreeNode::new(format!("parsed_stage_info: {self}"))
         StringTreeNode::new("".to_string())
     }
 }
 
-impl <'a> Display for ParsedStageInfo<'a> {
+impl  Display for ParsedStageInfo<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // write!(f, "{{ token: {} }}", self.token)
         write!(f, "")
     }
 }
 
-impl <'a> StageInfo for ParsedStageInfo<'a> {}
+impl  StageInfo for ParsedStageInfo<'_> {}
 
-pub fn filter_comments(pair: &Pair<'_, Rule>) -> bool {
-    match pair.as_rule() {
-        Rule::EOI | Rule::WHITESPACE | Rule::COMMENT | Rule::line_comment | Rule::program => false,
-        _ => true,
-    }
+pub fn is_comment(pair: &Pair<'_, Rule>) -> bool {
+    matches!(pair.as_rule(), Rule::EOI | Rule::WHITESPACE | Rule::COMMENT | Rule::line_comment | Rule::program)
+}
+
+pub fn is_not_comment(pair: &Pair<'_, Rule>) -> bool {
+    !is_comment(pair)
 }
 
 pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
@@ -48,18 +49,16 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
         Rule::expr => {
             let next = pair
                 .clone()
-                .into_inner()
-                .filter(filter_comments)
-                .next()
+                .into_inner().find(is_not_comment)
                 .expect("expr inner");
             parsed_expr_pass(next)
         }
         Rule::dict => {
             let mut entries = vec![];
-            let pairs = pair.clone().into_inner().filter(filter_comments);
+            let pairs = pair.clone().into_inner().filter(is_not_comment);
 
             for dict_assign in pairs {
-                let mut dict_assign_vals = dict_assign.clone().into_inner().filter(filter_comments);
+                let mut dict_assign_vals = dict_assign.clone().into_inner().filter(is_not_comment);
                 let key = dict_assign_vals.next().expect("dict_assign key");
                 let key = parsed_expr_pass(key);
 
@@ -74,7 +73,7 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
         }
         Rule::array => {
             let mut array = vec![];
-            let values = pair.clone().into_inner().filter(filter_comments);
+            let values = pair.clone().into_inner().filter(is_not_comment);
 
             for value in values {
                 let value = parsed_expr_pass(value);
@@ -89,8 +88,8 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
                 panic!("empty funccall not allowed");
             }
 
-            let mut pairs = pair.clone().into_inner().filter(filter_comments);
-            let next = pairs.next().expect(&format!("funccall id {pair}"));
+            let mut pairs = pair.clone().into_inner().filter(is_not_comment);
+            let next = pairs.next().unwrap_or_else(|| panic!("funccall id {pair}"));
 
             match next.as_rule() {
                 // singular funccall
@@ -161,11 +160,11 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
     }
 }
 
-fn info<'a>(p: Pair<'a, Rule>) -> ParsedStageInfo<'a> {
+fn info(p: Pair<'_, Rule>) -> ParsedStageInfo<'_> {
     ParsedStageInfo { token: p }
 }
 
-fn extract_arguments<'a>(p: Pair<'a, Rule>) -> Vec<Argument<ParsedStageInfo<'a>>> {
+fn extract_arguments(p: Pair<'_, Rule>) -> Vec<Argument<ParsedStageInfo<'_>>> {
     let pairs = p.into_inner();
     let mut args = vec![];
     let mut no_more_positional_args = false;

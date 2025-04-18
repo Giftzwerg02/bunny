@@ -29,18 +29,18 @@ pub enum Expr<I: StageInfo> {
 impl<I: StageInfo> Expr<I> {
     pub fn name(&self) -> String {
         match self {
-            Expr::Int(_) => format!("int"),
-            Expr::Float(_) => format!("float"),
-            Expr::String(_) => format!("string"),
-            Expr::Color(_) => format!("color"),
-            Expr::Symbol(_) => format!("symbol"),
+            Expr::Int(_) => "int".to_string(),
+            Expr::Float(_) => "float".to_string(),
+            Expr::String(_) => "string".to_string(),
+            Expr::Color(_) => "color".to_string(),
+            Expr::Symbol(s) => s.name(),
             Expr::FuncCall(func_call) => match func_call {
-                FuncCall::Single(f) => format!("func::single({})", f.id),
+                FuncCall::Single(f) => format!("func::single({})", f.id.name()),
                 FuncCall::List(f) => format!("func::list({})", f.calls.len()),
             },
-            Expr::Array(_) => format!("array"),
-            Expr::Dict(_) => format!("dict"),
-            Expr::Lambda(_) => format!("lambda"),
+            Expr::Array(_) => "array".to_string(),
+            Expr::Dict(_) => "dict".to_string(),
+            Expr::Lambda(_) => "lambda".to_string(),
         }
     }
 
@@ -87,7 +87,7 @@ impl<I: StageInfo> Expr<I> {
             Expr::FuncCall(func_call) => Expr::FuncCall(func_call.map_stage(f)),
             Expr::Array(array) => Expr::Array(array.map_stage(f)),
             Expr::Dict(dict) => Expr::Dict(dict.map_stage(f)),
-            Expr::Lambda(lambda) => todo!(),
+            Expr::Lambda(_) => todo!("map_stage: lambda"),
         }
     }
 }
@@ -135,7 +135,9 @@ impl<I: StageInfo> Display for Expr<I> {
             Expr::Dict(dict) => {
                 write!(f, "{dict}")
             }
-            Expr::Lambda(lambda) => todo!(),
+            Expr::Lambda(lambda) => {
+                write!(f, "{lambda}")
+            }
         }
     }
 }
@@ -314,7 +316,7 @@ impl<I: StageInfo> Symbol<I> {
     }
 
     pub fn as_code(&self) -> String {
-        format!("{}", self.value)
+        self.value.to_string()
     }
 
     /// Maps the StageInfo from type I to type O using the provided closure f.
@@ -324,6 +326,10 @@ impl<I: StageInfo> Symbol<I> {
             // Apply the mapping function f to the StageInfo
             info: f(self.info),
         }
+    }
+
+    pub fn name(&self) -> String {
+        format!("Symbol({})", self.value)
     }
 }
 
@@ -493,11 +499,11 @@ impl<I: StageInfo> FuncCallSingle<I> {
     }
 
     pub fn is_def(&self) -> bool {
-        return self.id.value == FUNC_DEF_KEYWORD;
+        self.id.value == FUNC_DEF_KEYWORD
     }
 
     pub fn is_lambda(&self) -> bool {
-        return self.id.value == FUNC_LAMBDA_KEYWORD;
+        self.id.value == FUNC_LAMBDA_KEYWORD
     }
 
     /// Recursively maps the StageInfo from type I to type O using the provided closure f.
@@ -603,11 +609,15 @@ pub struct NamedArgument<I: StageInfo> {
 
 impl<I: StageInfo> PrettyPrintable for NamedArgument<I> {
     fn pretty_print(&self) -> StringTreeNode {
-        let mut children = vec![];
-        children.push(self.name.pretty_print());
-        children.push(self.value.pretty_print());
-        children.push(self.info.pretty_print());
-        StringTreeNode::with_child_nodes("named_argument".to_string(), children.into_iter())
+        StringTreeNode::with_child_nodes(
+            "named_argument".to_string(),
+            vec![
+                self.name.pretty_print(),
+                self.value.pretty_print(),
+                self.info.pretty_print(),
+            ]
+            .into_iter(),
+        )
     }
 }
 
@@ -731,7 +741,7 @@ impl<I: StageInfo> Dict<I> {
     }
 
     pub fn as_code(&self) -> String {
-        if self.value.len() == 0 {
+        if self.value.is_empty() {
             return "[:]".to_owned();
         }
 
@@ -781,20 +791,22 @@ pub struct DictEntry<I: StageInfo> {
 
 impl<I: StageInfo> PrettyPrintable for DictEntry<I> {
     fn pretty_print(&self) -> StringTreeNode {
-        let mut children = vec![];
-        children.push(StringTreeNode::with_child_nodes(
+        let key = StringTreeNode::with_child_nodes(
             "key".to_string(),
             vec![self.key.pretty_print()].into_iter(),
-        ));
-        children.push(StringTreeNode::with_child_nodes(
+        );
+
+        let value = StringTreeNode::with_child_nodes(
             "value".to_string(),
             vec![self.value.pretty_print()].into_iter(),
-        ));
-        children.push(StringTreeNode::with_child_nodes(
+        );
+
+        let info = StringTreeNode::with_child_nodes(
             "info".to_string(),
             vec![self.info.pretty_print()].into_iter(),
-        ));
-        StringTreeNode::with_child_nodes("dict_entry".to_string(), children.into_iter())
+        );
+
+        StringTreeNode::with_child_nodes("dict_entry".to_string(), vec![key, value, info].into_iter())
     }
 }
 
@@ -841,10 +853,7 @@ pub struct Lambda<I: StageInfo> {
 
 impl<I: StageInfo> Lambda<I> {
     fn new(args: Vec<Argument<I>>, info: I) -> Self {
-        Self {
-            args,
-            info,
-        }
+        Self { args, info }
     }
 
     pub fn as_code(&self) -> String {
@@ -855,6 +864,12 @@ impl<I: StageInfo> Lambda<I> {
             .collect::<Vec<_>>()
             .join(" ");
         format!("({} {})", FUNC_LAMBDA_KEYWORD, args)
+    }
+}
+
+impl<I: StageInfo> Display for Lambda<I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Lambda({:?}, {})", self.args, self.info)
     }
 }
 
