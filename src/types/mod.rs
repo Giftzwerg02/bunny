@@ -1,6 +1,6 @@
-mod typed;
+pub mod typed;
 mod hm;
-mod util;
+pub mod util;
 
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
 use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, NamedArgument, Str, Symbol};

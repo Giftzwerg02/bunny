@@ -19,8 +19,8 @@ pub enum Lazy<'a> {
     // TODO Implement this
     //Opaque(LazyCell<()>),
     
-    // DO NOT replace LazyCell with LazyLock for it to be thread safe
-    // instead, use the thread safe version of the im crate
+    // To make it threat safe: Use LazyLock instead of LazyCell and use the
+    // thread safe version of the im crate
     Array(
         LazyCell<
             Vector<Lazy<'a>>,
