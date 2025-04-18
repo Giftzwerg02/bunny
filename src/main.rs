@@ -1,8 +1,8 @@
 pub mod ast;
 pub mod cli;
-pub mod parser;
 pub mod debug;
-mod types;
+pub mod parser;
+// mod types;
 // mod types;
 // mod library;
 // mod runner;
@@ -10,7 +10,9 @@ mod types;
 use std::fs::{self};
 
 use ast::{
-    parsed::{filter_comments, parsed_expr_pass, ParsedStageInfo}, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}, Expr, PrettyPrintable, StageInfo
+    Expr, PrettyPrintable, StageInfo,
+    parsed::{ParsedStageInfo, filter_comments, parsed_expr_pass},
+    scoped::{ScopedStageInfo, SymbolTable, scoped_expr_pass},
 };
 #[allow(unused)]
 use clap::Parser as ClapParser;
@@ -18,7 +20,7 @@ use clap::Parser as ClapParser;
 use cli::Cli;
 use parser::{BunnyParser, Rule};
 use pest::Parser;
-use crate::types::{typecheck_pass, InferenceState};
+// use crate::types::{typecheck_pass, InferenceState};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = fs::read_to_string("src/parser/examples/single-call.bny")?;
@@ -29,15 +31,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut syms = SymbolTable::new();
     let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
 
-    syms.insert(
-        "def".to_string(),
-        empty_func_expr(info.clone())
-    );
+    syms.insert("def".to_string(), ast::scoped::SymbolValue::Defined);
 
-    syms.insert(
-        "+".to_string(),
-        empty_func_expr(info.clone())
-    );
+    let empty = ast::scoped::FunctionDefinition::constant(empty_func_expr(info.clone()), info);
+    syms.insert("+".to_string(), empty.into());
 
     let ast = timed!(scoped_expr_pass(ast, &syms));
     println!("{}", ast.pretty_print());
@@ -53,7 +50,7 @@ fn empty_func<I: StageInfo>(info: I) -> ast::FuncCallSingle<I> {
     ast::FuncCallSingle::new(
         ast::Symbol::new("".to_owned(), info.clone()),
         vec![],
-        info.clone()
+        info.clone(),
     )
 }
 

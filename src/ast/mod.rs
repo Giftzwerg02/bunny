@@ -23,6 +23,7 @@ pub enum Expr<I: StageInfo> {
     FuncCall(FuncCall<I>),
     Array(Array<I>),
     Dict(Dict<I>),
+    Lambda(Lambda<I>),
 }
 
 impl<I: StageInfo> Expr<I> {
@@ -39,6 +40,7 @@ impl<I: StageInfo> Expr<I> {
             },
             Expr::Array(_) => format!("array"),
             Expr::Dict(_) => format!("dict"),
+            Expr::Lambda(_) => format!("lambda"),
         }
     }
 
@@ -52,6 +54,7 @@ impl<I: StageInfo> Expr<I> {
             Expr::FuncCall(func_call) => func_call.info(),
             Expr::Array(array) => &array.info,
             Expr::Dict(dict) => &dict.info,
+            Expr::Lambda(lambda) => &lambda.info,
         }
     }
 
@@ -65,6 +68,7 @@ impl<I: StageInfo> Expr<I> {
             Expr::FuncCall(func_call) => func_call.as_code(),
             Expr::Array(array) => array.as_code(),
             Expr::Dict(dict) => dict.as_code(),
+            Expr::Lambda(lambda) => lambda.as_code(),
         }
     }
 
@@ -83,6 +87,7 @@ impl<I: StageInfo> Expr<I> {
             Expr::FuncCall(func_call) => Expr::FuncCall(func_call.map_stage(f)),
             Expr::Array(array) => Expr::Array(array.map_stage(f)),
             Expr::Dict(dict) => Expr::Dict(dict.map_stage(f)),
+            Expr::Lambda(lambda) => todo!(),
         }
     }
 }
@@ -98,6 +103,7 @@ impl<I: StageInfo> PrettyPrintable for Expr<I> {
             Expr::FuncCall(func_call) => func_call.pretty_print(),
             Expr::Array(array) => array.pretty_print(),
             Expr::Dict(dict) => dict.pretty_print(),
+            Expr::Lambda(lambda) => lambda.pretty_print(),
         }
     }
 }
@@ -129,6 +135,7 @@ impl<I: StageInfo> Display for Expr<I> {
             Expr::Dict(dict) => {
                 write!(f, "{dict}")
             }
+            Expr::Lambda(lambda) => todo!(),
         }
     }
 }
@@ -501,11 +508,7 @@ impl<I: StageInfo> FuncCallSingle<I> {
         // Recursively map the StageInfo in the function identifier
         let new_id = self.id.map_stage(f);
         // Recursively map the StageInfo in each argument
-        let new_args = self
-            .args
-            .into_iter()
-            .map(|arg| arg.map_stage(f))
-            .collect();
+        let new_args = self.args.into_iter().map(|arg| arg.map_stage(f)).collect();
         // Apply the mapping function f to the StageInfo of this node
         let new_info = f(self.info);
 
@@ -829,4 +832,44 @@ impl<I: StageInfo> Display for DictEntry<I> {
         write!(f, "DictEntry({}, {}, {})", self.key, self.value, self.info)
     }
 }
- 
+
+#[derive(Debug, Clone)]
+pub struct Lambda<I: StageInfo> {
+    pub args: Vec<Argument<I>>,
+    pub info: I,
+}
+
+impl<I: StageInfo> Lambda<I> {
+    fn new(args: Vec<Argument<I>>, info: I) -> Self {
+        Self {
+            args,
+            info,
+        }
+    }
+
+    pub fn as_code(&self) -> String {
+        let args = self
+            .args
+            .iter()
+            .map(|arg| arg.as_code())
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!("({} {})", FUNC_LAMBDA_KEYWORD, args)
+    }
+}
+
+impl<I: StageInfo> PrettyPrintable for Lambda<I> {
+    fn pretty_print(&self) -> StringTreeNode {
+        let mut children = vec![];
+        for arg in &self.args {
+            children.push(arg.pretty_print());
+        }
+
+        children.push(self.info.pretty_print());
+
+        StringTreeNode::with_child_nodes(
+            format!("lambda: {}", self.info).to_string(),
+            children.into_iter(),
+        )
+    }
+}
