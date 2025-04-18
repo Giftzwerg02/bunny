@@ -7,6 +7,8 @@ edition = "2024"
 clap = { version = "4.5.32", features = ["derive", "cargo"] }
 const_format = "0.2.34"
 im = "15.1.0"
+imstr = "0.2.0"
+palette = "0.7.6"
 pest = { version = "2.7.15", features = ["miette-error", "pretty-print"] }
 pest_derive = "2.7.15"
 proptest = "1.6.0"
