@@ -8,8 +8,8 @@ use text_trees::StringTreeNode;
 use crate::ast::{Argument, FuncCallSingle};
 
 use super::{
-    Array, Color, Dict, DictEntry, Expr, Float, FuncCall, Int, NamedArgument, PrettyPrintable,
-    StageInfo, Str, Symbol, parsed::ParsedStageInfo,
+    Array, Color, Dict, DictEntry, Expr, Float, FuncCall, Int, Lambda, NamedArgument,
+    PrettyPrintable, StageInfo, Str, Symbol, parsed::ParsedStageInfo,
 };
 
 #[derive(Debug, Clone)]
@@ -81,11 +81,7 @@ impl<I: StageInfo> FunctionDefinition<I> {
     }
 
     fn name(&self) -> String {
-        format!(
-            "funcdef(args-len: {}, body: {})",
-            self.args.len(),
-            self.body.name()
-        )
+        format!("funcdef",)
     }
 }
 
@@ -99,7 +95,10 @@ impl<I: StageInfo> Display for SymbolTable<I> {
         write!(
             f,
             "{:?}",
-            self.inner.keys().map(|k| k.to_string()).collect::<Vec<_>>()
+            self.inner
+                .iter()
+                .map(|(k, v)| format!("({} -> {})", k, v.name()))
+                .collect::<Vec<_>>()
         )
     }
 }
@@ -188,11 +187,11 @@ pub fn scoped_expr_pass<'a>(
                     //  ^ id  ^ arg       ^ arg (optional)   ^ arg
                     //  i.e., 2 or 3 args
                     if func_call_single.is_def() {
-                        return Expr::FuncCall(handle_def(func_call_single, syms));
+                        return Expr::Lambda(handle_def(func_call_single, syms));
                     }
 
                     if func_call_single.is_lambda() {
-                        return Expr::FuncCall(handle_lambda(func_call_single, syms));
+                        return Expr::Lambda(handle_lambda(func_call_single, syms));
                     }
 
                     // it is not a def or lambda function -> check the inserted symbols
@@ -270,15 +269,10 @@ pub fn scoped_expr_pass<'a>(
                     );
 
                     let mut new_syms = syms.clone();
-                    let mut out_func: Option<FuncCall<_>> = None;
+                    let mut out_func: Option<Expr<_>> = None;
 
                     for (i, call) in func_call_list.calls.iter().enumerate() {
-                        let Expr::FuncCall(passed_call) =
-                            scoped_expr_pass(Expr::FuncCall(call.clone()), &new_syms)
-                        else {
-                            panic!("invalid ast");
-                        };
-
+                        let passed_call = scoped_expr_pass(Expr::FuncCall(call.clone()), &new_syms);
                         new_syms = passed_call.info().syms.clone();
 
                         if i == func_call_list.calls.len() - 1 {
@@ -286,7 +280,7 @@ pub fn scoped_expr_pass<'a>(
                         }
                     }
 
-                    Expr::FuncCall(out_func.unwrap())
+                    out_func.unwrap()
                 }
             }
         }
@@ -385,7 +379,7 @@ fn pass_arg<'a>(
 fn handle_def<'a>(
     def: FuncCallSingle<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> FuncCall<ScopedStageInfo<'a>> {
+) -> Lambda<ScopedStageInfo<'a>> {
     // create a new sym-table entry with the newly defined value
     let mut new_syms = syms.clone();
     let Argument::Positional(ref new_id) = def.args[0] else {
@@ -395,9 +389,6 @@ fn handle_def<'a>(
     let Expr::Symbol(new_id) = new_id else {
         panic!("invalid ast");
     };
-
-    /*
-     */
 
     let mut inner_syms = syms.clone();
     let func_id = pass_symbol(new_id.clone(), inner_syms.clone());
@@ -420,14 +411,10 @@ fn handle_def<'a>(
         );
 
         let mapped_arg0 = argument_symbol(new_id.clone(), &inner_syms);
-        let mapped_arg1 = Argument::Positional(new_call.clone());
+        let mapped_arg1 = Argument::Positional(new_call);
         let mapped_args = vec![mapped_arg0, mapped_arg1];
 
-        FuncCall::Single(FuncCallSingle::new(
-            pass_symbol(def.id, new_syms.clone()),
-            mapped_args,
-            info(def.info, new_syms.clone()),
-        ))
+        Lambda::new(mapped_args, info(def.info, new_syms.clone()))
     } else if def.args.len() == 3 {
         let func_args = def.args[1].clone();
         let Argument::Positional(func_args) = func_args else {
@@ -480,11 +467,7 @@ fn handle_def<'a>(
         let mapped_arg2 = Argument::Positional(new_call.clone());
         let mapped_args = vec![mapped_arg0, mapped_arg1, mapped_arg2];
 
-        FuncCall::Single(FuncCallSingle::new(
-            pass_symbol(def.id, new_syms.clone()),
-            mapped_args,
-            info(def.info, new_syms.clone()),
-        ))
+        Lambda::new(mapped_args, info(def.info, new_syms.clone()))
     } else {
         panic!("invalid ast");
     }
@@ -499,7 +482,7 @@ fn handle_def<'a>(
 fn handle_lambda<'a>(
     lambda: FuncCallSingle<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> FuncCall<ScopedStageInfo<'a>> {
+) -> Lambda<ScopedStageInfo<'a>> {
     // Case 1: Only function body
     if lambda.args.len() == 1 {
         let Argument::Positional(ref new_call) = lambda.args[0] else {
@@ -511,11 +494,7 @@ fn handle_lambda<'a>(
         let mapped_arg0 = Argument::Positional(new_call.clone());
         let mapped_args = vec![mapped_arg0];
 
-        FuncCall::Single(FuncCallSingle::new(
-            lambda_symbol(syms, lambda.info.clone()),
-            mapped_args,
-            info(lambda.info, syms.clone()),
-        ))
+        Lambda::new(mapped_args, info(lambda.info, syms.clone()))
     }
     // Case 2: Parameters and Function-Body
     else if lambda.args.len() == 2 {
@@ -561,11 +540,7 @@ fn handle_lambda<'a>(
         let mapped_arg1 = Argument::Positional(new_call.clone());
         let mapped_args = vec![mapped_arg0, mapped_arg1];
 
-        FuncCall::Single(FuncCallSingle::new(
-            lambda_symbol(syms, lambda.info.clone()),
-            mapped_args,
-            info(lambda.info, syms.clone()),
-        ))
+        Lambda::new(mapped_args, info(lambda.info, syms.clone()))
     } else {
         panic!("invalid ast");
     }
