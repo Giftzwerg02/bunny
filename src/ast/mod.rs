@@ -847,13 +847,22 @@ impl<I: StageInfo> Display for DictEntry<I> {
 
 #[derive(Debug, Clone)]
 pub struct Lambda<I: StageInfo> {
-    pub args: Vec<Argument<I>>,
+    pub args: Vec<Symbol<I>>,
+    pub body: Box<Expr<I>>,
     pub info: I,
 }
 
 impl<I: StageInfo> Lambda<I> {
-    fn new(args: Vec<Argument<I>>, info: I) -> Self {
-        Self { args, info }
+    fn new(args: Vec<Symbol<I>>, body: Expr<I>, info: I) -> Self {
+        Self { args, body: Box::new(body), info }
+    }
+
+    pub fn constant(body: Expr<I>, info: I) -> Self {
+        Self::new(vec![], body, info)
+    }
+
+    pub fn parametric(args: Vec<Symbol<I>>, body: Expr<I>, info: I) -> Self {
+        Self::new(args, body, info)
     }
 
     pub fn as_code(&self) -> String {
@@ -864,6 +873,11 @@ impl<I: StageInfo> Lambda<I> {
             .collect::<Vec<_>>()
             .join(" ");
         format!("({} {})", FUNC_LAMBDA_KEYWORD, args)
+    }
+
+
+    fn name(&self) -> String {
+        format!("lambda(body: {})", self.body.name())
     }
 }
 

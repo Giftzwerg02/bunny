@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     syms.insert("def".to_string(), ast::scoped::SymbolValue::Defined);
 
-    let empty = ast::scoped::FunctionDefinition::constant(empty_func_expr(info.clone()), info);
+    let empty = ast::Lambda::constant(empty_func_expr(info.clone()), info);
     syms.insert("+".to_string(), empty.into());
 
     let ast = timed!(scoped_expr_pass(ast, &syms));
