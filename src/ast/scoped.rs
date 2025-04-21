@@ -301,6 +301,10 @@ fn arguments_list<I: StageInfo>(args: FuncCallSingle<I>) -> Vec<Symbol<I>> {
             panic!("invalid ast");
         };
 
+        if res.iter().any(|pushed| pushed.value == a.value) {
+            panic!("duplicate argument in argument list");
+        }
+
         res.push(a);
     }
     res
@@ -373,19 +377,9 @@ fn handle_def<'a>(
 
         // Insert the first argument as a symbol
         // (which is the "id" of the arguments-list)
-        inner_syms.insert(func_args.id.value.clone(), SymbolValue::Defined);
-
-        // Insert the rest of the arguments as symbols
-        for next_arg in &func_args.args {
-            let Argument::Positional(next_arg) = next_arg else {
-                panic!("invalid ast");
-            };
-
-            let Expr::Symbol(next_arg) = next_arg else {
-                panic!("invalid ast");
-            };
-
-            inner_syms.insert(next_arg.value.clone(), SymbolValue::Defined);
+        let func_args = arguments_list(func_args.clone());
+        for arg in &func_args {
+            inner_syms.insert(arg.value.clone(), SymbolValue::Defined);
         }
 
         let Argument::Positional(ref new_call) = def.args[2] else {
@@ -393,9 +387,9 @@ fn handle_def<'a>(
         };
 
         let new_call = scoped_expr_pass(new_call.clone(), &inner_syms);
-        let new_call_args = arguments_list(func_args.clone())
+        let new_call_args = func_args
             .into_iter()
-            .map(|arg| pass_symbol(arg, inner_syms.clone()))
+            .map(|sym| pass_symbol(sym, inner_syms.clone()))
             .collect();
 
         let mut lambda = Lambda::parametric(new_call_args, new_call.clone(), info(def.info, syms.clone()));
@@ -447,16 +441,9 @@ fn handle_lambda<'a>(
         inner_syms.insert(func_args.id.value.clone(), SymbolValue::Defined);
 
         // Insert the rest of the arguments as symbols
-        for next_arg in &func_args.args {
-            let Argument::Positional(next_arg) = next_arg else {
-                panic!("invalid ast");
-            };
-
-            let Expr::Symbol(next_arg) = next_arg else {
-                panic!("invalid ast");
-            };
-
-            inner_syms.insert(next_arg.value.clone(), SymbolValue::Defined);
+        let func_args = arguments_list(func_args);
+        for arg in &func_args {
+            inner_syms.insert(arg.value.clone(), SymbolValue::Defined);
         }
 
         let Argument::Positional(ref new_call) = lambda.args[1] else {
@@ -464,7 +451,7 @@ fn handle_lambda<'a>(
         };
 
         let new_call = scoped_expr_pass(new_call.clone(), &inner_syms);
-        let args = arguments_list(func_args)
+        let args = func_args
             .into_iter()
             .map(|s| pass_symbol(s, inner_syms.clone()))
             .collect();
@@ -912,5 +899,93 @@ mod tests {
             )
         ",
         );
+    }
+
+    #[test]
+    fn def_parameters_must_be_unique() {
+        scoped_panic_test(r"
+            (
+                (def a (b b) (
+                    (+ b b)
+                ))
+                (a 1 2)
+            ) 
+        ");
+
+        scoped_panic_test(r"
+            (
+                (def a (foo bar b b baz boo) (
+                    (+ b b)
+                ))
+                (a 1 2 3 4 5 6)
+            ) 
+        ");
+    }
+
+    #[test]
+    fn def_parameters_may_be_shadowed() {
+        scoped_test(r"
+            (
+                (def a (bla) (
+                    (def inner (bla) (
+                        (+ 3 bla)
+                    ))
+                    (+ (inner bla: 4) 6)
+                ))
+                (+ 4 (a bla: 12))
+            )
+        ")
+    }
+
+    #[test]
+    fn lambda_parameter_names_must_be_unique() {
+        scoped_panic_test(r"
+            (
+                (def a (
+                    (\ (b b) (
+                        (+ b b)
+                    ))
+                ))
+                (a)
+            ) 
+        ");
+
+        scoped_panic_test(r"
+            (
+                (\ (foo bar b b baz boo) (
+                    (+ b b)
+                ))
+            ) 
+        ");
+    }
+
+    #[test]
+    fn lambda_parameters_may_be_shadowed() {
+        scoped_test(r"
+            (
+                (\ (bla) (
+                    (\ (bla) (
+                        (+ 3 bla)
+                    ))
+                ))
+            )
+        ")
+    }
+
+    #[test]
+    fn def_and_lambda_parameters_may_be_shadowed() {
+        scoped_test(r"
+            (
+                (def a (bla) (
+                    (\ (bla) (
+                        (def a (bla) (
+                            (+ 10 bla)
+                        ))
+                        (a bla: 1)
+                    ))
+                ))
+                (+ 30 (a bla: 3))
+            )
+        ")
     }
 }
