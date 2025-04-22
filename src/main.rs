@@ -23,7 +23,7 @@ use crate::ast::Symbol;
 use crate::library::standard_library;
 use crate::types::{typecheck_pass, InferenceState};
 use crate::types::typed::{PolyTypedStageInfo, TypedValue};
-use crate::types::util::{func_type, int_type, string_type};
+use crate::types::util::{bfunc, bint, bstring};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = fs::read_to_string("src/parser/examples/single-call.bny")?;

@@ -6,7 +6,7 @@ use crate::ast::scoped::{ScopedStageInfo, SymbolValue};
 use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, Lambda, NamedArgument, Str, Symbol};
 use crate::types::hm::{HMState, Type};
 use crate::types::typed::{TypedStageInfo, TypedSymbolTable, TypedValue};
-use crate::types::util::{array_type, color_type, dict_type, float_type, func_type, int_type, pair_type, string_type};
+use crate::types::util::{barray, bcolor, bdict, bfloat, bfunc, bint, bpair, bstring};
 
 pub struct InferenceState<'a> {
     pub type_assumptions: TypedSymbolTable<'a>,
@@ -31,7 +31,7 @@ pub fn typecheck_pass<'a>(
             Expr::Int(
                 Int::new(
                     value.clone(),
-                    type_stage_info(info, int_type(), state)
+                    type_stage_info(info, bint(), state)
                 )
             ),
 
@@ -39,7 +39,7 @@ pub fn typecheck_pass<'a>(
             Expr::Float(
                 Float::new(
                     value.clone(),
-                    type_stage_info(info, float_type(), state)
+                    type_stage_info(info, bfloat(), state)
                 )
             ),
 
@@ -47,7 +47,7 @@ pub fn typecheck_pass<'a>(
             Expr::String(
                 Str::new(
                     value.clone(),
-                    type_stage_info(info, string_type(), state)
+                    type_stage_info(info, bstring(), state)
                 )
             ),
 
@@ -55,7 +55,7 @@ pub fn typecheck_pass<'a>(
             Expr::Color(
                 Color::new(
                     *r, *g, *b,
-                    type_stage_info(info, color_type(), state)
+                    type_stage_info(info, bcolor(), state)
                 )
             ),
 
@@ -233,7 +233,7 @@ fn infer_array<'a>(
     if array.value.is_empty() {
         return Array::new(
             vec![],
-            type_stage_info(&array.info, array_type(state.hm.newvar()), state)
+            type_stage_info(&array.info, barray(&state.hm.newvar()), state)
         );
     }
 
@@ -255,7 +255,7 @@ fn infer_array<'a>(
         typed_values,
         type_stage_info(
             &array.info,
-            array_type(elem.typ().clone()),
+            barray(&elem.typ().clone()),
             state
         )
     )
@@ -271,7 +271,7 @@ fn infer_dict<'a>(
             vec![],
             type_stage_info(
                 &dict.info,
-                dict_type(state.hm.newvar(), state.hm.newvar()),
+                bdict(&state.hm.newvar(), &state.hm.newvar()),
                 state
             )
         )
@@ -289,7 +289,7 @@ fn infer_dict<'a>(
             value.clone(),
             type_stage_info(
                 &entry.info,
-                pair_type(key.typ().clone(), value.typ().clone()),
+                bpair(key.typ(), value.typ()),
                 state
             )
         )
@@ -320,9 +320,9 @@ fn infer_dict<'a>(
         typed_values,
         type_stage_info(
             &dict.info,
-            dict_type(
-                entry_expr.key.typ().clone(),
-                entry_expr.value.typ().clone()
+            bdict(
+                entry_expr.key.typ(),
+                entry_expr.value.typ()
             ),
             state
         )
@@ -354,9 +354,9 @@ fn infer_lambda<'a>(
     let arg_types = typed_args
         .iter()
         .map(|Symbol { info, .. }| info.typ.clone())
-        .collect();
+        .collect::<Vec<Type>>();
 
-    let fun_type = func_type(arg_types, typed_body.typ().clone());
+    let fun_type = bfunc(&arg_types[..], typed_body.typ());
 
     Lambda::parametric(
         typed_args,
@@ -373,7 +373,7 @@ mod tests {
     use std::panic::catch_unwind;
     use crate::ast::parsed::{is_not_comment, parsed_expr_pass};
     use crate::ast::scoped::{scoped_expr_pass, ScopedStageInfo};
-    use crate::library::{standard_library, Library};
+    use crate::library::Library;
     use crate::parser::{BunnyParser, Rule};
     use crate::types::hm::Type;
     use crate::types::typecheck_pass;
@@ -383,7 +383,7 @@ mod tests {
 
     fn test_library<'a>() -> Library<'a> {
         library! {
-            
+
         }
     }
 

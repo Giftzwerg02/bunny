@@ -40,7 +40,7 @@ macro_rules! library {
                 let ret_ty = all_types.last().expect("Should have at least one type").clone(); // The last one is the return type
 
                 // Use the parsed types here
-                let func_type = $crate::types::util::func_type(args_ty, ret_ty)
+                let func_type = $crate::types::util::bfunc(&args_ty[..], &ret_ty)
                     .generalize(&mut typed.hm);
 
                 typed.type_assumptions.insert(
