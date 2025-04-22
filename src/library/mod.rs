@@ -1,5 +1,6 @@
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
 use crate::library;
+use crate::types::InferenceState;
 use crate::types::typed::TypedSymbolTable;
 use crate::types::util::int_type;
 
@@ -7,7 +8,7 @@ pub mod macros;
 
 pub struct Library<'a> {
     pub scoped: SymbolTable<ScopedStageInfo<'a>>, // Made public for access
-    pub typed: TypedSymbolTable<'a> // Made public for access
+    pub typed: InferenceState<'a> // Made public for access
 }
 
 pub fn standard_library<'a>() -> Library<'a> {

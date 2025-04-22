@@ -85,7 +85,7 @@ fn type_stage_info<'a>(
     state: &mut InferenceState<'a>
 ) -> TypedStageInfo<'a> {
     TypedStageInfo {
-        inner: info.inner.clone(),
+        inner: info.inner.clone().expect("to be called only with bunny expressions"),
         typ,
         syms: state.type_assumptions.clone()
     }
