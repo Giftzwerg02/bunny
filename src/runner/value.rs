@@ -15,8 +15,8 @@ pub enum Lazy<'a> {
     // palette does not seem to have a "general" color type
     // so we just store it as a linear RGBA color for now
     Color(LazyCell<Srgba, Box<dyn FnOnce() -> Srgba>>),
-    
-    // TODO Implement this
+
+    // TODO: Use https://docs.rs/unsvg/latest/unsvg/ or https://docs.rs/esvg/latest/esvg/ for svgs
     //Opaque(LazyCell<()>),
     
     // To make it threat safe: Use LazyLock instead of LazyCell and use the
