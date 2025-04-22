@@ -27,3 +27,22 @@ pub fn dict_type(key: Type, value: Type) -> Type {
 pub fn pair_type(a: Type, b: Type) -> Type {
     Type::TApp("pair".to_owned(), vec![ a, b ])
 }
+
+pub fn func_type(args: Vec<Type>, ret: Type) -> Type {
+    match &args[..] {
+        [] => Type::Fn(
+            Box::new(Type::TUnit),
+            Box::new(ret)
+        ),
+
+        [ a ] => Type::Fn(
+            Box::new(a.clone()),
+            Box::new(ret)
+        ),
+
+        [ a, rest @ .. ] => Type::Fn(
+            Box::new(a.clone()),
+            Box::new(func_type(rest.to_vec(), ret))
+        )
+    }
+}

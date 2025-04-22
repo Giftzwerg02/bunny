@@ -2,10 +2,9 @@ pub mod ast;
 pub mod cli;
 pub mod debug;
 pub mod parser;
-// mod types;
-// mod types;
-// mod library;
-// mod runner;
+mod types;
+mod runner;
+//mod library;
 
 use std::fs::{self};
 
@@ -20,6 +19,10 @@ use clap::Parser as ClapParser;
 use cli::Cli;
 use parser::{BunnyParser, Rule};
 use pest::Parser;
+use crate::ast::Symbol;
+use crate::types::{typecheck_pass, InferenceState};
+use crate::types::typed::PolyTypedStageInfo;
+use crate::types::util::{func_type, int_type, string_type};
 // use crate::types::{typecheck_pass, InferenceState};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,14 +37,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     syms.insert("def".to_string(), ast::scoped::SymbolValue::Defined);
 
     let empty = ast::Lambda::constant(empty_func_expr(info.clone()), info);
-    syms.insert("+".to_string(), empty.into());
+    syms.insert("+".to_string(), empty.clone().into());
 
     let ast = timed!(scoped_expr_pass(ast, &syms));
     println!("{}", ast.pretty_print());
 
-    //let mut inference_state = InferenceState::new();
-    //let typ = typecheck_pass(&ast, &mut inference_state);
-    //println!("{:?}", typ);
+    // Type checking
+    //
+    let mut inference_state = InferenceState::new();
+
+    let add_type = func_type(
+        vec![int_type(), string_type()],
+        int_type()
+    );
+
+    inference_state.type_assumptions.insert("+".to_string(), Expr::Symbol(
+        Symbol::new(
+            "+".to_owned(),
+            PolyTypedStageInfo {
+                inner: empty.info.inner,
+                typ: add_type.generalize(&inference_state.hm),
+                syms: Default::default(),
+            }
+        )
+    ));
+
+    let typ = typecheck_pass(&ast, &mut inference_state);
+    println!("{:?}", typ.info().typ);
 
     Ok(())
 }

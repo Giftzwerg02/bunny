@@ -1,18 +1,15 @@
-use crate::ast::AST;
-use crate::runner::value::Value;
-use crate::types::typed_expression::TypedExpr;
+use crate::runner::value::{Lazy, Value};
 
-#[derive(Debug, Clone, PartialEq)]
+
+pub struct InterpreterSymbolTable {
+
+}
+
 pub enum RunnableExpr<'a> {
-    Native(NativeExpr),
+    Native(NativeExpr<'a>),
 
-    Bunny(BunnyExpr<'a>)
+    Bunny(Expr<'a>) // Howwwww
 }
 
-pub type NativeExpr = Box<dyn Fn(Vec<Value>) -> Value>;
+pub type NativeExpr<'a> = Box<dyn Fn(Vec<Lazy<'a>>) -> Lazy<'a>>;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct BunnyExpr<'a> {
-    pub value: Box<AST<RunnableExpr<'a>>>,
-    pub inner: TypedExpr<'a>
-}

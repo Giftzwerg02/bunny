@@ -25,6 +25,8 @@ type Level = u64;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
+    TUnit,
+
     /// A maybe-bound type variable
     TVar(Rc<RefCell<TypeVar>>),
 
@@ -102,6 +104,8 @@ impl PolyType {
         // Replace the typevars in typ recursively.
         fn replace_tvs(typ: &Type, repl: &mut HashMap<TypeVarId, Type>) -> Type {
             match typ {
+                Type::TUnit => typ.clone(),
+
                 Type::TVar(tvar_rc) => {
                     match &*tvar_rc.borrow() {
                         TypeVar::Bound(t) => {
@@ -151,6 +155,8 @@ impl Type {
         // Helper function that recursively collects unbound type variables.
         fn find_all_tvs(t: &Type, current_level: Level, acc: &mut Vec<TypeVarId>) {
             match t {
+                Type::TUnit => {},
+
                 Type::TVar(tvar_rc) => {
                     let tvar = tvar_rc.borrow();
                     match *tvar {
@@ -249,6 +255,8 @@ impl Type {
     /// Returns true if a_id is found, false otherwise.
     fn occurs(a_id: TypeVarId, a_level: Level, typ: &Type) -> bool {
         match typ {
+            Type::TUnit => false,
+
             Type::TVar(tvar_rc) => {
                 let mut tb = tvar_rc.borrow_mut();
                 match &mut *tb {
@@ -279,6 +287,9 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Type::TUnit =>
+                write!(f, "()"),
+
             Type::TVar(tv) =>
                 write!(f, "{}", tv.borrow()),
 

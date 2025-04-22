@@ -87,7 +87,7 @@ impl<I: StageInfo> Expr<I> {
             Expr::FuncCall(func_call) => Expr::FuncCall(func_call.map_stage(f)),
             Expr::Array(array) => Expr::Array(array.map_stage(f)),
             Expr::Dict(dict) => Expr::Dict(dict.map_stage(f)),
-            Expr::Lambda(_) => todo!("map_stage: lambda"),
+            Expr::Lambda(lambda) => Expr::Lambda(lambda.map_stage(f)),
         }
     }
 }
@@ -873,6 +873,25 @@ impl<I: StageInfo> Lambda<I> {
             .collect::<Vec<_>>()
             .join(" ");
         format!("({} {})", FUNC_LAMBDA_KEYWORD, args)
+    }
+
+    /// Recursively maps the StageInfo from type I to type O using the provided closure f.
+    pub fn map_stage<O: StageInfo, F>(self, f: &mut F) -> Lambda<O>
+    where
+        F: FnMut(I) -> O,
+    {
+        // Recursively map the StageInfo in each argument/body part
+        let new_args = self.args.into_iter().map(|arg| arg.map_stage(f)).collect();
+        // Apply the mapping function f to the StageInfo of this node
+        let new_info = f(self.info);
+
+        let new_body = self.body.map_stage(f);
+
+        Lambda {
+            args: new_args,
+            body: Box::new(new_body),
+            info: new_info,
+        }
     }
 
 

@@ -2,21 +2,21 @@ pub mod typed;
 mod hm;
 pub mod util;
 
-use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
-use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, NamedArgument, Str, Symbol};
+use crate::ast::scoped::{ScopedStageInfo, SymbolValue};
+use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, Lambda, NamedArgument, Str, Symbol};
 use crate::types::hm::{HMState, Type};
-use crate::types::typed::{PolyTypedStageInfo, TypedStageInfo};
-use crate::types::util::{array_type, color_type, dict_type, float_type, int_type, pair_type, string_type};
+use crate::types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable};
+use crate::types::util::{array_type, color_type, dict_type, float_type, func_type, int_type, pair_type, string_type};
 
 pub struct InferenceState<'a> {
-    type_assumptions: SymbolTable<PolyTypedStageInfo<'a>>,
-    hm: HMState
+    pub type_assumptions: TypedSymbolTable<PolyTypedStageInfo<'a>>,
+    pub hm: HMState
 }
 
 impl InferenceState<'_> {
     pub fn new() -> Self {
         InferenceState {
-            type_assumptions: SymbolTable::new(),
+            type_assumptions: TypedSymbolTable::new(),
             hm: HMState::new()
         }
     }
@@ -72,7 +72,10 @@ pub fn typecheck_pass<'a>(
             Expr::Array(infer_array(array, state)),
 
         Expr::Dict(dict) =>
-            Expr::Dict(infer_dict(dict, state))
+            Expr::Dict(infer_dict(dict, state)),
+
+        Expr::Lambda(lambda) =>
+            Expr::Lambda(infer_lambda(lambda, state))
     }
 }
 
@@ -88,6 +91,20 @@ fn type_stage_info<'a>(
     }
 }
 
+fn infer_argument_definition<'a>(
+    sym: &Symbol<ScopedStageInfo<'a>>,
+    state: &mut InferenceState<'a>
+) -> Symbol<TypedStageInfo<'a>> {
+    Symbol::new(
+        sym.value.clone(),
+        type_stage_info(
+            &sym.info,
+            state.hm.newvar(),
+            state
+        )
+    )
+}
+
 /// Refer to https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L197
 fn infer_symbol<'a>(
     sym: &Symbol<ScopedStageInfo<'a>>,
@@ -97,19 +114,25 @@ fn infer_symbol<'a>(
 
     // defs are infered as let-binded vars:
     // https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L241
-    if !state.type_assumptions.contains(key) {
+    if !state.type_assumptions.contains_key(key) {
         let scoped_expr = sym.info.syms.get(key)
             .expect(&format!("The should be no undefined symbols in the type checking stage: {key}"));
 
         state.hm.enter_level();
 
-        let expr = typecheck_pass(scoped_expr, state);
-        let poly_expr = expr.map_stage(
+        let typed_expr = match scoped_expr {
+            SymbolValue::Defined =>
+                Expr::Symbol(infer_argument_definition(&sym, state)),
+
+            SymbolValue::FunctionDefinition(lambda) =>
+                Expr::Lambda(infer_lambda(lambda, state))
+        };
+
+        let poly_expr = typed_expr.map_stage(
             &mut |typed_info: TypedStageInfo| typed_info.generalize(&state.hm)
         );
 
         state.hm.exit_level();
-
 
         state.type_assumptions.insert(key.clone(), poly_expr);
     }
@@ -305,6 +328,43 @@ fn infer_dict<'a>(
             ),
             state
         )
+    )
+}
+
+fn infer_lambda<'a>(
+    lambda: &Lambda<ScopedStageInfo<'a>>,
+    state: &mut InferenceState<'a>
+) -> Lambda<TypedStageInfo<'a>> {
+    let typed_body = typecheck_pass(&lambda.body, state);
+
+    let typed_symbols = &typed_body.info().syms;
+
+    let typed_args = lambda
+        .clone()
+        .args
+        .into_iter()
+        .map(|Symbol { value, info }| {
+            let typed_expr = typed_symbols.get(&value)
+                .expect("Argument value to be typed in symbol table of body");
+
+            let typ = typed_expr.info().typ.inst(&mut state.hm);
+            Symbol::new(value, type_stage_info(&info, typ, state))
+        })
+        .collect::<Vec<Symbol<TypedStageInfo>>>();
+
+    let arg_types = typed_args
+        .iter()
+        .map(|Symbol { info, .. }| info.typ.clone())
+        .collect();
+
+    let fun_type = func_type(arg_types, typed_body.typ().clone());
+
+    Lambda::parametric(
+        typed_args,
+
+        typed_body,
+
+        type_stage_info(&lambda.info, fun_type, state)
     )
 }
 

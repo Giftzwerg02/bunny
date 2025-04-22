@@ -1,22 +1,24 @@
 use crate::ast::parsed::ParsedStageInfo;
-use crate::ast::scoped::SymbolTable;
 use crate::ast::{Expr, PrettyPrintable, StageInfo};
 use std::fmt::{Display, Formatter};
+use im::HashMap;
 use text_trees::StringTreeNode;
 use crate::types::hm::{HMState, PolyType, Type};
+
+pub type TypedSymbolTable<T> = HashMap<String, Expr<T>>;
 
 #[derive(Clone, Debug)]
 pub struct TypedStageInfo<'a> {
     pub inner: ParsedStageInfo<'a>,
     pub typ: Type,
-    pub syms: SymbolTable<PolyTypedStageInfo<'a>>
+    pub syms: TypedSymbolTable<PolyTypedStageInfo<'a>>
 }
 
 #[derive(Clone, Debug)]
 pub struct PolyTypedStageInfo<'a> {
     pub inner: ParsedStageInfo<'a>,
     pub typ: PolyType,
-    pub syms: SymbolTable<PolyTypedStageInfo<'a>>
+    pub syms: TypedSymbolTable<PolyTypedStageInfo<'a>>
 }
 
 impl Display for TypedStageInfo<'_> {
