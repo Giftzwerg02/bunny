@@ -5,7 +5,7 @@ pub mod util;
 use crate::ast::scoped::{ScopedStageInfo, SymbolValue};
 use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, Lambda, NamedArgument, Str, Symbol};
 use crate::types::hm::{HMState, Type};
-use crate::types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue};
+use crate::types::typed::{TypedStageInfo, TypedSymbolTable, TypedValue};
 use crate::types::util::{array_type, color_type, dict_type, float_type, func_type, int_type, pair_type, string_type};
 
 pub struct InferenceState<'a> {
@@ -367,47 +367,56 @@ fn infer_lambda<'a>(
     )
 }
 
-/*
+
 #[cfg(test)]
 mod tests {
-    use crate::ast;
-    use crate::ast::{Expr, Lambda, StageInfo};
-    use crate::ast::parsed::{parsed_expr_pass, ParsedStageInfo};
-    use crate::ast::scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable, SymbolValue};
+    use std::panic::catch_unwind;
+    use crate::ast::parsed::{is_not_comment, parsed_expr_pass};
+    use crate::ast::scoped::{scoped_expr_pass, ScopedStageInfo};
+    use crate::library::{standard_library, Library};
     use crate::parser::{BunnyParser, Rule};
     use crate::types::hm::Type;
+    use crate::types::typecheck_pass;
+    use pest::Parser;
+    use crate::ast::Expr;
+    use crate::library;
 
-    fn assert_type(expr: &'static str, typ: Type) {
-        fn empty_func<I: StageInfo>(info: I) -> ast::FuncCallSingle<I> {
-            ast::FuncCallSingle::new(
-                ast::Symbol::new("".to_owned(), info.clone()),
-                vec![],
-                info.clone(),
-            )
+    fn test_library<'a>() -> Library<'a> {
+        library! {
+            
         }
+    }
 
-        fn empty_func_expr<I: StageInfo>(info: I) -> Expr<I> {
-            Expr::FuncCall(ast::FuncCall::Single(empty_func(info)))
-        }
-
-        let pair = BunnyParser::parse(Rule::program, code)
+    fn prepare_expr<'a>(expr: &'static str, library: &Library) -> Expr<ScopedStageInfo<'a>> {
+        let mut pair = BunnyParser::parse(Rule::program, expr)
             .unwrap()
+            .filter(is_not_comment)
             .next()
-            .unwrap();
+            .expect("no program :("); // TODO Write a utility function for this
 
-        let mut syms = SymbolTable::new();
-        let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
 
-        syms.insert("def".to_string(), SymbolValue::Defined);
-        syms.insert(r"\".to_string(), SymbolValue::Defined);
-        let empty = Lambda::constant(crate::ast::scoped::tests::empty_func_expr(info.clone()), info);
-        syms.insert("+".to_string(), empty.into());
-
-        let parsed_expr = parsed_expr_pass(pair);
-        scoped_expr_pass(parsed_expr, &syms);
+        let basic_ast = parsed_expr_pass(pair.clone());
+        scoped_expr_pass(basic_ast, &library.scoped)
     }
 
-    fn assert_panics(expr: &'static) {
+    fn assert_type(expr: &'static str, needed_type: Type) {
+        let mut library = test_library();
+        let scoped_ast = prepare_expr(expr, &library);
+        let typed_ast = typecheck_pass(&scoped_ast, &mut library.typed);
 
+        let result_type = typed_ast.typ();
+        needed_type.unify(result_type)
     }
-}*/
+
+    fn assert_panics(expr: &'static str) {
+        let maybe_panic = catch_unwind(|| {
+            let mut library = test_library();
+            let scoped_ast = prepare_expr(expr, &library);
+            typecheck_pass(&scoped_ast, &mut library.typed)
+        });
+
+        assert!(maybe_panic.is_err(), "Panic-Test did not panic")
+    }
+
+
+}

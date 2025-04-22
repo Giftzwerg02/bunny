@@ -1,8 +1,8 @@
 #[macro_export]
 macro_rules! library {
     ( $(
-         #[func_type($args_ty:expr, $ret_ty:expr)]
-         fn $func_name:tt ( $($arg_pat:pat),* ) -> $ret_expr_ty:ty $body:block
+         #[ $($ty:expr) => + ] // Updated pattern for type signature
+         fn $func_name:tt ( $($arg_pat:pat),* ) $body:block
        )* ) => {{
             let mut scoped: $crate::ast::scoped::SymbolTable<$crate::ast::scoped::ScopedStageInfo> = $crate::ast::scoped::SymbolTable::new();
             let mut typed = $crate::types::InferenceState::new();
@@ -11,6 +11,14 @@ macro_rules! library {
             scoped.insert("\\".to_string(), $crate::ast::scoped::SymbolValue::Defined);
 
             $(
+                // Process the type signature
+                let all_types = vec![$($ty),+]; // Collect all types
+                // Ensure there's at least a return type
+                assert!(!all_types.is_empty(), "Function type signature cannot be empty.");
+                let args_ty = all_types[..all_types.len() - 1].to_vec(); // All but the last are args
+                // Clone the last element safely
+                let ret_ty = all_types.last().expect("Should have at least one type").clone(); // The last one is the return type
+
                 let info = $crate::ast::scoped::ScopedStageInfo::libinfo(SymbolTable::new());
 
                 let call = $crate::ast::FuncCallSingle::new(
@@ -28,7 +36,8 @@ macro_rules! library {
                     .into()
                 );
 
-                let func_type = $crate::types::util::func_type($args_ty, $ret_ty)
+                // Use the parsed types here
+                let func_type = $crate::types::util::func_type(args_ty, ret_ty)
                     .generalize(&mut typed.hm);
 
                 typed.type_assumptions.insert(
