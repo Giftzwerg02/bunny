@@ -5,31 +5,37 @@ use im::HashMap;
 use text_trees::StringTreeNode;
 use crate::types::hm::{HMState, PolyType, Type};
 
-pub type TypedSymbolTable<T> = HashMap<String, Expr<T>>;
+pub type TypedSymbolTable<'a> = HashMap<String, Expr<PolyTypedStageInfo<'a>>>;
 
+/// This stage info is used for typed expression in the AST itself
 #[derive(Clone, Debug)]
 pub struct TypedStageInfo<'a> {
     pub inner: ParsedStageInfo<'a>,
     pub typ: Type,
-    pub syms: TypedSymbolTable<PolyTypedStageInfo<'a>>
+    pub syms: TypedSymbolTable<'a>
 }
 
+/// This stage info is used for typed expressions in symbol tables
+/// The difference is that this stage info contains PolyTypes, e.g.
+/// types which may be "generic"
 #[derive(Clone, Debug)]
 pub struct PolyTypedStageInfo<'a> {
     pub inner: ParsedStageInfo<'a>,
     pub typ: PolyType,
-    pub syms: TypedSymbolTable<PolyTypedStageInfo<'a>>
+    pub syms: TypedSymbolTable<'a>
 }
 
 impl Display for TypedStageInfo<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "type: {}", self.typ)
     }
 }
 
 impl PrettyPrintable for TypedStageInfo<'_> {
     fn pretty_print(&self) -> StringTreeNode {
-        todo!()
+        StringTreeNode::new(
+            format!("type: {}", self.typ)
+        )
     }
 }
 

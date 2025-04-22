@@ -9,7 +9,7 @@ use crate::types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable};
 use crate::types::util::{array_type, color_type, dict_type, float_type, func_type, int_type, pair_type, string_type};
 
 pub struct InferenceState<'a> {
-    pub type_assumptions: TypedSymbolTable<PolyTypedStageInfo<'a>>,
+    pub type_assumptions: TypedSymbolTable<'a>,
     pub hm: HMState
 }
 

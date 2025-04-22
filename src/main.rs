@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut inference_state = InferenceState::new();
 
     let add_type = func_type(
-        vec![int_type(), string_type()],
+        vec![int_type(), int_type()],
         int_type()
     );
 
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     let typ = typecheck_pass(&ast, &mut inference_state);
-    println!("{:?}", typ.info().typ);
+    println!("{}", typ.pretty_print());
 
     Ok(())
 }
