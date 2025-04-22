@@ -20,20 +20,19 @@ macro_rules! library {
                 );
 
                 scoped.insert(
-                    stringify!($func_name).to_string(),
-                    $crate::ast::scoped::SymbolValue::FunctionDefinition(
-                        $crate::ast::Lambda::constant( // TODO handle arguments
-                            $crate::ast::Expr::FuncCall($crate::ast::FuncCall::Single(call)),
-                            info
-                        )
+                    stringify!($func_name).trim_matches('"').to_string(),
+                    $crate::ast::Lambda::constant( // TODO handle arguments
+                        $crate::ast::Expr::FuncCall($crate::ast::FuncCall::Single(call)),
+                        info
                     )
+                    .into()
                 );
 
                 let func_type = $crate::types::util::func_type($args_ty, $ret_ty)
                     .generalize(&mut typed.hm);
 
                 typed.type_assumptions.insert(
-                    stringify!($func_name).to_string(),
+                    stringify!($func_name).trim_matches('"').to_string(),
                     $crate::types::typed::TypedValue::FromLibrary(func_type)
                 );
 
