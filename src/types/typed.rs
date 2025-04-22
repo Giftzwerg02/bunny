@@ -4,8 +4,15 @@ use std::fmt::{Display, Formatter};
 use im::HashMap;
 use text_trees::StringTreeNode;
 use crate::types::hm::{HMState, PolyType, Type};
+use crate::types::InferenceState;
 
-pub type TypedSymbolTable<'a> = HashMap<String, Expr<PolyTypedStageInfo<'a>>>;
+pub type TypedSymbolTable<'a> = HashMap<String, TypedValue<'a>>;
+
+#[derive(Clone, Debug)]
+pub enum TypedValue<'a> {
+    FromLibrary(PolyType),
+    FromBunny(Expr<PolyTypedStageInfo<'a>>)
+}
 
 /// This stage info is used for typed expression in the AST itself
 #[derive(Clone, Debug)]
@@ -23,6 +30,22 @@ pub struct PolyTypedStageInfo<'a> {
     pub inner: ParsedStageInfo<'a>,
     pub typ: PolyType,
     pub syms: TypedSymbolTable<'a>
+}
+
+impl TypedValue<'_> {
+    pub fn inst(&self, state: &mut HMState) -> Type {
+        match self {
+            TypedValue::FromLibrary(polytype) =>
+                polytype.inst(state),
+
+            TypedValue::FromBunny(expr) =>
+                expr
+                    .clone()
+                    .map_stage(&mut |poly_typed_info: PolyTypedStageInfo| poly_typed_info.inst(state))
+                    .typ()
+                    .clone()
+        }
+    }
 }
 
 impl Display for TypedStageInfo<'_> {
