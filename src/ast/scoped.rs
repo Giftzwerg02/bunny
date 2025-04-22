@@ -13,13 +13,20 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub struct ScopedStageInfo<'a> {
-    pub inner: ParsedStageInfo<'a>,
+    pub inner: Option<ParsedStageInfo<'a>>,
     pub syms: SymbolTable<ScopedStageInfo<'a>>,
 }
 
 impl<'a> ScopedStageInfo<'a> {
     pub fn new(inner: ParsedStageInfo<'a>, syms: SymbolTable<ScopedStageInfo<'a>>) -> Self {
-        Self { inner, syms }
+        Self { inner: Some(inner), syms }
+    }
+
+    /// Used for builtin / library functions.
+    /// Doesn't provide a inner ParsedStageInfo, since they do not "appear" in the source code and
+    /// therefore don't have a position / range (Pair).
+    pub fn libinfo(syms: SymbolTable<ScopedStageInfo<'a>>) -> Self {
+        Self { inner: None, syms }
     }
 }
 
@@ -31,7 +38,7 @@ impl PrettyPrintable for ScopedStageInfo<'_> {
 
 impl Display for ScopedStageInfo<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ syms: {}, inner: {} }}", self.syms, self.inner)
+        write!(f, "{{ syms: {} }}", self.syms)
     }
 }
 
@@ -286,6 +293,13 @@ fn info<'a>(
     parsed: ParsedStageInfo<'a>,
     syms: SymbolTable<ScopedStageInfo<'a>>,
 ) -> ScopedStageInfo<'a> {
+    info_opt(Some(parsed), syms)
+}
+
+fn info_opt<'a>(
+    parsed: Option<ParsedStageInfo<'a>>,
+    syms: SymbolTable<ScopedStageInfo<'a>>,
+) -> ScopedStageInfo<'a> {
     ScopedStageInfo {
         inner: parsed,
         syms,
@@ -323,7 +337,7 @@ fn pass_arg<'a>(
             Argument::Named(NamedArgument::new(
                 name,
                 expr.clone(),
-                info(expr.info().inner.clone(), syms.clone()),
+                info_opt(expr.info().inner.clone(), syms.clone()),
             ))
         }
     }
@@ -491,7 +505,7 @@ mod tests {
             .unwrap();
 
         let mut syms = SymbolTable::new();
-        let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
+        let info = ScopedStageInfo::libinfo(syms.clone());
 
         syms.insert("def".to_string(), SymbolValue::Defined);
         syms.insert(r"\".to_string(), SymbolValue::Defined);
@@ -509,7 +523,7 @@ mod tests {
             .unwrap();
 
         let mut syms = SymbolTable::new();
-        let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
+        let info = ScopedStageInfo::libinfo(syms.clone());
 
         syms.insert("def".to_string(), SymbolValue::Defined);
         syms.insert(r"\".to_string(), SymbolValue::Defined);

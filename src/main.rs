@@ -10,7 +10,7 @@ use std::fs::{self};
 
 use ast::{
     Expr, PrettyPrintable, StageInfo,
-    parsed::{ParsedStageInfo, is_not_comment, parsed_expr_pass},
+    parsed::{is_not_comment, parsed_expr_pass},
     scoped::{ScopedStageInfo, SymbolTable, scoped_expr_pass},
 };
 #[allow(unused)]
@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ast = parsed_expr_pass(pair.clone());
 
     let mut syms = SymbolTable::new();
-    let info = ScopedStageInfo::new(ParsedStageInfo::new(pair.clone()), syms.clone());
+    let info = ScopedStageInfo::libinfo(syms.clone());
 
     syms.insert("def".to_string(), ast::scoped::SymbolValue::Defined);
 
