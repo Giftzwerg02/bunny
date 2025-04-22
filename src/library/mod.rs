@@ -12,20 +12,20 @@ pub struct Library<'a> {
 
 pub fn standard_library<'a>() -> Library<'a> {
     library! {
-        #[int_type() => int_type() => int_type()]
+        #[| a:int_type() => b:int_type() => r:int_type()]
         fn "+"(Lazy::Int(a), Lazy::Int(b)) {
             Lazy::new_int(*a + *b)
         }
 
-        #[int_type() => int_type() => int_type()]
+        #[| a:int_type() => b:int_type() => r:int_type()]
         fn "-"(Lazy::Int(a), Lazy::Int(b)) {
             Lazy::new_int(*a - *b)
         }
 
-        /*#[forall a : list_type(a) => a]
+        #[forall a | inp:array_type(a.clone()) => ret:a ]
         fn "get"(Lazy::List(v)) {
             unimplemented!("get implementation pending")
-        }*/
+        }
     }
 }
 
