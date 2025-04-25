@@ -1,0 +1,14 @@
+(
+	(def foo (a b c) (
+		(+ a (+ b c))
+	))
+
+	(def bar (a b c d) (
+		(+ a (+ b (+ c d)))
+	))
+
+	(+
+		(foo 5 c: 3 b: 2)
+		(bar 9 8 7 6)
+	)
+)
