@@ -4,6 +4,7 @@ use crate::types::InferenceState;
 use crate::types::util::*;
 
 pub mod macros;
+pub mod runnable_expression;
 
 pub struct Library<'a> {
     pub scoped: SymbolTable<ScopedStageInfo<'a>>,

@@ -1,1 +1,248 @@
+use std::{collections::HashMap, fmt::Display};
+
+use im::Vector;
+use palette::Srgba;
+use value::{ClonableLazy, Lazy, Value};
+
+use crate::{
+    ast::{Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo},
+    library::runnable_expression::{InterpreterSymbolTable, RunnableExpr}, types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue},
+};
+
 pub mod value;
+
+struct SymbolStack<'a> {
+    inner: Vec<ClonableLazy<'a>>,
+}
+
+impl<'a> SymbolStack<'a> {
+    fn new() -> Self {
+        SymbolStack { inner: Vec::new() }
+    }
+
+    fn push(&mut self, val: ClonableLazy<'a>) {
+        self.inner.push(val);
+    }
+
+    fn pop(&mut self) -> Option<ClonableLazy<'a>> {
+        self.inner.pop()
+    }
+
+    fn read(&self) -> Option<ClonableLazy<'a>> {
+        self.inner.last().cloned()
+    }
+}
+
+pub struct Runner<'a> {
+    state: HashMap<String, SymbolStack<'a>>,
+}
+
+pub struct BunnyResult {}
+
+impl BunnyResult {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl<'stack> Runner<'stack> {
+    pub fn new() -> Self {
+        Runner {
+            state: HashMap::new(),
+        }
+    }
+
+    // How to run a bunny expression 101:
+    //     It is a expression - i.e., some sort of user-written code. We do not know at this point if
+    //     and where it calls to a native function. 
+    //     Every expression is some sort of composition between literals (int, float, string,
+    //     color, ...) and symbols.
+    //     Literals are just wrapped into a Lazy
+    //     Symbols reference some further RunnableExpr
+    //     Assume the following code:
+    //     ```
+    //     (
+    //      (def const 5)
+    //
+    //      (def sum (a b c) (
+    //          (+ a b c const)
+    //      ))
+    //
+    //      (sum 1 2 3)
+    //     )
+    //     ```
+    //     The implementation behind
+    //      - `sum` is a *RunnableExpr* of variant *Bunny* with value *FuncCall (single)*
+    //      - `const` is a *RunnableExpr* of variant *Bunny* with value *Int*
+    //      - `+` is a *RunnableExpr* of variant *Native* (with some func-pointer)
+    //
+    //      When running the expression `(sum 1 2 3)` with its value being f = FuncCallSingle:
+    //          1. get the implementing expression via the symbol-table: `smys.get(f.id)`
+    //          2. push states: state["a"] = lazy(1), state["b"] = lazy(2) and state["c"] = lazy(3)
+    //          3. run f
+    //          4. pop states
+    //
+    //      Therefore, when we get to a funccall branch, we need to check if the identifier
+    //      references user-written code or a native function.
+    //      Note that a native function technically doesn't need any scoping-information anymore
+    //      since it will just be provided with the arguments that were passed to it.
+    pub fn run(
+        &mut self,
+        expr: Expr<PolyTypedStageInfo<'stack>>,
+    ) -> Lazy<'stack> {
+        match expr {
+            Expr::Int(int) => Lazy::new_int(int.value.try_into().expect("uint too large")),
+            Expr::Float(float) => Lazy::new_float(float.value),
+            Expr::String(string) => Lazy::new_string(string.value.into()),
+            Expr::Color(color) => {
+                // TODO: add alpha to color...?
+                let color = Srgba::new(color.r, color.g, color.b, 1);
+                Lazy::new_color(color.into())
+            }
+            Expr::Array(array) => {
+                let mut res = Vector::new();
+
+                for elem in array.value {
+                    let elem = self.run(elem);
+                    res.push_back(elem.into());
+                }
+
+                Lazy::new_array(res)
+            }
+            Expr::Dict(dict) => {
+                let mut res: im::HashMap<Value<'_>, ClonableLazy<'_>> = im::HashMap::new();
+                for entry in dict.value {
+                    let key = entry.key;
+                    let key = self.run(key);
+                    let key = key.eval();
+
+                    let value = entry.value;
+                    let value = self.run(value);
+
+                    res.insert(key, value.into());
+                }
+                Lazy::new_dict(res)
+            },
+            Expr::Symbol(symbol) => {
+                // if the implementation of a function is just a symbol,
+                // then we just have another indirection
+                let res = self.read_var(symbol.value);
+                (*res).clone()
+            }
+            Expr::FuncCall(func) => {
+                let FuncCall::Single(func) = func else {
+                    panic!("invalid ast");
+                };
+
+                let implementation = func.info.syms.get(&func.id.value).expect("scoping err");
+
+                let TypedValue::FromBunny(implementation) = implementation else {
+                    // TODO: handle library stuff
+                    let mut sum = 0;
+                    for arg in func.args {
+                        let arg_val = match arg {
+                            crate::ast::Argument::Positional(expr) => {
+                                let Value::Int(i) = self.run(expr.clone()).eval() else { panic!("sample code"); };
+                                sum += i;
+                            },
+                            crate::ast::Argument::Named(named_argument) => {
+                                todo!()
+                            },
+                        };
+                    }
+
+                    return Lazy::new_int(sum);
+                };
+
+                let Expr::Lambda(implementation) = implementation else {
+                    panic!("invalid ast");
+                };
+
+                let lambda = implementation;
+                for (pos, arg) in func.args.iter().cloned().enumerate() {
+                    match arg {
+                        crate::ast::Argument::Positional(arg_expr) => {
+                            let arg_sym = lambda.args[pos].clone();
+                            let arg_value =
+                                self.run(arg_expr);
+                            self.push_var(arg_sym.value, arg_value);
+                        }
+                        crate::ast::Argument::Named(named_argument) => {
+                            let arg_value = self.run(*named_argument.value);
+                            self.push_var(named_argument.name.value, arg_value);
+                        }
+                    }
+                }
+
+                // TODO: can we get rid of this clone?
+                let body = lambda.clone().body;
+                let result = self.run(*body);
+
+                for arg in lambda.clone().args {
+                    self.pop_var(arg.value);
+                }
+
+                result
+            }
+            Expr::Lambda(lambda) => {
+                todo!("run lambda")
+            }
+        }
+    }
+
+    fn push_var(&mut self, sym: String, val: Lazy<'stack>) {
+        match self.state.get_mut(&sym) {
+            Some(stack) => stack.push(val.into()),
+            None => {
+                let mut stack = SymbolStack::new();
+                stack.push(val.into());
+                self.state.insert(sym, stack);
+            }
+        }
+    }
+
+    fn pop_var(&mut self, sym: String) {
+        let stack = self.state.get_mut(&sym).expect("invalid stack");
+        stack.pop().expect("invalid stack");
+    }
+    
+    fn read_var(&mut self, sym: String) -> ClonableLazy<'stack> {
+        let stack = self.state.get_mut(&sym).expect("invalid stack");
+        stack.read().expect("invalid stack")
+    }
+
+    fn get_func_lambda<'a>(
+        &self,
+        f: &'a FuncCallSingle<PolyTypedStageInfo<'stack>>,
+    ) -> &'a Lambda<PolyTypedStageInfo<'stack>> {
+        let TypedValue::FromBunny(implementation) = f.info.syms.get(&f.id.value).expect("scoping err") else {
+            todo!("handle library stuff")
+        };
+
+        let Expr::Lambda(implementation) = implementation else {
+            panic!("invalid ast");
+        };
+
+        implementation
+    }
+}
+
+// #[derive(Debug, Clone)]
+// struct PolyTypedStageInfo<'a> {
+//     // syms: InterpreterSymbolTable<'a, RunnerStageInfo<'a>>,
+//     syms: TypedSymbolTable<'a>
+// }
+
+// impl<'a> StageInfo for PolyTypedStageInfo<'a> {}
+//
+// impl<'a> PrettyPrintable for PolyTypedStageInfo<'a> {
+//     fn pretty_print(&self) -> text_trees::StringTreeNode {
+//         todo!()
+//     }
+// }
+//
+// impl<'a> Display for PolyTypedStageInfo<'a> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         todo!()
+//     }
+// }

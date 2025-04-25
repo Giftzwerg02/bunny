@@ -1,15 +1,20 @@
-use crate::runner::value::{Lazy, Value};
+use std::fmt::Debug;
 
+use im::HashMap;
 
-pub struct InterpreterSymbolTable {
+use crate::{
+    ast::{Expr, StageInfo},
+    runner::value::{Lazy, Value},
+};
 
-}
+pub type InterpreterSymbolTable<'a, I: StageInfo> = HashMap<String, Expr<I>>;
 
-pub enum RunnableExpr<'a> {
+#[derive(Debug, Clone)]
+pub enum RunnableExpr<'a, I: StageInfo> {
     Native(NativeExpr<'a>),
 
-    Bunny(Expr<'a>) // Howwwww
+    Bunny(Expr<I>), // Howwwww
 }
 
-pub type NativeExpr<'a> = Box<dyn Fn(Vec<Lazy<'a>>) -> Lazy<'a>>;
-
+// NOTE: does this work instead?
+pub type NativeExpr<'a> = fn(Vec<Lazy<'a>>) -> Lazy<'a>;

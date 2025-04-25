@@ -17,8 +17,11 @@ use ast::{
 use clap::Parser as ClapParser;
 #[allow(unused)]
 use cli::Cli;
+use library::runnable_expression::RunnableExpr;
 use parser::{BunnyParser, Rule};
 use pest::Parser;
+use runner::Runner;
+use types::typed::TypedStageInfo;
 use crate::ast::Symbol;
 use crate::library::standard_library;
 use crate::types::{typecheck_pass, InferenceState};
@@ -38,6 +41,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let typ = typecheck_pass(&ast, &mut std_library.typed);
     println!("{}", typ.pretty_print());
+
+    let typ = typ.map_stage(
+        &mut |typed_info: TypedStageInfo| typed_info.generalize(&std_library.typed.hm)
+    );
+
+    let mut runner = Runner::new();
+    let result = runner.run(typ);
+    println!("{:?}", result.eval());
 
     Ok(())
 }
