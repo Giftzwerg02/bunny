@@ -7,6 +7,6 @@
 ---
 
 We are currently ~14x *slower* than python when computing fibonacci numbers :+1:
-<img alt="fib-benchmark" src="assets/fib-benchmark.png" width="100vw">
+<img alt="fib-benchmark" src="assets/fib-benchmark.png">
 
 
