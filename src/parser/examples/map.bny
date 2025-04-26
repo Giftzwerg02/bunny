@@ -1,0 +1,13 @@
+(
+	(def sum (elems) (
+		(foldl
+			(\ (acc elem) (
+				(+ acc elem)
+			))
+			0
+			elems
+		)
+	))
+
+	(sum [10 4 6])
+)

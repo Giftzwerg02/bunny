@@ -228,7 +228,7 @@ impl Type {
                 }
             }
 
-            _ => panic!(),
+            _ => panic!("{self:?}, {other:?}"),
         }
     }
 
