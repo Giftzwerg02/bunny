@@ -37,6 +37,10 @@ pub enum Lazy<'a> {
             Box<dyn FnOnce() -> HashMap<Value<'a>, ClonableLazy<'a>> + 'a>,
         >>,
     ),
+
+    Wrapper(
+        Arc<LazyCell<Lazy<'a>, Box<dyn FnOnce() -> Lazy<'a> + 'a>>>,
+    )
 }
 
 impl<'a> Lazy<'a> {
@@ -71,6 +75,10 @@ impl<'a> Lazy<'a> {
         Lazy::Dict(Arc::new(LazyCell::new(callback)))
     }
 
+    pub fn wrap(f: Box<dyn Fn() -> Lazy<'a> + 'a>) -> Self {
+        Lazy::Wrapper(Arc::new(LazyCell::new(f)))
+    }
+
     pub fn eval(self) -> Value<'a> {
         match self {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
@@ -84,6 +92,11 @@ impl<'a> Lazy<'a> {
             Lazy::Array(lazy_cell) => todo!("eval lazy array"),
             Lazy::Dict(lazy_cell) => {
                 todo!("eval lazy dict")
+            }
+            Lazy::Wrapper(lazy_cell) => {
+                let inner = lazy_cell.clone();
+                let inner = (*inner).clone();
+                inner.eval()
             }
         }
     }

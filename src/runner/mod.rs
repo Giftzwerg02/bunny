@@ -89,7 +89,7 @@ impl<'stack> Runner<'stack> {
     pub fn run(
         &mut self,
         expr: Expr<PolyTypedStageInfo<'stack>>,
-        syms: &mut InterpreterSymbolTable<'stack>,
+        syms: &'stack InterpreterSymbolTable<'stack>,
     ) -> Lazy<'stack> {
         match expr {
             Expr::Int(int) => Lazy::new_int(int.value.try_into().expect("uint too large")),
@@ -138,6 +138,8 @@ impl<'stack> Runner<'stack> {
                 let implementation = func.info.syms.get(&func.id.value).expect("scoping err");
 
                 let TypedValue::FromBunny(implementation) = implementation else {
+                    let TypedValue::FromLibrary(typ) = implementation else { panic!() };
+
                     let args = func.args
                         .into_iter()
                         .map(|arg| {
@@ -154,7 +156,7 @@ impl<'stack> Runner<'stack> {
 
                     let native = syms.get(&func.id.value).unwrap();
 
-                    return (*native)(args);
+                    return Lazy::wrap(Box::new(|| (*native)(args)));
                 };
 
                 let Expr::Lambda(implementation) = implementation else {
