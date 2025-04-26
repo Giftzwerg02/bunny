@@ -6,7 +6,6 @@ use std::sync::Mutex;
 
 use im::HashMap;
 use im::Vector;
-use imstr::data::Data;
 use imstr::ImString;
 use palette::Srgba;
 
@@ -16,14 +15,12 @@ pub type LambdaFuncWrap = Arc<Mutex<LambdaFunc>>;
 
 #[derive(Clone)]
 pub struct LazyLambda {
-    pub func: LambdaFuncWrap
+    pub func: LambdaFuncWrap,
 }
 
 impl LazyLambda {
     pub fn new(func: LambdaFuncWrap) -> Self {
-        Self {
-            func
-        }
+        Self { func }
     }
 }
 
@@ -57,22 +54,18 @@ pub enum Lazy {
     // Keys are eagerly evaluated, but values are lazy
     // TODO Maybe restrict to only "reasoably" hashable keys? int, string, color?
     Dict(
-        Arc<LazyCell<
-            HashMap<Value, ClonableLazy>,
-            Box<dyn FnOnce() -> HashMap<Value, ClonableLazy>>,
-        >>,
-    ),
-
-    Lambda(
-        Arc<LazyCell<
-            LazyLambda,
-            Box<dyn FnOnce() -> LazyLambda>
-        >>,
+        Arc<
+            LazyCell<
+                HashMap<Value, ClonableLazy>,
+                Box<dyn FnOnce() -> HashMap<Value, ClonableLazy>>,
+            >,
+        >,
     ),
 
     Wrapper(
         Arc<LazyCell<Lazy, Box<dyn FnOnce() -> Lazy>>>,
-    )
+    ),
+    Lambda(Arc<LazyCell<LazyLambda, Box<dyn FnOnce() -> LazyLambda>>>),
 }
 
 impl Lazy {
@@ -102,8 +95,7 @@ impl Lazy {
     }
 
     pub fn new_dict(value: HashMap<Value, ClonableLazy>) -> Self {
-        let callback: Box<dyn FnOnce() -> HashMap<Value, ClonableLazy>> =
-            Box::new(move || value);
+        let callback: Box<dyn FnOnce() -> HashMap<Value, ClonableLazy>> = Box::new(move || value);
         Lazy::Dict(Arc::new(LazyCell::new(callback)))
     }
 
@@ -112,7 +104,7 @@ impl Lazy {
         Lazy::Lambda(Arc::new(LazyCell::new(callback)))
     }
 
-    pub fn wrap(f: Box<dyn Fn() -> Lazy>) -> Self {
+    pub fn wrap(f: Box<dyn FnOnce() -> Lazy>) -> Self {
         Lazy::Wrapper(Arc::new(LazyCell::new(f)))
     }
 
@@ -120,10 +112,10 @@ impl Lazy {
         match self {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
             Lazy::Float(lazy_cell) => Value::Float(**lazy_cell),
-            Lazy::String(lazy_cell) => { 
+            Lazy::String(lazy_cell) => {
                 let pain = (*lazy_cell.clone()).clone(); // TODO What the fuck
                 Value::String(pain)
-            },
+            }
             Lazy::Color(lazy_cell) => Value::Color(**lazy_cell),
             Lazy::Opaque(lazy_cell) => todo!("eval lazy opaque"),
             Lazy::Array(lazy_cell) => {
@@ -132,10 +124,10 @@ impl Lazy {
                     res.push((*elem).clone().eval());
                 }
                 Value::Array(res.into())
-            },
+            }
             Lazy::Dict(lazy_cell) => {
-                        todo!("eval lazy dict")
-                    }
+                todo!("eval lazy dict")
+            }
             Lazy::Lambda(lazy_cell) => Value::Lambda((**lazy_cell).clone()),
 
             Lazy::Wrapper(lazy_cell) => {
@@ -161,7 +153,7 @@ pub enum Value {
 
     Dict(HashMap<Value, Value>),
 
-    Lambda(LazyLambda)
+    Lambda(LazyLambda),
 }
 
 impl Into<Lazy> for Value {
@@ -197,7 +189,7 @@ impl Hash for Value {
                 alpha.red.to_bits().hash(state);
                 alpha.green.to_bits().hash(state);
                 alpha.blue.to_bits().hash(state);
-            },
+            }
             Value::Array(vector) => vector.hash(state),
             Value::Dict(hash_map) => hash_map.hash(state),
             Value::Lambda(_) => panic!("cannot hash lambdas... I think?"),
@@ -205,9 +197,7 @@ impl Hash for Value {
     }
 }
 
-impl Eq for Value {
-    
-}
+impl Eq for Value {}
 
 impl PartialEq for LazyLambda {
     fn eq(&self, other: &Self) -> bool {

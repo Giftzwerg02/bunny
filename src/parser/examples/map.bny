@@ -2,12 +2,12 @@
 	(def sum (elems) (
 		(foldl
 			(\ (acc elem) (
-				(+ acc elem)
+				(+ acc (+ 1 elem))
 			))
 			0
 			elems
 		)
 	))
 
-	(sum [10 4 6])
+	(sum [1 5 7])
 )

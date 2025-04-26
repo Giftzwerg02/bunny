@@ -1,5 +1,17 @@
 (
-	(fib (n) (
-		(if)
+	(def fib (n) (
+		(foldl
+			(\ (acc num) (
+				(def l ((len acc)))
+				(def f1 ((get acc (- l 1))))
+				(def f2 ((get acc (- l 2))))		
+				(def res ((+ f1 f2)))
+				(append acc res)
+			))
+			[0 1]
+			(range 0 n)
+		)
 	))
+
+	(fib 5)
 )

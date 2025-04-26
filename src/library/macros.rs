@@ -67,7 +67,7 @@ macro_rules! library {
 
                         match &args[..] {
                             [ $($arg_pat,)* ] => $body,
-                            _ => panic!("Invalid argument count or types for function '{}'", name),
+                            _ => panic!("Invalid argument count or types for function '{}'\nargs: {:?}", name, args),
                         }
                     })
                 );

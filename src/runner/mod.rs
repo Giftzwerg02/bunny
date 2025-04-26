@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt::Display, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
 
 use im::Vector;
 use palette::Srgba;
@@ -145,7 +149,9 @@ impl Runner {
                         .args
                         .into_iter()
                         .map(|arg| match arg {
-                            crate::ast::Argument::Positional(arg_expr) => self.run(arg_expr, syms.clone()),
+                            crate::ast::Argument::Positional(arg_expr) => {
+                                self.run(arg_expr, syms.clone())
+                            }
                             crate::ast::Argument::Named(named_argument) => {
                                 self.run(*named_argument.value, syms.clone())
                             }
@@ -195,10 +201,13 @@ impl Runner {
                     pub info: I,
                 */
 
-                let lambda_args = Arc::new(lambda.args
-                    .iter()
-                    .map(|arg| arg.value.clone())
-                    .collect::<Vec<_>>());
+                let lambda_args = Arc::new(
+                    lambda
+                        .args
+                        .iter()
+                        .map(|arg| arg.value.clone())
+                        .collect::<Vec<_>>(),
+                );
 
                 let mut lambda_runner = self.clone();
 
