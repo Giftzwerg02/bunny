@@ -80,9 +80,7 @@ pub fn standard_library<'a>() -> Library<'a> {
             let mut acc = fst.clone();
             for elem in (**list).clone() {
                 let elem = (*elem).clone();
-                acc = f(vec![acc, elem.clone()].into())
-                    .eval()
-                    .into();
+                acc = f(vec![acc, elem.clone()].into());
             }
             acc
         }
