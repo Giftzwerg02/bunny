@@ -152,9 +152,9 @@ impl Runner {
                         })
                         .collect::<Vec<Lazy>>();
 
-                    let native = syms.get(&func.id.value).unwrap();
+                    let native = syms.get(&func.id.value).unwrap().clone();
 
-                    return (*native)(args);
+                    return Lazy::wrap(Box::new(move || (*native)(args.clone())));
                 };
 
                 let Expr::Lambda(implementation) = implementation else {

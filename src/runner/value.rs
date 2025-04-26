@@ -71,7 +71,7 @@ pub enum Lazy {
     ),
 
     Wrapper(
-        Arc<LazyCell<Lazy<'a>, Box<dyn FnOnce() -> Lazy<'a> + 'a>>>,
+        Arc<LazyCell<Lazy, Box<dyn FnOnce() -> Lazy>>>,
     )
 }
 
@@ -112,7 +112,7 @@ impl Lazy {
         Lazy::Lambda(Arc::new(LazyCell::new(callback)))
     }
 
-    pub fn wrap(f: Box<dyn Fn() -> Lazy<'a> + 'a>) -> Self {
+    pub fn wrap(f: Box<dyn Fn() -> Lazy>) -> Self {
         Lazy::Wrapper(Arc::new(LazyCell::new(f)))
     }
 
@@ -164,7 +164,25 @@ pub enum Value {
     Lambda(LazyLambda)
 }
 
+impl Into<Lazy> for Value {
+    fn into(self) -> Lazy {
+        match self {
+            Value::Int(int) => Lazy::new_int(int),
+
             Value::Float(float) => Lazy::new_float(float),
+
+            Value::String(string) => Lazy::new_string(string),
+
+            Value::Color(color) => Lazy::new_color(color),
+
+            Value::Array(_) => todo!(),
+
+            Value::Dict(_) => todo!(),
+
+            Value::Lambda(_) => todo!()
+        }
+    }
+}
 
 impl Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
