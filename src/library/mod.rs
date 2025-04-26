@@ -35,6 +35,24 @@ pub fn standard_library<'a>() -> Library<'a> {
         fn "map"(Lazy::Array(v)) {
             unimplemented!("map implementation pending")
         }
+
+        #[forall a | cond:bint() => iftrue:a.clone() => iffalse:a.clone() => ret:a]
+        fn "if"(Lazy::Int(cond), iftrue, iffalse){
+            if eval!(cond) != 0 {
+                iftrue.clone().eval().into()
+            }
+            else {
+                iffalse.clone().eval().into()
+            }
+        }
+
+        #[forall a | elem:a.clone() => ret:a]
+        fn "print"(elem){
+            println!("Evaluated: {:?}", elem.clone().eval());
+            elem.clone()
+        }
+
+
     }
 }
 

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use im::HashMap;
 use im::Vector;
+use imstr::data::Data;
 use imstr::ImString;
 use palette::Srgba;
 
@@ -74,7 +75,10 @@ impl<'a> Lazy<'a> {
         match self {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
             Lazy::Float(lazy_cell) => Value::Float(**lazy_cell),
-            Lazy::String(lazy_cell) => Value::String((**lazy_cell).to_string()),
+            Lazy::String(lazy_cell) => { 
+                let pain = (*lazy_cell.clone()).clone(); // TODO What the fuck
+                Value::String(pain)
+            },
             Lazy::Color(lazy_cell) => Value::Color(**lazy_cell),
             Lazy::Opaque(lazy_cell) => todo!("eval lazy opaque"),
             Lazy::Array(lazy_cell) => todo!("eval lazy array"),
@@ -91,13 +95,31 @@ pub enum Value<'a> {
 
     Float(f64),
 
-    String(String),
+    String(ImString),
 
     Color(Srgba),
 
     Array(Vector<Value<'a>>),
 
     Dict(HashMap<Value<'a>, Value<'a>>),
+}
+
+impl<'a> Into<Lazy<'a>> for Value<'a> {
+    fn into(self) -> Lazy<'a> {
+        match self {
+            Value::Int(int) => Lazy::new_int(int),
+
+            Value::Float(float) => Lazy::new_float(float),
+
+            Value::String(string) => Lazy::new_string(string),
+
+            Value::Color(color) => Lazy::new_color(color),
+
+            Value::Array(_) => todo!(),
+
+            Value::Dict(_) => todo!()
+        }
+    }
 }
 
 impl<'a> Hash for Value<'a> {
