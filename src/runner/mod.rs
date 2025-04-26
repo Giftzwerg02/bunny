@@ -89,6 +89,7 @@ impl<'stack> Runner<'stack> {
     pub fn run(
         &mut self,
         expr: Expr<PolyTypedStageInfo<'stack>>,
+        syms: &mut InterpreterSymbolTable<'stack>,
     ) -> Lazy<'stack> {
         match expr {
             Expr::Int(int) => Lazy::new_int(int.value.try_into().expect("uint too large")),
@@ -103,7 +104,7 @@ impl<'stack> Runner<'stack> {
                 let mut res = Vector::new();
 
                 for elem in array.value {
-                    let elem = self.run(elem);
+                    let elem = self.run(elem, syms);
                     res.push_back(elem.into());
                 }
 
@@ -113,11 +114,11 @@ impl<'stack> Runner<'stack> {
                 let mut res: im::HashMap<Value<'_>, ClonableLazy<'_>> = im::HashMap::new();
                 for entry in dict.value {
                     let key = entry.key;
-                    let key = self.run(key);
+                    let key = self.run(key, syms);
                     let key = key.eval();
 
                     let value = entry.value;
-                    let value = self.run(value);
+                    let value = self.run(value, syms);
 
                     res.insert(key, value.into());
                 }
@@ -137,21 +138,23 @@ impl<'stack> Runner<'stack> {
                 let implementation = func.info.syms.get(&func.id.value).expect("scoping err");
 
                 let TypedValue::FromBunny(implementation) = implementation else {
-                    // TODO: handle library stuff
-                    let mut sum = 0;
-                    for arg in func.args {
-                        let arg_val = match arg {
-                            crate::ast::Argument::Positional(expr) => {
-                                let Value::Int(i) = self.run(expr.clone()).eval() else { panic!("sample code"); };
-                                sum += i;
-                            },
-                            crate::ast::Argument::Named(named_argument) => {
-                                todo!()
-                            },
-                        };
-                    }
+                    let args = func.args
+                        .into_iter()
+                        .map(|arg| {
+                            match arg {
+                                crate::ast::Argument::Positional(arg_expr) => {
+                                    self.run(arg_expr, syms)
+                                }
+                                crate::ast::Argument::Named(named_argument) => {
+                                    self.run(*named_argument.value, syms)
+                                }
+                            }
+                        })
+                        .collect::<Vec<Lazy>>();
 
-                    return Lazy::new_int(sum);
+                    let native = syms.get(&func.id.value).unwrap();
+
+                    return (*native)(args);
                 };
 
                 let Expr::Lambda(implementation) = implementation else {
@@ -164,19 +167,19 @@ impl<'stack> Runner<'stack> {
                         crate::ast::Argument::Positional(arg_expr) => {
                             let arg_sym = lambda.args[pos].clone();
                             let arg_value =
-                                self.run(arg_expr);
+                                self.run(arg_expr, syms);
                             self.push_var(arg_sym.value, arg_value);
                         }
                         crate::ast::Argument::Named(named_argument) => {
-                            let arg_value = self.run(*named_argument.value);
+                            let arg_value = self.run(*named_argument.value, syms);
                             self.push_var(named_argument.name.value, arg_value);
                         }
                     }
                 }
 
                 // TODO: can we get rid of this clone?
-                let body = lambda.clone().body;
-                let result = self.run(*body);
+                let body: Box<Expr<PolyTypedStageInfo<'_>>> = lambda.clone().body;
+                let result = self.run(*body, syms);
 
                 for arg in lambda.clone().args {
                     self.pop_var(arg.value);

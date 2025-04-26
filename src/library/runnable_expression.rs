@@ -1,15 +1,14 @@
-use std::fmt::Debug;
+use std::sync::Arc;
 
 use im::HashMap;
 
 use crate::{
     ast::{Expr, StageInfo},
-    runner::value::{Lazy, Value},
+    runner::value::Lazy,
 };
 
-pub type InterpreterSymbolTable<'a, I: StageInfo> = HashMap<String, Expr<I>>;
+pub type InterpreterSymbolTable<'a> = HashMap<String, NativeExpr<'a>>;
 
-#[derive(Debug, Clone)]
 pub enum RunnableExpr<'a, I: StageInfo> {
     Native(NativeExpr<'a>),
 
@@ -17,4 +16,4 @@ pub enum RunnableExpr<'a, I: StageInfo> {
 }
 
 // NOTE: does this work instead?
-pub type NativeExpr<'a> = fn(Vec<Lazy<'a>>) -> Lazy<'a>;
+pub type NativeExpr<'a> = Arc<dyn Fn(Vec<Lazy<'a>>) -> Lazy<'a> + 'a>;

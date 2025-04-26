@@ -6,11 +6,13 @@ macro_rules! library {
        )* ) => {{
             let mut scoped: $crate::ast::scoped::SymbolTable<$crate::ast::scoped::ScopedStageInfo> = $crate::ast::scoped::SymbolTable::new();
             let mut typed = $crate::types::InferenceState::new();
+            let mut runnable: $crate::library::InterpreterSymbolTable = $crate::library::InterpreterSymbolTable::new();
 
             scoped.insert("def".to_string(), $crate::ast::scoped::SymbolValue::Defined);
             scoped.insert("\\".to_string(), $crate::ast::scoped::SymbolValue::Defined);
 
             $(
+                let name = stringify!($func_name).trim_matches('"');
                 let info = $crate::ast::scoped::ScopedStageInfo::libinfo(SymbolTable::new());
 
                 let call = $crate::ast::FuncCallSingle::new(
@@ -20,7 +22,7 @@ macro_rules! library {
                 );
 
                 scoped.insert(
-                    stringify!($func_name).trim_matches('"').to_string(),
+                    name.to_string(),
                     $crate::ast::Lambda::constant( // TODO handle arguments
                         $crate::ast::Expr::FuncCall($crate::ast::FuncCall::Single(call)),
                         info
@@ -44,13 +46,30 @@ macro_rules! library {
                     .generalize(&mut typed.hm);
 
                 typed.type_assumptions.insert(
-                    stringify!($func_name).trim_matches('"').to_string(),
+                    name.to_string(),
                     $crate::types::typed::TypedValue::FromLibrary(func_type)
                 );
 
-                // TODO: Ignore implementation for now
+                // Store the function pointer (type NativeExpr) in the runnable table.
+                runnable.insert(
+                    name.to_string(),
+                    ::std::sync::Arc::new(move |args| { // Use Arc for cloneable shared ownership
+                        match &args[..] {
+                            [ $($arg_pat,)* ] => $body,
+                            _ => panic!("Invalid argument count or types for function '{}'", name),
+                        }
+                    })
+                );
             )*
 
-            $crate::library::Library { scoped, typed }
+            $crate::library::Library { scoped, typed, runnable }
        }};
+}
+
+
+#[macro_export]
+macro_rules! eval {
+    ($arg:expr) => {
+        ***$arg
+    };
 }
