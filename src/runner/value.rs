@@ -108,6 +108,18 @@ impl Lazy {
         Lazy::Wrapper(Arc::new(LazyCell::new(f)))
     }
 
+    pub fn nowrap(self) -> Self {
+        match self {
+            Lazy::Wrapper(wrapped) => {
+                let unwrapped = (*wrapped.clone()).clone();
+                unwrapped.nowrap()
+            },
+            _ => {
+                self
+            }
+        }
+    }
+
     pub fn eval(self) -> Value {
         match self {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
@@ -130,9 +142,8 @@ impl Lazy {
             }
             Lazy::Lambda(lazy_cell) => Value::Lambda((**lazy_cell).clone()),
 
-            Lazy::Wrapper(lazy_cell) => {
-                let inner = lazy_cell.clone();
-                let inner = (*inner).clone();
+            Lazy::Wrapper(_) => {
+                let inner = self.nowrap();
                 inner.eval()
             }
         }
@@ -154,6 +165,20 @@ pub enum Value {
     Dict(HashMap<Value, Value>),
 
     Lambda(LazyLambda),
+}
+
+impl Value {
+    pub fn name(&self) -> String {
+        match self {
+            Value::Int(_) => "int",
+            Value::Float(_) => "float",
+            Value::String(im_string) => "string",
+            Value::Color(alpha) => "color",
+            Value::Array(vector) => "array",
+            Value::Dict(hash_map) => "dict",
+            Value::Lambda(lazy_lambda) => "lambda",
+        }.to_string()
+    }
 }
 
 impl Into<Lazy> for Value {
@@ -203,4 +228,11 @@ impl PartialEq for LazyLambda {
     fn eq(&self, other: &Self) -> bool {
         todo!("compare lambda by reference?")
     }
+}
+
+#[macro_export]
+macro_rules! lwrap {
+    ($body:expr) => {
+        Lazy::wrap(Box::new(move || $body))
+    };
 }

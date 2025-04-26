@@ -3,15 +3,17 @@
 		(foldl
 			(\ (acc num) (
 				(def l ((len acc)))
-				(def f1 ((get acc (- l 1))))
-				(def f2 ((get acc (- l 2))))		
-				(def res ((+ f1 f2)))
-				(append acc res)
+				(def f1 ((get acc (- (l) 1))))
+				(def f2 ((get acc (- (l) 2))))		
+				(def res ((+ (f1) (f2))))
+				(def zero ((- num num)))
+				(def resa ((+ (zero) (res))))
+				(append acc (resa))
 			))
 			[0 1]
 			(range 0 n)
 		)
 	))
 
-	(fib 5)
+	(fib 10)
 )

@@ -9,14 +9,12 @@ use palette::Srgba;
 use value::{ClonableLazy, Lazy, LazyLambda, Value};
 
 use crate::{
-    ast::{Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo},
-    library::runnable_expression::{InterpreterSymbolTable, RunnableExpr},
-    types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue},
+    ast::{Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo}, library::runnable_expression::{InterpreterSymbolTable, RunnableExpr}, lwrap, types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue}
 };
 
 pub mod value;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct SymbolStack {
     inner: Vec<ClonableLazy>,
 }
@@ -39,17 +37,9 @@ impl SymbolStack {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Runner {
     state: HashMap<String, SymbolStack>,
-}
-
-pub struct BunnyResult {}
-
-impl BunnyResult {
-    pub fn new() -> Self {
-        Self {}
-    }
 }
 
 impl Runner {
@@ -134,8 +124,27 @@ impl Runner {
             Expr::Symbol(symbol) => {
                 // if the implementation of a function is just a symbol,
                 // then we just have another indirection
-                let res = self.read_var(symbol.value);
-                (*res).clone()
+                //
+                // We are inside some func-call, meaning a variable could either come from:
+                // 1. An immediately preceeding "let-binding" (def foo ...)
+                // 2. From the outer scope which is stored on the SymbolStack
+                //
+                // Therefore, if the symbol resolves to an argument we need to check the
+                // SymbolStack
+                
+                let TypedValue::FromBunny(scope) = symbol.info.syms.get(&symbol.value).expect("scoping err") else {
+                    panic!("invalid runner state");
+                };
+
+                if matches!(scope, Expr::Lambda(_)) {
+                    let res = self.run(scope.clone(), syms.clone())
+                        .nowrap();
+                    println!("here: {:?}", &res);
+                    res
+                } else {
+                    let res = self.read_var(symbol.value);
+                    (*res).clone()
+                }
             }
             Expr::FuncCall(func) => {
                 let FuncCall::Single(func) = func else {
@@ -150,10 +159,18 @@ impl Runner {
                         .into_iter()
                         .map(|arg| match arg {
                             crate::ast::Argument::Positional(arg_expr) => {
-                                self.run(arg_expr, syms.clone())
+                                let syms = syms.clone();
+                                let mut runner = self.clone();
+                                lwrap! {
+                                    runner.run(arg_expr, syms)
+                                }
                             }
                             crate::ast::Argument::Named(named_argument) => {
-                                self.run(*named_argument.value, syms.clone())
+                                let syms = syms.clone();
+                                let mut runner = self.clone();
+                                lwrap! {
+                                    runner.run(*named_argument.value, syms)
+                                }
                             }
                         })
                         .collect::<Vec<Lazy>>();
@@ -195,11 +212,6 @@ impl Runner {
             Expr::Lambda(lambda) => {
                 // A lambda should return a lazy of
                 // a function that takes some arguments and returns a result
-                /*
-                    pub args: Vec<Symbol<I>>,
-                    pub body: Box<Expr<I>>,
-                    pub info: I,
-                */
 
                 let lambda_args = Arc::new(
                     lambda
@@ -222,7 +234,6 @@ impl Runner {
                     }
 
                     let result = lambda_runner.run(body, syms.clone());
-                    //result();
 
                     for arg in (lambda_args).clone() {
                         lambda_runner.pop_var(arg);
@@ -253,8 +264,8 @@ impl Runner {
     }
 
     fn read_var(&mut self, sym: String) -> ClonableLazy {
-        let stack = self.state.get_mut(&sym).expect("invalid stack");
-        stack.read().expect("invalid stack")
+        let stack = self.state.get_mut(&sym).expect(&format!("read_var: invalid stack: {sym}"));
+        stack.read().expect(&format!("read_var: invalid stack: {sym}"))
     }
 }
 
