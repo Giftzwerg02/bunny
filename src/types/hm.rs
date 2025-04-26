@@ -228,6 +228,12 @@ impl Type {
                 }
             }
 
+            (Type::Fn(a, b), o) |
+            (o, Type::Fn(a, b)) => {
+                if **a != Type::TUnit { panic!() }
+                b.unify(o);
+            }
+
             _ => panic!("{self:?}, {other:?}"),
         }
     }
