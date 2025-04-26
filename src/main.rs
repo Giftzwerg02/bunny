@@ -30,7 +30,7 @@ use crate::types::util::{bfunc, bint, bstring};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = fs::read_to_string("src/parser/examples/if-test.bny")?;
-    let mut pair = BunnyParser::parse(Rule::program, &input)?.filter(is_not_comment);
+    let mut pair = BunnyParser::parse(Rule::program, input.leak())?.filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());
 
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let mut runner = Runner::new();
-    let result = runner.run(typ, &mut std_library.runnable);
+    let result = runner.run(typ, std_library.runnable);
     println!("{:?}", result.eval());
 
     Ok(())

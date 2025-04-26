@@ -7,13 +7,13 @@ use crate::{
     runner::value::Lazy,
 };
 
-pub type InterpreterSymbolTable<'a> = HashMap<String, NativeExpr<'a>>;
+pub type InterpreterSymbolTable = HashMap<String, NativeExpr>;
 
-pub enum RunnableExpr<'a, I: StageInfo> {
-    Native(NativeExpr<'a>),
+pub enum RunnableExpr<I: StageInfo> {
+    Native(NativeExpr),
 
     Bunny(Expr<I>), // Howwwww
 }
 
 // NOTE: does this work instead?
-pub type NativeExpr<'a> = Arc<dyn Fn(Vec<Lazy<'a>>) -> Lazy<'a> + 'a>;
+pub type NativeExpr = Arc<dyn Fn(Vec<Lazy>) -> Lazy>;
