@@ -9,7 +9,6 @@ use im::Vector;
 use imstr::ImString;
 use palette::Srgba;
 
-pub type ClonableLazy = Arc<Lazy>;
 pub type LambdaFunc = dyn FnMut(Vector<Lazy>) -> Lazy;
 pub type LambdaFuncWrap = Arc<Mutex<LambdaFunc>>;
 
@@ -49,15 +48,15 @@ pub enum Lazy {
 
     // To make it threat safe: Use LazyLock instead of LazyCell and use the
     // thread safe version of the im crate
-    Array(Arc<LazyCell<Vector<ClonableLazy>, Box<dyn FnOnce() -> Vector<ClonableLazy>>>>),
+    Array(Arc<LazyCell<Vector<Lazy>, Box<dyn FnOnce() -> Vector<Lazy>>>>),
 
     // Keys are eagerly evaluated, but values are lazy
     // TODO Maybe restrict to only "reasoably" hashable keys? int, string, color?
     Dict(
         Arc<
             LazyCell<
-                HashMap<Value, ClonableLazy>,
-                Box<dyn FnOnce() -> HashMap<Value, ClonableLazy>>,
+                HashMap<Value, Lazy>,
+                Box<dyn FnOnce() -> HashMap<Value, Lazy>>,
             >,
         >,
     ),
@@ -89,13 +88,13 @@ impl Lazy {
         Lazy::Color(Arc::new(LazyCell::new(callback)))
     }
 
-    pub fn new_array(value: Vector<ClonableLazy>) -> Self {
-        let callback: Box<dyn FnOnce() -> Vector<ClonableLazy>> = Box::new(move || value);
+    pub fn new_array(value: Vector<Lazy>) -> Self {
+        let callback: Box<dyn FnOnce() -> Vector<Lazy>> = Box::new(move || value);
         Lazy::Array(Arc::new(LazyCell::new(callback)))
     }
 
-    pub fn new_dict(value: HashMap<Value, ClonableLazy>) -> Self {
-        let callback: Box<dyn FnOnce() -> HashMap<Value, ClonableLazy>> = Box::new(move || value);
+    pub fn new_dict(value: HashMap<Value, Lazy>) -> Self {
+        let callback: Box<dyn FnOnce() -> HashMap<Value, Lazy>> = Box::new(move || value);
         Lazy::Dict(Arc::new(LazyCell::new(callback)))
     }
 
@@ -111,8 +110,8 @@ impl Lazy {
     pub fn nowrap(self) -> Self {
         match self {
             Lazy::Wrapper(wrapped) => {
-                let unwrapped = (*wrapped.clone()).clone();
-                unwrapped.nowrap()
+                let a = (*wrapped.clone()).clone();
+                a
             },
             _ => {
                 self
@@ -133,12 +132,16 @@ impl Lazy {
             Lazy::Array(lazy_cell) => {
                 let mut res = vec![];
                 for elem in (*lazy_cell).clone() {
-                    res.push((*elem).clone().eval());
+                    res.push(elem.eval());
                 }
                 Value::Array(res.into())
             }
             Lazy::Dict(lazy_cell) => {
-                todo!("eval lazy dict")
+                let init = (**lazy_cell).clone();
+                let dict = init.into_iter()
+                        .map(|(k, v)| (k, v.eval()))
+                        .collect();
+                Value::Dict(dict)
             }
             Lazy::Lambda(lazy_cell) => Value::Lambda((**lazy_cell).clone()),
 
@@ -181,6 +184,7 @@ impl Value {
     }
 }
 
+// TODO: this seems... wrong
 impl Into<Lazy> for Value {
     fn into(self) -> Lazy {
         match self {
@@ -192,11 +196,17 @@ impl Into<Lazy> for Value {
 
             Value::Color(color) => Lazy::new_color(color),
 
-            Value::Array(_) => todo!(),
+            Value::Array(arr) => {
+                let arr = arr.into_iter().map(|e| e.into()).collect();
+                Lazy::new_array(arr)
+            },
 
-            Value::Dict(_) => todo!(),
+            Value::Dict(dict) => {
+                let dict = dict.into_iter().map(|(k, v)| (k, v.into())).collect();
+                Lazy::new_dict(dict)
+            },
 
-            Value::Lambda(_) => todo!()
+            Value::Lambda(lambda) => Lazy::new_lambda(lambda),
         }
     }
 }

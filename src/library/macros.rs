@@ -54,21 +54,18 @@ macro_rules! library {
                 runnable.insert(
                     name.to_string(),
                     ::std::sync::Arc::new(move |args| { // Use Arc for cloneable shared ownership
-                        let args = args
-                            .into_iter()
-                            .map(|elem| {
-                                match elem {
-                                    Lazy::Wrapper(f) => (*f.clone()).clone(), // TODO needed?
+                        Lazy::wrap(Box::new(move || {
+                            let args = args
+                                .into_iter()
+                                .map(|elem| elem.nowrap())
+                                .collect::<::std::vec::Vec<$crate::library::Lazy>>();
 
-                                    a => a
-                                }
-                            })
-                            .collect::<::std::vec::Vec<$crate::library::Lazy>>();
 
-                        match &args[..] {
-                            [ $($arg_pat,)* ] => $body,
-                            _ => panic!("Invalid argument count or types for function '{}'\nargs: {:?}", name, args),
-                        }
+                            match &args[..] {
+                                [ $($arg_pat,)* ] => $body,
+                                _ => panic!("Invalid argument count or types for function '{}'\nargs: {:?}", name, args),
+                            }
+                        }))
                     })
                 );
             )*
@@ -76,7 +73,6 @@ macro_rules! library {
             $crate::library::Library { scoped, typed, runnable }
        }};
 }
-
 
 #[macro_export]
 macro_rules! eval {

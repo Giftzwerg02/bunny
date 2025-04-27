@@ -6,17 +6,20 @@ use std::{
 
 use im::Vector;
 use palette::Srgba;
-use value::{ClonableLazy, Lazy, LazyLambda, Value};
+use value::{Lazy, LazyLambda, Value};
 
 use crate::{
-    ast::{Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo}, library::runnable_expression::{InterpreterSymbolTable, RunnableExpr}, lwrap, types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue}
+    ast::{Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo},
+    library::runnable_expression::{InterpreterSymbolTable, RunnableExpr},
+    lwrap,
+    types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue},
 };
 
 pub mod value;
 
 #[derive(Debug, Clone)]
 struct SymbolStack {
-    inner: Vec<ClonableLazy>,
+    inner: Vec<Lazy>,
 }
 
 impl SymbolStack {
@@ -24,15 +27,15 @@ impl SymbolStack {
         SymbolStack { inner: Vec::new() }
     }
 
-    fn push(&mut self, val: ClonableLazy) {
+    fn push(&mut self, val: Lazy) {
         self.inner.push(val);
     }
 
-    fn pop(&mut self) -> Option<ClonableLazy> {
+    fn pop(&mut self) -> Option<Lazy> {
         self.inner.pop()
     }
 
-    fn read(&self) -> Option<ClonableLazy> {
+    fn read(&self) -> Option<Lazy> {
         self.inner.last().cloned()
     }
 }
@@ -108,18 +111,21 @@ impl Runner {
                 Lazy::new_array(res)
             }
             Expr::Dict(dict) => {
-                let mut res: im::HashMap<Value, ClonableLazy> = im::HashMap::new();
-                for entry in dict.value {
-                    let key = entry.key;
-                    let key = self.run(key, syms.clone());
-                    let key = key.eval();
+                let mut runner = self.clone();
+                lwrap! {{
+                    let mut res: im::HashMap<Value, Lazy> = im::HashMap::new();
+                    for entry in dict.value {
+                        let key = entry.key;
+                        let key = runner.run(key, syms.clone());
+                        let key = key.eval();
 
-                    let value = entry.value;
-                    let value = self.run(value, syms.clone());
+                        let value = entry.value;
+                        let value = runner.run(value, syms.clone());
 
-                    res.insert(key, value.into());
-                }
-                Lazy::new_dict(res)
+                        res.insert(key, value.into());
+                    }
+                    Lazy::new_dict(res)
+                }}
             }
             Expr::Symbol(symbol) => {
                 // if the implementation of a function is just a symbol,
@@ -131,19 +137,25 @@ impl Runner {
                 //
                 // Therefore, if the symbol resolves to an argument we need to check the
                 // SymbolStack
-                
-                let TypedValue::FromBunny(scope) = symbol.info.syms.get(&symbol.value).expect("scoping err") else {
-                    panic!("invalid runner state");
-                };
 
-                if matches!(scope, Expr::Lambda(_)) {
-                    let res = self.run(scope.clone(), syms.clone())
-                        .nowrap();
-                    println!("here: {:?}", &res);
-                    res
-                } else {
-                    let res = self.read_var(symbol.value);
-                    (*res).clone()
+                let scope = symbol.info.syms.get(&symbol.value).expect("scoping err");
+                match scope {
+                    TypedValue::FromLibrary(_) => {
+                        let native = syms.get(&symbol.value).unwrap().clone();
+                        let lambda =
+                            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
+                                (*native)(args.into_iter().collect())
+                            })));
+                        Lazy::new_lambda(lambda)
+                    }
+                    TypedValue::FromBunny(scope) => {
+                        if matches!(scope, Expr::Lambda(_)) {
+                            let res = self.run(scope.clone(), syms.clone()).nowrap();
+                            res
+                        } else {
+                            self.read_var(symbol.value)
+                        }
+                    }
                 }
             }
             Expr::FuncCall(func) => {
@@ -176,8 +188,7 @@ impl Runner {
                         .collect::<Vec<Lazy>>();
 
                     let native = syms.get(&func.id.value).unwrap().clone();
-
-                    return Lazy::wrap(Box::new(move || (*native)(args.clone())));
+                    return (*native)(args.clone());
                 };
 
                 let Expr::Lambda(implementation) = implementation else {
@@ -207,12 +218,17 @@ impl Runner {
                     self.pop_var(arg.value);
                 }
 
-                result
+                result.nowrap()
             }
             Expr::Lambda(lambda) => {
                 // A lambda should return a lazy of
                 // a function that takes some arguments and returns a result
-
+                
+                // auto-execute constant definition
+                if lambda.args.len() == 0 {
+                    return self.run(*lambda.body, syms.clone());
+                }
+                
                 let lambda_args = Arc::new(
                     lambda
                         .args
@@ -263,9 +279,15 @@ impl Runner {
         stack.pop().expect("invalid stack");
     }
 
-    fn read_var(&mut self, sym: String) -> ClonableLazy {
-        let stack = self.state.get_mut(&sym).expect(&format!("read_var: invalid stack: {sym}"));
-        stack.read().expect(&format!("read_var: invalid stack: {sym}"))
+    fn read_var(&mut self, sym: String) -> Lazy {
+        let stack = self
+            .state
+            .get_mut(&sym)
+            .expect(&format!("read_var: invalid stack: {sym}"));
+
+        stack
+            .read()
+            .expect(&format!("read_var: invalid stack: {sym}"))
     }
 }
 

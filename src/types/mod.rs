@@ -248,7 +248,7 @@ fn infer_array<'a>(
         .collect::<Vec<Expr<TypedStageInfo>>>();
 
     if typed_values.iter().any(|current| current.typ() != elem.typ()) {
-        panic!();
+        panic!("mixed types in array: {:?}", typed_values.iter().map(|c| c.typ()).collect::<Vec<_>>());
     }
 
     Array::new(

@@ -1,0 +1,20 @@
+(
+	(def never (panic "lazy-bug: this should never be evaluated"))
+	(def a 
+		(if 0
+			(never)
+			"bla"
+		)
+	)
+
+	(map 
+		(\ (val) (
+			(def no (panic "no"))
+			(def two (a) (if a 2 (panic "two")))
+			(def really-no (panic "really-no"))
+			(def res (+ (two 1) val))
+			(if 0 (panic "final") (res))
+		))
+		[1 2 3]
+	)
+)

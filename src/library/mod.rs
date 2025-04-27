@@ -43,7 +43,7 @@ pub fn standard_library<'a>() -> Library<'a> {
         #[forall a | arr:barray(&a) => ret:a ]
         fn "first"(Lazy::Array(v)) {
             let arr = (**v).clone();
-            (*arr[0]).clone()
+            arr[0].clone()
         }
 
         #[forall a | arr:barray(&a) => ret:bint() ]
@@ -57,7 +57,7 @@ pub fn standard_library<'a>() -> Library<'a> {
         fn "get"(Lazy::Array(v), Lazy::Int(idx)) {
             let arr = (**v).clone();
             let idx = eval!(idx);
-            (*arr[idx as usize]).clone()
+            arr[idx as usize].clone()
         }
 
         #[forall a, b | fun:bfunc1(&a, &b) => arr:barray(&a) => ret:b ]
@@ -66,9 +66,8 @@ pub fn standard_library<'a>() -> Library<'a> {
             let mut f = f.func.lock().unwrap();
             let mut res = vec![];
             for elem in (**v).clone() {
-                let elem = (*elem).clone();
                 let mapped = f(vec![elem.clone()].into());
-                res.push(Arc::new(mapped));
+                res.push(mapped);
             }
             Lazy::new_array(res.into())
         }
@@ -79,8 +78,7 @@ pub fn standard_library<'a>() -> Library<'a> {
             let mut f = f.func.lock().unwrap();
             let mut acc = fst.clone();
             for elem in (**list).clone() {
-                let elem = (*elem).clone();
-                acc = f(vec![acc, elem.clone()].into());
+                acc = f(vec![acc, elem].into());
             }
             acc
         }
@@ -88,7 +86,7 @@ pub fn standard_library<'a>() -> Library<'a> {
         #[forall a | arr:barray(&a) => val:a.clone() => ret:barray(&a)]
         fn "append" (Lazy::Array(a), val) {
             let mut res = (**a).clone();
-            res.push_back(Arc::new(val.clone()));
+            res.push_back(val.clone());
             Lazy::new_array(res)
         }
 
@@ -98,7 +96,6 @@ pub fn standard_library<'a>() -> Library<'a> {
             let to = eval!(to);
             let range: Vec<_> = (from..to)
                 .map(Lazy::new_int)
-                .map(Arc::new)
                 .collect();
             Lazy::new_array(range.into())
         }
@@ -111,10 +108,10 @@ pub fn standard_library<'a>() -> Library<'a> {
         #[forall a | cond:bint() => iftrue:a.clone() => iffalse:a.clone() => ret:a]
         fn "if"(Lazy::Int(cond), iftrue, iffalse){
             if eval!(cond) != 0 {
-                iftrue.clone().eval().into()
+                iftrue.clone()
             }
             else {
-                iffalse.clone().eval().into()
+                iffalse.clone()
             }
         }
 
@@ -122,6 +119,11 @@ pub fn standard_library<'a>() -> Library<'a> {
         fn "print"(elem){
             println!("Evaluated: {:?}", elem.clone().eval());
             elem.clone()
+        }
+
+        #[forall a | message:bstring() => ret:a]
+        fn "panic"(Lazy::String(message)) {
+            panic!("panicked: {}", eval!(message))
         }
 
         #[| a:bint() => b:bint() => res:bint()]
