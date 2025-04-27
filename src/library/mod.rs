@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use esvg::Element;
+use polygonical::point::Point;
+
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
 use crate::library::runnable_expression::InterpreterSymbolTable;
 use crate::runner::value::Lazy;
@@ -30,6 +33,11 @@ macro_rules! lfalse {
 
 pub fn standard_library<'a>() -> Library<'a> {
     library! {
+        #[| a:int() => ret:int()]
+        fn "neg"(Lazy::Int(a)) {
+            Lazy::new_int(-eval!(a))
+        }
+
         #[| a:int() => b:int() => ret:int()]
         fn "+"(Lazy::Int(a), Lazy::Int(b)) {
             Lazy::new_int(eval!(a) + eval!(b))
@@ -38,6 +46,16 @@ pub fn standard_library<'a>() -> Library<'a> {
         #[| a:int() => b:int() => ret:int()]
         fn "-"(Lazy::Int(a), Lazy::Int(b)) {
             Lazy::new_int(eval!(a) - eval!(b))
+        }
+
+        #[| a:int() => b:int() => ret:int()]
+        fn "*"(Lazy::Int(a), Lazy::Int(b)) {
+            Lazy::new_int(eval!(a) * eval!(b))
+        }
+
+        #[| a:int() => b:int() => ret:int()]
+        fn "/"(Lazy::Int(a), Lazy::Int(b)) {
+            Lazy::new_int(eval!(a) / eval!(b))
         }
 
         #[forall a | arr:array(&a) => ret:a ]
@@ -130,7 +148,6 @@ pub fn standard_library<'a>() -> Library<'a> {
             }
         }
 
-
         #[| a:int() => b:int() => res:int()]
         fn ">"(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) > eval!(b) {
@@ -166,6 +183,57 @@ pub fn standard_library<'a>() -> Library<'a> {
             } else {
                 lfalse!()
             }
+        }
+
+        #[| x:int() => y:int() => radius:int() => fill:color() => children:array(&opaque()) => ret:opaque()]
+        fn "circle"(Lazy::Int(x), Lazy::Int(y), Lazy::Int(radius), Lazy::Color(fill), Lazy::Array(children)){
+            let mut group = Element::new("g");
+
+            let mut circle = esvg::shapes::circle(
+                Point::new(eval!(x) as f32, eval!(y) as f32), // TODO pretty hacky
+                eval!(radius) as i32
+            );
+
+            let (r, g, b, a) = eval!(fill).into_components();
+
+            let color_str = format!("#{:02x}{:02x}{:02x}", r, g, b);  // TODO ignore alpha for now
+            circle.set("fill", color_str);
+
+            group.add(&circle);
+
+            for child in eval!(children) {
+                let Lazy::Opaque(child) = child else { panic!() };
+
+                group.add(&child);
+            }
+
+            Lazy::new_opaque(group)
+        }
+
+        #[| x:int() => y:int() => w:int() => h:int() => fill:color() => children:array(&opaque()) => ret:opaque()]
+        fn "rect"(Lazy::Int(x), Lazy::Int(y), Lazy::Int(w), Lazy::Int(h), Lazy::Color(fill), Lazy::Array(children)){
+            let mut group = Element::new("g");
+
+            let mut rect = esvg::shapes::rectangle(
+                Point::new(eval!(x) as f32, eval!(y) as f32), // TODO pretty hacky
+                eval!(w) as f64,
+                eval!(h) as f64,
+            );
+
+            let (r, g, b, a) = eval!(fill).into_components();
+
+            let color_str = format!("#{:02x}{:02x}{:02x}", r, g, b); // TODO ignore alpha for now
+            rect.set("fill", color_str);
+
+            group.add(&rect);
+
+            for child in eval!(children) {
+                let Lazy::Opaque(child) = child else { panic!() };
+
+                group.add(&child);
+            }
+
+            Lazy::new_opaque(group)
         }
     }
 }

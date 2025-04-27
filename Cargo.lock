@@ -151,11 +151,13 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "const_format",
+ "esvg",
  "im",
  "imstr",
  "palette",
  "pest",
  "pest_derive",
+ "polygonical",
  "proptest",
  "rand 0.9.0",
  "text_trees",
@@ -279,6 +281,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "esvg"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4df51e730855571f4f6b6ededb9b8979bea2f90c5baeb554d1d1c7ecd121359d"
+dependencies = [
+ "polygonical",
+ "quick-xml",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "fast-srgb8"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -289,6 +302,15 @@ name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+
+[[package]]
+name = "float-cmp"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "fnv"
@@ -588,6 +610,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "polygonical"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7ea54a5aac399455538901e57d767125569eee6bcaee1323b32e02e22b2ac86"
+dependencies = [
+ "float-cmp",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -630,6 +661,15 @@ name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
+
+[[package]]
+name = "quick-xml"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81b9228215d82c7b61490fec1de287136b5de6f5700f6e58ea9ad61a7964ca51"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "quote"

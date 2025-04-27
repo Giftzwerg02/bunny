@@ -1,0 +1,32 @@
+(
+	(def mouth (x y w h) (
+		; return a rect at x,y with width = w, height = h and a background-color of red
+		(rect x y w h #ff0000 [])
+	))
+
+	(def eye (cx cy r) (
+		; return a circle with center at cx, cy and radius = r and a background-color of red
+		(circle cx cy r #ff0000 [])
+	))
+
+	(def smiley (cx cy radius) (
+		(def mouthOffsetY (+ cy (/ radius 2)))
+		(def mouthOffsetX (- cx (/ radius 4)))
+		(def mouthWidth (/ radius 2))
+		(def mouthHeight (/ radius 8))
+
+		(def eyeOffsetY (- cy (/ radius 2)))
+		(def eyeOffsetX (+ cx (/ radius 4)))
+		(def eyeRadius (/ radius 8))
+
+		(circle cx cy radius  #ffffff [
+			(mouth mouthOffsetX mouthOffsetY mouthWidth mouthHeight)    
+			(eye eyeOffsetX eyeOffsetY eyeRadius)
+			(eye (- eyeOffsetX mouthWidth) eyeOffsetY eyeRadius)
+		])
+	))
+
+	; Smiley is the only top-level expression, meaning that the result of this function is the program-output.
+	; The variable smileyRadius is given as a command-line argument.
+	(smiley 50 50 30)
+)

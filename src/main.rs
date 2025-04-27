@@ -6,7 +6,7 @@ mod types;
 mod runner;
 mod library;
 
-use std::fs::{self};
+use std::{fs::{self}, io::Write};
 
 use ast::{
     Expr, PrettyPrintable, StageInfo,
@@ -17,19 +17,21 @@ use ast::{
 use clap::Parser as ClapParser;
 #[allow(unused)]
 use cli::Cli;
+use esvg::{create_document, page::Page};
 use library::runnable_expression::RunnableExpr;
+use palette::{encoding::Srgb, Srgba};
 use parser::{BunnyParser, Rule};
 use pest::Parser;
-use runner::Runner;
+use runner::{value::{Lazy, Value}, Runner};
 use types::typed::TypedStageInfo;
 use crate::ast::Symbol;
 use crate::library::standard_library;
 use crate::types::{typecheck_pass, InferenceState};
 use crate::types::typed::{PolyTypedStageInfo, TypedValue};
-use crate::types::util::{bfunc, bint, bstring};
+use crate::types::util::{func, int, string};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let input = fs::read_to_string("src/parser/examples/never-say-never.bny")?;
+    let input = fs::read_to_string("src/parser/examples/simpler.bny")?;
     let mut pair = BunnyParser::parse(Rule::program, input.leak())?.filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());
@@ -49,7 +51,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut runner = Runner::new();
     let result = runner.run(typ, std_library.runnable);
     println!("lazy: {:?}", result);
-    println!("{:?}", result.eval());
+
+    //println!("{}", render_page(result.eval()));
+
+    let svg = render_page(result.eval());
+    let mut file = fs::File::create("out.svg")?;
+    file.write_all(svg.as_bytes())?;
 
     Ok(())
+}
+
+fn render_page(val: Value) -> String {
+    let Value::Opaque(child) = val else { panic!() };
+
+    let page = Page::A4(96);  // 96 dpi
+    let mut doc = create_document(&page);
+    doc.add(&child);
+    doc.to_pretty_string()
 }

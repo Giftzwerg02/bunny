@@ -173,16 +173,16 @@ impl Runner {
                             crate::ast::Argument::Positional(arg_expr) => {
                                 let syms = syms.clone();
                                 let mut runner = self.clone();
-                                lwrap! {
+                                //lwrap! {
                                     runner.run(arg_expr, syms)
-                                }
+                                //}
                             }
                             crate::ast::Argument::Named(named_argument) => {
                                 let syms = syms.clone();
                                 let mut runner = self.clone();
-                                lwrap! {
+                                //lwrap! {
                                     runner.run(*named_argument.value, syms)
-                                }
+                                //}
                             }
                         })
                         .collect::<Vec<Lazy>>();

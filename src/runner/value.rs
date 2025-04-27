@@ -4,6 +4,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use esvg::Element;
 use im::HashMap;
 use im::Vector;
 use imstr::ImString;
@@ -41,10 +42,9 @@ pub enum Lazy {
 
     // palette does not seem to have a "general" color type
     // so we just store it as a linear RGBA color for now
-    Color(Arc<LazyCell<Srgba, Box<dyn FnOnce() -> Srgba>>>),
+    Color(Arc<LazyCell<Srgba<u8>, Box<dyn FnOnce() -> Srgba<u8>>>>),
 
-    // TODO: Use https://docs.rs/unsvg/latest/unsvg/ or https://docs.rs/esvg/latest/esvg/ for svgs
-    Opaque(Arc<LazyCell<()>>),
+    Opaque(Arc<LazyCell<Element, Box<dyn FnOnce() -> Element>>>),
 
     // To make it threat safe: Use LazyLock instead of LazyCell and use the
     // thread safe version of the im crate
@@ -83,8 +83,8 @@ impl Lazy {
         Lazy::String(Arc::new(LazyCell::new(callback)))
     }
 
-    pub fn new_color(value: Srgba) -> Self {
-        let callback: Box<dyn FnOnce() -> Srgba> = Box::new(move || value);
+    pub fn new_color(value: Srgba<u8>) -> Self {
+        let callback: Box<dyn FnOnce() -> Srgba<u8>> = Box::new(move || value);
         Lazy::Color(Arc::new(LazyCell::new(callback)))
     }
 
@@ -101,6 +101,11 @@ impl Lazy {
     pub fn new_lambda(value: LazyLambda) -> Self {
         let callback: Box<dyn FnOnce() -> LazyLambda> = Box::new(move || value);
         Lazy::Lambda(Arc::new(LazyCell::new(callback)))
+    }
+
+    pub fn new_opaque(value: Element) -> Self {
+        let callback: Box<dyn FnOnce() -> Element> = Box::new(move || value);
+        Lazy::Opaque(Arc::new(LazyCell::new(callback)))
     }
 
     pub fn wrap(f: Box<dyn FnOnce() -> Lazy>) -> Self {
@@ -128,7 +133,7 @@ impl Lazy {
                 Value::String(pain)
             }
             Lazy::Color(lazy_cell) => Value::Color(**lazy_cell),
-            Lazy::Opaque(lazy_cell) => todo!("eval lazy opaque"),
+            Lazy::Opaque(lazy_cell) => Value::Opaque((**lazy_cell).clone()),
             Lazy::Array(lazy_cell) => {
                 let mut res = vec![];
                 for elem in (*lazy_cell).clone() {
@@ -153,7 +158,7 @@ impl Lazy {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Int(i64),
 
@@ -161,7 +166,9 @@ pub enum Value {
 
     String(ImString),
 
-    Color(Srgba),
+    Color(Srgba<u8>),
+
+    Opaque(Element),
 
     Array(Vector<Value>),
 
@@ -180,6 +187,7 @@ impl Value {
             Value::Array(vector) => "array",
             Value::Dict(hash_map) => "dict",
             Value::Lambda(lazy_lambda) => "lambda",
+            Value::Opaque(_) => "opaque",
         }.to_string()
     }
 }
@@ -207,6 +215,8 @@ impl Into<Lazy> for Value {
             },
 
             Value::Lambda(lambda) => Lazy::new_lambda(lambda),
+
+            Value::Opaque(opaque) => Lazy::new_opaque(opaque),
         }
     }
 }
@@ -221,18 +231,38 @@ impl Hash for Value {
             Value::String(string) => string.hash(state),
             // NOTE: same here
             Value::Color(alpha) => {
-                alpha.red.to_bits().hash(state);
-                alpha.green.to_bits().hash(state);
-                alpha.blue.to_bits().hash(state);
+                alpha.red.hash(state);
+                alpha.green.hash(state);
+                alpha.blue.hash(state);
+                alpha.alpha.hash(state);
             }
             Value::Array(vector) => vector.hash(state),
             Value::Dict(hash_map) => hash_map.hash(state),
             Value::Lambda(_) => panic!("cannot hash lambdas... I think?"),
+            Value::Opaque(opaque) => {
+                opaque.to_pretty_string().hash(state); // Use string representation for hashing
+            }
         }
     }
 }
 
 impl Eq for Value {}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Color(a), Value::Color(b)) => a == b,
+            (Value::Array(a), Value::Array(b)) => a == b,
+            (Value::Dict(a), Value::Dict(b)) => a == b,
+            (Value::Lambda(_), Value::Lambda(_)) => false, // Cannot compare lambdas
+            (Value::Opaque(a), Value::Opaque(b)) => a.to_pretty_string() == b.to_pretty_string(),
+            _ => false,
+        }
+    }
+}
 
 impl PartialEq for LazyLambda {
     fn eq(&self, other: &Self) -> bool {

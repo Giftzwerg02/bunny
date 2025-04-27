@@ -16,6 +16,10 @@ pub fn color() -> Type {
     Type::Basic("color".to_owned())
 }
 
+pub fn opaque() -> Type {
+    Type::Basic("opaque".to_owned())
+}
+
 pub fn array(elem: &Type) -> Type {
     Type::TApp("array".to_owned(), vec![ elem.clone() ])
 }
