@@ -34,7 +34,7 @@ macro_rules! library {
                 $( $(let $var = typed.hm.newvar();)* )?
 
                 // Process the type signature - uses the captured $ty expressions
-                let all_types = vec![$($ty),+]; // Collect all types
+                let all_types = vec![$(($ty).clone()),+]; // Clone each type
                 // Ensure there's at least a return type
                 assert!(!all_types.is_empty(), "Function type signature cannot be empty.");
                 let args_ty = all_types[..all_types.len() - 1].to_vec(); // All but the last are args
@@ -42,7 +42,7 @@ macro_rules! library {
                 let ret_ty = all_types.last().expect("Should have at least one type").clone(); // The last one is the return type
 
                 // Use the parsed types here
-                let func_type = $crate::types::util::bfunc(&args_ty[..], &ret_ty)
+                let func_type = $crate::types::util::func(&args_ty[..], &ret_ty)
                     .generalize(&mut typed.hm);
 
                 typed.type_assumptions.insert(
@@ -77,6 +77,6 @@ macro_rules! library {
 #[macro_export]
 macro_rules! eval {
     ($arg:expr) => {
-        ***$arg
+        (**$arg).clone()
     };
 }

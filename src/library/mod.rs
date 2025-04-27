@@ -30,67 +30,62 @@ macro_rules! lfalse {
 
 pub fn standard_library<'a>() -> Library<'a> {
     library! {
-        #[| a:bint() => b:bint() => ret:bint()]
+        #[| a:int() => b:int() => ret:int()]
         fn "+"(Lazy::Int(a), Lazy::Int(b)) {
             Lazy::new_int(eval!(a) + eval!(b))
         }
 
-        #[| a:bint() => b:bint() => ret:bint()]
+        #[| a:int() => b:int() => ret:int()]
         fn "-"(Lazy::Int(a), Lazy::Int(b)) {
             Lazy::new_int(eval!(a) - eval!(b))
         }
 
-        #[forall a | arr:barray(&a) => ret:a ]
+        #[forall a | arr:array(&a) => ret:a ]
         fn "first"(Lazy::Array(v)) {
-            let arr = (**v).clone();
-            arr[0].clone()
+            v[0].clone()
         }
 
-        #[forall a | arr:barray(&a) => ret:bint() ]
+        #[forall a | arr:array(&a) => ret:int() ]
         fn "len"(Lazy::Array(v)) {
-            let arr = (**v).clone();
-            let len = arr.len();
+            let len = v.len();
             Lazy::new_int(len as i64)
         }
 
-        #[forall a | arr:barray(&a) => idx:bint() => ret:a ]
+        #[forall a | arr:array(&a) => idx:int() => ret:a ]
         fn "get"(Lazy::Array(v), Lazy::Int(idx)) {
-            let arr = (**v).clone();
             let idx = eval!(idx);
-            arr[idx as usize].clone()
+            v[idx as usize].clone()
         }
 
-        #[forall a, b | fun:bfunc1(&a, &b) => arr:barray(&a) => ret:b ]
+        #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => ret:b ]
         fn "map"(Lazy::Lambda(f), Lazy::Array(v)) {
-            let f = (**f).clone();
             let mut f = f.func.lock().unwrap();
             let mut res = vec![];
-            for elem in (**v).clone() {
+            for elem in eval!(v) {
                 let mapped = f(vec![elem.clone()].into());
                 res.push(mapped);
             }
             Lazy::new_array(res.into())
         }
 
-        #[forall a, b | fun:bfunc(&[b.clone(), a.clone()], &b) => ground:b.clone() => arr:barray(&a) => ret:b]
+        #[forall a, b | fun:func2(&b, &a, &b) => ground:b => arr:array(&a) => ret:b]
         fn "foldl" (Lazy::Lambda(f), fst, Lazy::Array(list)) {
-            let f = (**f).clone();
             let mut f = f.func.lock().unwrap();
             let mut acc = fst.clone();
-            for elem in (**list).clone() {
+            for elem in eval!(list) {
                 acc = f(vec![acc, elem].into());
             }
             acc
         }
 
-        #[forall a | arr:barray(&a) => val:a.clone() => ret:barray(&a)]
+        #[forall a | arr:array(&a) => val:a => ret:array(&a)]
         fn "append" (Lazy::Array(a), val) {
-            let mut res = (**a).clone();
+            let mut res = eval!(a);
             res.push_back(val.clone());
             Lazy::new_array(res)
         }
 
-        #[| from:bint() => to:bint() => res:barray(&bint())]
+        #[| from:int() => to:int() => res:array(&int())]
         fn "range" (Lazy::Int(from), Lazy::Int(to)) {
             let from = eval!(from);
             let to = eval!(to);
@@ -105,7 +100,7 @@ pub fn standard_library<'a>() -> Library<'a> {
             v.clone()
         }
 
-        #[forall a | cond:bint() => iftrue:a.clone() => iffalse:a.clone() => ret:a]
+        #[forall a | cond:int() => iftrue:a => iffalse:a => ret:a]
         fn "if"(Lazy::Int(cond), iftrue, iffalse){
             if eval!(cond) != 0 {
                 iftrue.clone()
@@ -115,18 +110,18 @@ pub fn standard_library<'a>() -> Library<'a> {
             }
         }
 
-        #[forall a | elem:a.clone() => ret:a]
+        #[forall a | elem:a => ret:a]
         fn "print"(elem){
             println!("Evaluated: {:?}", elem.clone().eval());
             elem.clone()
         }
 
-        #[forall a | message:bstring() => ret:a]
+        #[forall a | message:string() => ret:a]
         fn "panic"(Lazy::String(message)) {
             panic!("panicked: {}", eval!(message))
         }
 
-        #[| a:bint() => b:bint() => res:bint()]
+        #[| a:int() => b:int() => res:int()]
         fn "<"(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) < eval!(b) {
                 ltrue!()
@@ -136,7 +131,7 @@ pub fn standard_library<'a>() -> Library<'a> {
         }
 
 
-        #[| a:bint() => b:bint() => res:bint()]
+        #[| a:int() => b:int() => res:int()]
         fn ">"(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) > eval!(b) {
                 ltrue!()
@@ -145,7 +140,7 @@ pub fn standard_library<'a>() -> Library<'a> {
             }
         }
 
-        #[| a:bint() => b:bint() => res:bint()]
+        #[| a:int() => b:int() => res:int()]
         fn "<="(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) <= eval!(b) {
                 ltrue!()
@@ -155,7 +150,7 @@ pub fn standard_library<'a>() -> Library<'a> {
         }
 
 
-        #[| a:bint() => b:bint() => res:bint()]
+        #[| a:int() => b:int() => res:int()]
         fn ">="(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) >= eval!(b) {
                 ltrue!()
@@ -164,7 +159,7 @@ pub fn standard_library<'a>() -> Library<'a> {
             }
         }
 
-        #[| a:bint() => b:bint() => res:bint()]
+        #[| a:int() => b:int() => res:int()]
         fn "="(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) == eval!(b) {
                 ltrue!()

@@ -6,7 +6,7 @@ use crate::ast::scoped::{ScopedStageInfo, SymbolValue};
 use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, Lambda, NamedArgument, Str, Symbol};
 use crate::types::hm::{HMState, Type};
 use crate::types::typed::{TypedStageInfo, TypedSymbolTable, TypedValue};
-use crate::types::util::{barray, bcolor, bdict, bfloat, bfunc, bint, bpair, bstring};
+use crate::types::util::{array, color, dict, float, func, int, pair, string};
 
 pub struct InferenceState<'a> {
     pub type_assumptions: TypedSymbolTable<'a>,
@@ -31,7 +31,7 @@ pub fn typecheck_pass<'a>(
             Expr::Int(
                 Int::new(
                     value.clone(),
-                    type_stage_info(info, bint(), state)
+                    type_stage_info(info, int(), state)
                 )
             ),
 
@@ -39,7 +39,7 @@ pub fn typecheck_pass<'a>(
             Expr::Float(
                 Float::new(
                     value.clone(),
-                    type_stage_info(info, bfloat(), state)
+                    type_stage_info(info, float(), state)
                 )
             ),
 
@@ -47,7 +47,7 @@ pub fn typecheck_pass<'a>(
             Expr::String(
                 Str::new(
                     value.clone(),
-                    type_stage_info(info, bstring(), state)
+                    type_stage_info(info, string(), state)
                 )
             ),
 
@@ -55,7 +55,7 @@ pub fn typecheck_pass<'a>(
             Expr::Color(
                 Color::new(
                     *r, *g, *b,
-                    type_stage_info(info, bcolor(), state)
+                    type_stage_info(info, color(), state)
                 )
             ),
 
@@ -221,7 +221,7 @@ fn infer_argument<'a>(
 }
 
 fn infer_array<'a>(
-    array: &Array<ScopedStageInfo<'a>>,
+    barray: &Array<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
 ) -> Array<TypedStageInfo<'a>> {
 
@@ -230,14 +230,14 @@ fn infer_array<'a>(
         return Type::TApp(array_typ_name, vec![ state.hm.newvar() ])
     }*/
 
-    if array.value.is_empty() {
+    if barray.value.is_empty() {
         return Array::new(
             vec![],
-            type_stage_info(&array.info, barray(&state.hm.newvar()), state)
+            type_stage_info(&barray.info, array(&state.hm.newvar()), state)
         );
     }
 
-    let cloned_values = array.value.clone();
+    let cloned_values = barray.value.clone();
     let first = cloned_values.first().unwrap();
 
     let elem = typecheck_pass(first, state);
@@ -254,24 +254,24 @@ fn infer_array<'a>(
     Array::new(
         typed_values,
         type_stage_info(
-            &array.info,
-            barray(&elem.typ().clone()),
+            &barray.info,
+            array(&elem.typ().clone()),
             state
         )
     )
 }
 
 fn infer_dict<'a>(
-    dict: &Dict<ScopedStageInfo<'a>>,
+    dictionary: &Dict<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
 ) -> Dict<TypedStageInfo<'a>> {
 
-    if dict.value.is_empty() {
+    if dictionary.value.is_empty() {
         return Dict::new(
             vec![],
             type_stage_info(
-                &dict.info,
-                bdict(&state.hm.newvar(), &state.hm.newvar()),
+                &dictionary.info,
+                dict(&state.hm.newvar(), &state.hm.newvar()),
                 state
             )
         )
@@ -289,13 +289,13 @@ fn infer_dict<'a>(
             value.clone(),
             type_stage_info(
                 &entry.info,
-                bpair(key.typ(), value.typ()),
+                pair(key.typ(), value.typ()),
                 state
             )
         )
     }
 
-    let cloned_values = dict.value.clone();
+    let cloned_values = dictionary.value.clone();
 
     let first = cloned_values.first().unwrap();
     let entry_expr = infer_dict_entry(first, state);
@@ -319,8 +319,8 @@ fn infer_dict<'a>(
     Dict::new(
         typed_values,
         type_stage_info(
-            &dict.info,
-            bdict(
+            &dictionary.info,
+            dict(
                 entry_expr.key.typ(),
                 entry_expr.value.typ()
             ),
@@ -356,7 +356,7 @@ fn infer_lambda<'a>(
         .map(|Symbol { info, .. }| info.typ.clone())
         .collect::<Vec<Type>>();
 
-    let fun_type = bfunc(&arg_types[..], typed_body.typ());
+    let fun_type = func(&arg_types[..], typed_body.typ());
 
     Lambda::parametric(
         typed_args,
