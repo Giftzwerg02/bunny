@@ -26,10 +26,9 @@ use crate::ast::Symbol;
 use crate::library::standard_library;
 use crate::types::{typecheck_pass, InferenceState};
 use crate::types::typed::{PolyTypedStageInfo, TypedValue};
-use crate::types::util::{bfunc, bint, bstring};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let input = fs::read_to_string("src/parser/examples/never-say-never.bny")?;
+    let input = fs::read_to_string("src/parser/examples/radius.bny")?;
     let mut pair = BunnyParser::parse(Rule::program, input.leak())?.filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());

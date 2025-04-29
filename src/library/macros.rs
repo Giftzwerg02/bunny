@@ -2,7 +2,7 @@
 macro_rules! library {
     ( $(
          #[ $(forall $($var:ident),+ )? | $( $name:ident : $ty:expr ) => + ]
-         fn $func_name:tt ( $($arg_pat:pat),* ) $body:block
+         fn $func_name:tt ( $($arg_pat:pat),* ): ($runner:pat) $body:block
        )* ) => {{
             let mut scoped: $crate::ast::scoped::SymbolTable<$crate::ast::scoped::ScopedStageInfo> = $crate::ast::scoped::SymbolTable::new();
             let mut typed = $crate::types::InferenceState::new();
@@ -53,16 +53,14 @@ macro_rules! library {
                 // Store the function pointer (type NativeExpr) in the runnable table.
                 runnable.insert(
                     name.to_string(),
-                    ::std::sync::Arc::new(move |args| { // Use Arc for cloneable shared ownership
+                    ::std::sync::Arc::new(move |args, runner| { // Use Arc for cloneable shared ownership
                         Lazy::wrap(Box::new(move || {
-                            let args = args
-                                .into_iter()
-                                .map(|elem| elem.nowrap())
-                                .collect::<::std::vec::Vec<$crate::library::Lazy>>();
-
-
                             match &args[..] {
-                                [ $($arg_pat,)* ] => $body,
+                                [ $($arg_pat,)* ] => {
+                                    match runner {
+                                        $runner => $body
+                                    }
+                                }
                                 _ => panic!("Invalid argument count or types for function '{}'\nargs: {:?}", name, args),
                             }
                         }))
@@ -76,7 +74,16 @@ macro_rules! library {
 
 #[macro_export]
 macro_rules! eval {
-    ($arg:expr) => {
-        (**$arg).clone()
-    };
+    ($runner:ident($arg:expr)) => {{
+        let mut r = $runner.lock().unwrap();
+        r($arg.clone())
+    }};
+    ($runner:ident($arg:expr) as $type:path) => {{
+        let mut r = $runner.lock().unwrap();
+        let $type(val) = r($arg.clone()) else {
+            panic!("invalid ast");
+        };
+        (**val).clone()
+    }};
 }
+

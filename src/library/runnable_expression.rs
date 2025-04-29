@@ -4,7 +4,7 @@ use im::HashMap;
 
 use crate::{
     ast::{Expr, StageInfo},
-    runner::value::Lazy,
+    runner::{value::Lazy, Runnable, ToLazyFn},
 };
 
 pub type InterpreterSymbolTable = HashMap<String, NativeExpr>;
@@ -16,4 +16,4 @@ pub enum RunnableExpr<I: StageInfo> {
 }
 
 // NOTE: does this work instead?
-pub type NativeExpr = Arc<dyn Fn(Vec<Lazy>) -> Lazy>;
+pub type NativeExpr = Arc<dyn Fn(Vec<Runnable>, ToLazyFn) -> Lazy>;

@@ -1,15 +1,18 @@
 use std::cell::LazyCell;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use im::HashMap;
-use im::Vector;
-use imstr::ImString;
 use palette::Srgba;
 
-pub type LambdaFunc = dyn FnMut(Vector<Lazy>) -> Lazy;
+use crate::library::runnable_expression::InterpreterSymbolTable;
+
+use super::Runnable;
+use super::Runner;
+
+pub type LambdaFunc = dyn FnMut(Vec<Lazy>) -> Lazy;
 pub type LambdaFuncWrap = Arc<Mutex<LambdaFunc>>;
 
 #[derive(Clone)]
@@ -30,6 +33,47 @@ impl Debug for LazyLambda {
 }
 
 // pub type ValueLambda<'a> = fn(Vector<Value<'a>>) -> Value<'a>;
+#[derive(Clone)]
+pub struct LazyFunc {
+    inner: Arc<Mutex<dyn FnMut() -> Lazy>>
+}
+
+impl LazyFunc {
+    pub fn new(inner: Arc<Mutex<dyn FnMut() -> Lazy>>) -> Self {
+        Self {
+            inner
+        }
+    }
+
+    pub fn call(self) -> Lazy {
+        let mut i = self.inner.lock().unwrap();
+        i()
+    }
+}
+
+impl Debug for LazyFunc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "lazyfunc")
+    }
+}
+
+pub type LazyIterInner = Arc<Mutex<Box<dyn Iterator<Item = Lazy>>>>;
+#[derive(Clone)]
+pub struct LazyIter {
+    pub inner: LazyIterInner,
+}
+
+impl LazyIter {
+    pub fn new(inner: LazyIterInner) -> Self {
+        Self { inner }
+    }
+}
+
+impl Debug for LazyIter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "LazyIter")
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Lazy {
@@ -37,7 +81,7 @@ pub enum Lazy {
 
     Float(Arc<LazyCell<f64, Box<dyn FnOnce() -> f64>>>),
 
-    String(Arc<LazyCell<ImString, Box<dyn FnOnce() -> ImString>>>),
+    String(Arc<LazyCell<String, Box<dyn FnOnce() -> String>>>),
 
     // palette does not seem to have a "general" color type
     // so we just store it as a linear RGBA color for now
@@ -48,15 +92,15 @@ pub enum Lazy {
 
     // To make it threat safe: Use LazyLock instead of LazyCell and use the
     // thread safe version of the im crate
-    Array(Arc<LazyCell<Vector<Lazy>, Box<dyn FnOnce() -> Vector<Lazy>>>>),
+    Array(Arc<LazyCell<LazyIter, Box<dyn FnOnce() -> LazyIter>>>),
 
     // Keys are eagerly evaluated, but values are lazy
     // TODO Maybe restrict to only "reasoably" hashable keys? int, string, color?
     Dict(
         Arc<
             LazyCell<
-                HashMap<Value, Lazy>,
-                Box<dyn FnOnce() -> HashMap<Value, Lazy>>,
+                HashMap<Value, LazyFunc>,
+                Box<dyn FnOnce() -> HashMap<Value, LazyFunc>>,
             >,
         >,
     ),
@@ -78,8 +122,8 @@ impl Lazy {
         Lazy::Float(Arc::new(LazyCell::new(callback)))
     }
 
-    pub fn new_string(value: ImString) -> Self {
-        let callback: Box<dyn FnOnce() -> ImString> = Box::new(move || value);
+    pub fn new_string(value: String) -> Self {
+        let callback: Box<dyn FnOnce() -> String> = Box::new(move || value);
         Lazy::String(Arc::new(LazyCell::new(callback)))
     }
 
@@ -88,13 +132,13 @@ impl Lazy {
         Lazy::Color(Arc::new(LazyCell::new(callback)))
     }
 
-    pub fn new_array(value: Vector<Lazy>) -> Self {
-        let callback: Box<dyn FnOnce() -> Vector<Lazy>> = Box::new(move || value);
+    pub fn new_array(value: LazyIter) -> Self {
+        let callback: Box<dyn FnOnce() -> LazyIter> = Box::new(move || value);
         Lazy::Array(Arc::new(LazyCell::new(callback)))
     }
 
-    pub fn new_dict(value: HashMap<Value, Lazy>) -> Self {
-        let callback: Box<dyn FnOnce() -> HashMap<Value, Lazy>> = Box::new(move || value);
+    pub fn new_dict(value: HashMap<Value, LazyFunc>) -> Self {
+        let callback: Box<dyn FnOnce() -> HashMap<Value, LazyFunc>> = Box::new(move || value);
         Lazy::Dict(Arc::new(LazyCell::new(callback)))
     }
 
@@ -119,7 +163,7 @@ impl Lazy {
         }
     }
 
-    pub fn eval(self) -> Value {
+    pub fn full_eval(self) -> Value {
         match self {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
             Lazy::Float(lazy_cell) => Value::Float(**lazy_cell),
@@ -128,18 +172,23 @@ impl Lazy {
                 Value::String(pain)
             }
             Lazy::Color(lazy_cell) => Value::Color(**lazy_cell),
-            Lazy::Opaque(lazy_cell) => todo!("eval lazy opaque"),
+            Lazy::Opaque(_) => todo!("eval lazy opaque"),
             Lazy::Array(lazy_cell) => {
+                let arr = lazy_cell;
+                let mut arr = arr.inner.lock().unwrap();
                 let mut res = vec![];
-                for elem in (*lazy_cell).clone() {
-                    res.push(elem.eval());
+                for elem in arr.into_iter() {
+                    res.push(elem.full_eval());
                 }
-                Value::Array(res.into())
+                Value::Array(res)
             }
             Lazy::Dict(lazy_cell) => {
                 let init = (**lazy_cell).clone();
                 let dict = init.into_iter()
-                        .map(|(k, v)| (k, v.eval()))
+                        .map(|(k, v)| {
+                            let v = v.call().full_eval();
+                            (k, v)
+                        })
                         .collect();
                 Value::Dict(dict)
             }
@@ -147,7 +196,7 @@ impl Lazy {
 
             Lazy::Wrapper(_) => {
                 let inner = self.nowrap();
-                inner.eval()
+                inner.full_eval()
             }
         }
     }
@@ -159,11 +208,11 @@ pub enum Value {
 
     Float(f64),
 
-    String(ImString),
+    String(String),
 
     Color(Srgba),
 
-    Array(Vector<Value>),
+    Array(Vec<Value>),
 
     Dict(HashMap<Value, Value>),
 
@@ -185,31 +234,32 @@ impl Value {
 }
 
 // TODO: this seems... wrong
-impl Into<Lazy> for Value {
-    fn into(self) -> Lazy {
-        match self {
-            Value::Int(int) => Lazy::new_int(int),
-
-            Value::Float(float) => Lazy::new_float(float),
-
-            Value::String(string) => Lazy::new_string(string),
-
-            Value::Color(color) => Lazy::new_color(color),
-
-            Value::Array(arr) => {
-                let arr = arr.into_iter().map(|e| e.into()).collect();
-                Lazy::new_array(arr)
-            },
-
-            Value::Dict(dict) => {
-                let dict = dict.into_iter().map(|(k, v)| (k, v.into())).collect();
-                Lazy::new_dict(dict)
-            },
-
-            Value::Lambda(lambda) => Lazy::new_lambda(lambda),
-        }
-    }
-}
+// NOTE: It was wrong!
+// impl Into<Lazy> for Value {
+//     fn into(self) -> Lazy {
+//         match self {
+//             Value::Int(int) => Lazy::new_int(int),
+//
+//             Value::Float(float) => Lazy::new_float(float),
+//
+//             Value::String(string) => Lazy::new_string(string),
+//
+//             Value::Color(color) => Lazy::new_color(color),
+//
+//             Value::Array(arr) => {
+//                 let arr = arr.into_iter().map(|e| e.into()).collect();
+//                 Lazy::new_array(arr)
+//             },
+//
+//             Value::Dict(dict) => {
+//                 let dict = dict.into_iter().map(|(k, v)| (k, v.into())).collect();
+//                 Lazy::new_dict(dict)
+//             },
+//
+//             Value::Lambda(lambda) => Lazy::new_lambda(lambda),
+//         }
+//     }
+// }
 
 impl Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -226,7 +276,7 @@ impl Hash for Value {
                 alpha.blue.to_bits().hash(state);
             }
             Value::Array(vector) => vector.hash(state),
-            Value::Dict(hash_map) => hash_map.hash(state),
+            Value::Dict(_) => panic!("let's just don't..."),
             Value::Lambda(_) => panic!("cannot hash lambdas... I think?"),
         }
     }
