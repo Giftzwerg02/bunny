@@ -1,7 +1,5 @@
 use std::{
-    collections::HashMap,
-    fmt::Display,
-    sync::{Arc, Mutex},
+    cell::LazyCell, collections::HashMap, fmt::Display, sync::{Arc, Mutex}
 };
 
 use im::Vector;
@@ -9,10 +7,7 @@ use palette::Srgba;
 use value::{Lazy, LazyLambda, Value};
 
 use crate::{
-    ast::{Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo},
-    library::runnable_expression::{InterpreterSymbolTable, RunnableExpr},
-    lwrap,
-    types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue},
+    ast::{Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo}, lazy, library::runnable_expression::{InterpreterSymbolTable, RunnableExpr}, types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue}
 };
 
 pub mod value;
@@ -92,27 +87,40 @@ impl Runner {
         syms: InterpreterSymbolTable,
     ) -> Lazy {
         match expr {
-            Expr::Int(int) => Lazy::new_int(int.value.try_into().expect("uint too large")),
-            Expr::Float(float) => Lazy::new_float(float.value),
-            Expr::String(string) => Lazy::new_string(string.value.into()),
+            Expr::Int(int) => {
+                lazy!(Lazy::Int, {
+                    int.value.try_into().expect("uint too large")
+                })
+            },
+            Expr::Float(float) => {
+                lazy!(Lazy::Float, float.value)
+            },
+            Expr::String(string) => {
+                lazy!(Lazy::String, string.value.into())
+            },
             Expr::Color(color) => {
-                // TODO: add alpha to color...?
-                let color = Srgba::new(color.r, color.g, color.b, 1);
-                Lazy::new_color(color.into())
+                lazy!(Lazy::Color, {
+                    // TODO: add alpha to color...?
+                    let color = Srgba::new(color.r, color.g, color.b, 1);
+                    color.into()
+                })
             }
             Expr::Array(array) => {
-                let mut res = Vector::new();
+                let mut runner = self.clone();
+                lazy!(Lazy::Array, {
+                    let mut res = Vector::new();
 
-                for elem in array.value {
-                    let elem = self.run(elem, syms.clone());
-                    res.push_back(elem.into());
-                }
+                    for elem in array.value {
+                        let elem = runner.run(elem, syms.clone());
+                        res.push_back(elem.into());
+                    }
 
-                Lazy::new_array(res)
+                    res
+                })
             }
             Expr::Dict(dict) => {
                 let mut runner = self.clone();
-                lwrap! {{
+                lazy!(Lazy::Dict, {
                     let mut res: im::HashMap<Value, Lazy> = im::HashMap::new();
                     for entry in dict.value {
                         let key = entry.key;
@@ -124,8 +132,8 @@ impl Runner {
 
                         res.insert(key, value.into());
                     }
-                    Lazy::new_dict(res)
-                }}
+                    res
+                })
             }
             Expr::Symbol(symbol) => {
                 // if the implementation of a function is just a symbol,
@@ -141,17 +149,18 @@ impl Runner {
                 let scope = symbol.info.syms.get(&symbol.value).expect("scoping err");
                 match scope {
                     TypedValue::FromLibrary(_) => {
-                        let native = syms.get(&symbol.value).unwrap().clone();
-                        let lambda =
-                            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
-                                (*native)(args.into_iter().collect())
-                            })));
-                        Lazy::new_lambda(lambda)
+                        lazy!(Lazy::Lambda, {
+                            let native = syms.get(&symbol.value).unwrap().clone();
+                            let lambda =
+                                LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
+                                    (*native)(args.into_iter().collect())
+                                })));
+                            lambda
+                        })
                     }
                     TypedValue::FromBunny(scope) => {
                         if matches!(scope, Expr::Lambda(_)) {
-                            let res = self.run(scope.clone(), syms.clone()).nowrap();
-                            res
+                            self.run(scope.clone(), syms.clone())
                         } else {
                             self.read_var(symbol.value)
                         }
@@ -164,6 +173,7 @@ impl Runner {
                 };
 
                 let implementation = func.info.syms.get(&func.id.value).expect("scoping err");
+                dbg!(&func.id.value);
 
                 let TypedValue::FromBunny(implementation) = implementation else {
                     let args = func
@@ -173,16 +183,12 @@ impl Runner {
                             crate::ast::Argument::Positional(arg_expr) => {
                                 let syms = syms.clone();
                                 let mut runner = self.clone();
-                                //lwrap! {
-                                    runner.run(arg_expr, syms)
-                                //}
+                                runner.run(arg_expr, syms)
                             }
                             crate::ast::Argument::Named(named_argument) => {
                                 let syms = syms.clone();
                                 let mut runner = self.clone();
-                                //lwrap! {
-                                    runner.run(*named_argument.value, syms)
-                                //}
+                                runner.run(*named_argument.value, syms)
                             }
                         })
                         .collect::<Vec<Lazy>>();
@@ -218,7 +224,7 @@ impl Runner {
                     self.pop_var(arg.value);
                 }
 
-                result.nowrap()
+                result
             }
             Expr::Lambda(lambda) => {
                 // A lambda should return a lazy of
@@ -241,24 +247,26 @@ impl Runner {
 
                 let body = *lambda.clone().body;
 
-                let value = LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
-                    let body = body.clone();
-                    let lambda_args = (*lambda_args).clone();
-                    for (pos, arg) in args.iter().cloned().enumerate() {
-                        let arg_sym = lambda_args[pos].clone();
-                        lambda_runner.push_var(arg_sym, arg);
-                    }
+                lazy!(Lazy::Lambda, {
+                    let value = LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
+                        let body = body.clone();
+                        let lambda_args = (*lambda_args).clone();
+                        for (pos, arg) in args.iter().cloned().enumerate() {
+                            let arg_sym = lambda_args[pos].clone();
+                            lambda_runner.push_var(arg_sym, arg);
+                        }
 
-                    let result = lambda_runner.run(body, syms.clone());
+                        let result = lambda_runner.run(body, syms.clone());
 
-                    for arg in (lambda_args).clone() {
-                        lambda_runner.pop_var(arg);
-                    }
+                        for arg in (lambda_args).clone() {
+                            lambda_runner.pop_var(arg);
+                        }
 
-                    result
-                })));
+                        result
+                    })));
 
-                Lazy::new_lambda(value)
+                    value
+                })
             }
         }
     }

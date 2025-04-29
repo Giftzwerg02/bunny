@@ -61,68 +61,63 @@ pub enum Lazy {
         >,
     ),
 
-    Wrapper(
-        Arc<LazyCell<Lazy, Box<dyn FnOnce() -> Lazy>>>,
-    ),
+    // Wrapper(
+    //     Arc<LazyCell<Lazy, Box<dyn FnOnce() -> Lazy>>>,
+    // ),
     Lambda(Arc<LazyCell<LazyLambda, Box<dyn FnOnce() -> LazyLambda>>>),
 }
 
 impl Lazy {
-    pub fn new_int(value: i64) -> Self {
-        let callback: Box<dyn FnOnce() -> i64> = Box::new(move || value);
-        Lazy::Int(Arc::new(LazyCell::new(callback)))
-    }
+    // pub fn new_int(value: i64) -> Self {
+    //     let callback: Box<dyn FnOnce() -> i64> = Box::new(move || value);
+    //     Lazy::Int(Arc::new(LazyCell::new(callback)))
+    // }
+    //
+    // pub fn new_float(value: f64) -> Self {
+    //     let callback: Box<dyn FnOnce() -> f64> = Box::new(move || value);
+    //     Lazy::Float(Arc::new(LazyCell::new(callback)))
+    // }
+    //
+    // pub fn new_string(value: ImString) -> Self {
+    //     let callback: Box<dyn FnOnce() -> ImString> = Box::new(move || value);
+    //     Lazy::String(Arc::new(LazyCell::new(callback)))
+    // }
+    //
+    // pub fn new_color(value: Srgba) -> Self {
+    //     let callback: Box<dyn FnOnce() -> Srgba> = Box::new(move || value);
+    //     Lazy::Color(Arc::new(LazyCell::new(callback)))
+    // }
+    //
+    // pub fn new_array(value: Vector<Lazy>) -> Self {
+    //     let callback: Box<dyn FnOnce() -> Vector<Lazy>> = Box::new(move || value);
+    //     Lazy::Array(Arc::new(LazyCell::new(callback)))
+    // }
+    //
+    // pub fn new_dict(value: HashMap<Value, Lazy>) -> Self {
+    //     let callback: Box<dyn FnOnce() -> HashMap<Value, Lazy>> = Box::new(move || value);
+    //     Lazy::Dict(Arc::new(LazyCell::new(callback)))
+    // }
+    //
+    // pub fn new_lambda(value: LazyLambda) -> Self {
+    //     let callback: Box<dyn FnOnce() -> LazyLambda> = Box::new(move || value);
+    //     Lazy::Lambda(Arc::new(LazyCell::new(callback)))
+    // }
 
-    pub fn new_float(value: f64) -> Self {
-        let callback: Box<dyn FnOnce() -> f64> = Box::new(move || value);
-        Lazy::Float(Arc::new(LazyCell::new(callback)))
-    }
-
-    pub fn new_string(value: ImString) -> Self {
-        let callback: Box<dyn FnOnce() -> ImString> = Box::new(move || value);
-        Lazy::String(Arc::new(LazyCell::new(callback)))
-    }
-
-    pub fn new_color(value: Srgba<u8>) -> Self {
-        let callback: Box<dyn FnOnce() -> Srgba<u8>> = Box::new(move || value);
-        Lazy::Color(Arc::new(LazyCell::new(callback)))
-    }
-
-    pub fn new_array(value: Vector<Lazy>) -> Self {
-        let callback: Box<dyn FnOnce() -> Vector<Lazy>> = Box::new(move || value);
-        Lazy::Array(Arc::new(LazyCell::new(callback)))
-    }
-
-    pub fn new_dict(value: HashMap<Value, Lazy>) -> Self {
-        let callback: Box<dyn FnOnce() -> HashMap<Value, Lazy>> = Box::new(move || value);
-        Lazy::Dict(Arc::new(LazyCell::new(callback)))
-    }
-
-    pub fn new_lambda(value: LazyLambda) -> Self {
-        let callback: Box<dyn FnOnce() -> LazyLambda> = Box::new(move || value);
-        Lazy::Lambda(Arc::new(LazyCell::new(callback)))
-    }
-
-    pub fn new_opaque(value: Element) -> Self {
-        let callback: Box<dyn FnOnce() -> Element> = Box::new(move || value);
-        Lazy::Opaque(Arc::new(LazyCell::new(callback)))
-    }
-
-    pub fn wrap(f: Box<dyn FnOnce() -> Lazy>) -> Self {
-        Lazy::Wrapper(Arc::new(LazyCell::new(f)))
-    }
-
-    pub fn nowrap(self) -> Self {
-        match self {
-            Lazy::Wrapper(wrapped) => {
-                let a = (*wrapped.clone()).clone();
-                a
-            },
-            _ => {
-                self
-            }
-        }
-    }
+    // pub fn wrap(f: Box<dyn FnOnce() -> Lazy>) -> Self {
+    //     Lazy::Wrapper(Arc::new(LazyCell::new(f)))
+    // }
+    //
+    // pub fn nowrap(self) -> Self {
+    //     match self {
+    //         Lazy::Wrapper(wrapped) => {
+    //             let a = (*wrapped.clone()).clone();
+    //             a
+    //         },
+    //         _ => {
+    //             self
+    //         }
+    //     }
+    // }
 
     pub fn eval(self) -> Value {
         match self {
@@ -150,10 +145,10 @@ impl Lazy {
             }
             Lazy::Lambda(lazy_cell) => Value::Lambda((**lazy_cell).clone()),
 
-            Lazy::Wrapper(_) => {
-                let inner = self.nowrap();
-                inner.eval()
-            }
+            // Lazy::Wrapper(_) => {
+            //     let inner = self.nowrap();
+            //     inner.eval()
+            // }
         }
     }
 }
@@ -193,33 +188,32 @@ impl Value {
 }
 
 // TODO: this seems... wrong
-impl Into<Lazy> for Value {
-    fn into(self) -> Lazy {
-        match self {
-            Value::Int(int) => Lazy::new_int(int),
-
-            Value::Float(float) => Lazy::new_float(float),
-
-            Value::String(string) => Lazy::new_string(string),
-
-            Value::Color(color) => Lazy::new_color(color),
-
-            Value::Array(arr) => {
-                let arr = arr.into_iter().map(|e| e.into()).collect();
-                Lazy::new_array(arr)
-            },
-
-            Value::Dict(dict) => {
-                let dict = dict.into_iter().map(|(k, v)| (k, v.into())).collect();
-                Lazy::new_dict(dict)
-            },
-
-            Value::Lambda(lambda) => Lazy::new_lambda(lambda),
-
-            Value::Opaque(opaque) => Lazy::new_opaque(opaque),
-        }
-    }
-}
+// NOTE: It w as wrong!
+// impl Into<Lazy> for Value {
+//     fn into(self) -> Lazy {
+//         match self {
+//             Value::Int(int) => Lazy::new_int(int),
+//
+//             Value::Float(float) => Lazy::new_float(float),
+//
+//             Value::String(string) => Lazy::new_string(string),
+//
+//             Value::Color(color) => Lazy::new_color(color),
+//
+//             Value::Array(arr) => {
+//                 let arr = arr.into_iter().map(|e| e.into()).collect();
+//                 Lazy::new_array(arr)
+//             },
+//
+//             Value::Dict(dict) => {
+//                 let dict = dict.into_iter().map(|(k, v)| (k, v.into())).collect();
+//                 Lazy::new_dict(dict)
+//             },
+//
+//             Value::Lambda(lambda) => Lazy::new_lambda(lambda),
+//         }
+//     }
+// }
 
 impl Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -270,9 +264,42 @@ impl PartialEq for LazyLambda {
     }
 }
 
+// #[macro_export]
+// macro_rules! lwrap {
+//     ($body:expr) => {
+//         Lazy::wrap(Box::new(move || $body))
+//     };
+// }
+
 #[macro_export]
-macro_rules! lwrap {
-    ($body:expr) => {
-        Lazy::wrap(Box::new(move || $body))
-    };
+macro_rules! lazy {
+    ($value:ident, $to:expr) => {{
+        match $value {
+            Lazy::Int(lazy_cell) => lazy!(Lazy::Int, $to),
+            Lazy::Float(lazy_cell) => lazy!(Lazy::Float, $to),
+            Lazy::String(lazy_cell) => lazy!(Lazy::String, $to),
+            Lazy::Color(lazy_cell) => lazy!(Lazy::Color, $to),
+            Lazy::Opaque(lazy_cell) => todo!(),
+            Lazy::Array(lazy_cell) => todo!(),
+            Lazy::Dict(lazy_cell) => todo!(),
+            Lazy::Lambda(lazy_cell) => todo!(),
+        } 
+    }};
+    ($type:path, $value:expr) => {{
+        let callback = Box::new(move || $value);
+        $type(Arc::new(core::cell::LazyCell::new(callback)))
+    }};
 }
+
+// fn a(val: Lazy) {
+//     match val {
+//         Lazy::Int(lazy_cell) => lazy!(Lazy::Int, $value),
+//         Lazy::Float(lazy_cell) => lazy!(Lazy::Float, $value),
+//         Lazy::String(lazy_cell) => todo!(),
+//         Lazy::Color(lazy_cell) => todo!(),
+//         Lazy::Opaque(lazy_cell) => todo!(),
+//         Lazy::Array(lazy_cell) => todo!(),
+//         Lazy::Dict(lazy_cell) => todo!(),
+//         Lazy::Lambda(lazy_cell) => todo!(),
+//     }
+// }

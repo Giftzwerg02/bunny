@@ -8,7 +8,7 @@ use crate::library::runnable_expression::InterpreterSymbolTable;
 use crate::runner::value::Lazy;
 use crate::types::InferenceState;
 use crate::types::util::*;
-use crate::{eval, library};
+use crate::{eval, lazy, library};
 
 pub mod macros;
 pub mod runnable_expression;
@@ -21,13 +21,13 @@ pub struct Library<'a> {
 
 macro_rules! ltrue {
     () => {
-       Lazy::new_int(1)
+        lazy!(Lazy::Int, 1)
     };
 }
 
 macro_rules! lfalse {
     () => {
-       Lazy::new_int(0)
+        lazy!(Lazy::Int, 0)
     };
 }
 
@@ -40,12 +40,24 @@ pub fn standard_library<'a>() -> Library<'a> {
 
         #[| a:int() => b:int() => ret:int()]
         fn "+"(Lazy::Int(a), Lazy::Int(b)) {
-            Lazy::new_int(eval!(a) + eval!(b))
+            let a = a.clone();
+            let b = b.clone();
+            lazy!(Lazy::Int, {
+                let a = **a;
+                let b = **b;
+                a + b
+            })
         }
 
         #[| a:int() => b:int() => ret:int()]
         fn "-"(Lazy::Int(a), Lazy::Int(b)) {
-            Lazy::new_int(eval!(a) - eval!(b))
+            let a = a.clone();
+            let b = b.clone();
+            lazy!(Lazy::Int, {
+                let a = **a;
+                let b = **b;
+                a - b
+            })
         }
 
         #[| a:int() => b:int() => ret:int()]
@@ -65,8 +77,11 @@ pub fn standard_library<'a>() -> Library<'a> {
 
         #[forall a | arr:array(&a) => ret:int() ]
         fn "len"(Lazy::Array(v)) {
-            let len = v.len();
-            Lazy::new_int(len as i64)
+            let v = v.clone();
+            lazy!(Lazy::Int, {
+                let len = v.len();
+                len as i64
+            })
         }
 
         #[forall a | arr:array(&a) => idx:int() => ret:a ]
@@ -77,13 +92,17 @@ pub fn standard_library<'a>() -> Library<'a> {
 
         #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => ret:b ]
         fn "map"(Lazy::Lambda(f), Lazy::Array(v)) {
-            let mut f = f.func.lock().unwrap();
-            let mut res = vec![];
-            for elem in eval!(v) {
-                let mapped = f(vec![elem.clone()].into());
-                res.push(mapped);
-            }
-            Lazy::new_array(res.into())
+            let f = f.clone();
+            let v = v.clone();
+            lazy!(Lazy::Array, {
+                let mut f = f.func.lock().unwrap();
+                let mut res = vec![];
+                for elem in (**v).clone() {
+                    let mapped = f(vec![elem.clone()].into());
+                    res.push(mapped);
+                }
+                res.into()
+            })
         }
 
         #[forall a, b | fun:func2(&b, &a, &b) => ground:b => arr:array(&a) => ret:b]
@@ -98,19 +117,27 @@ pub fn standard_library<'a>() -> Library<'a> {
 
         #[forall a | arr:array(&a) => val:a => ret:array(&a)]
         fn "append" (Lazy::Array(a), val) {
-            let mut res = eval!(a);
-            res.push_back(val.clone());
-            Lazy::new_array(res)
+            let a = a.clone();
+            let val = val.clone();
+            lazy!(Lazy::Array, {
+                let mut res = eval!(a);
+                res.push_back(val);
+                res
+            })
         }
 
         #[| from:int() => to:int() => res:array(&int())]
         fn "range" (Lazy::Int(from), Lazy::Int(to)) {
-            let from = eval!(from);
-            let to = eval!(to);
-            let range: Vec<_> = (from..to)
-                .map(Lazy::new_int)
-                .collect();
-            Lazy::new_array(range.into())
+            let from = from.clone();
+            let to = to.clone();
+            lazy!(Lazy::Array, {
+                let from = **from;
+                let to = **to;
+                let range = (from..to)
+                    .map(|i| lazy!(Lazy::Int, i))
+                    .collect();
+                range
+            })
         }
 
         #[forall a | val:a.clone() => ret:a]
@@ -130,13 +157,76 @@ pub fn standard_library<'a>() -> Library<'a> {
 
         #[forall a | elem:a => ret:a]
         fn "print"(elem){
-            println!("Evaluated: {:?}", elem.clone().eval());
-            elem.clone()
+            let elem = elem.clone();
+            match elem {
+                Lazy::Int(ref lazy_cell) => {
+                    let res = lazy_cell.clone();
+                    lazy!(Lazy::Int, {
+                        println!("Evaluated: {:?}", elem.clone().eval());
+                        eval!(res)
+                    })
+                },
+                Lazy::Float(ref lazy_cell) => {
+                    let res = lazy_cell.clone();
+                    lazy!(Lazy::Float, {
+                        println!("Evaluated: {:?}", elem.clone().eval());
+                        eval!(res)
+                    })
+                }
+                Lazy::String(ref lazy_cell) => {
+                    let res = lazy_cell.clone();
+                    lazy!(Lazy::String, {
+                        println!("Evaluated: {:?}", elem.clone().eval());
+                        let res = eval!(res);
+                        res
+                    })
+                },
+                Lazy::Color(ref lazy_cell) => {
+                    let res = lazy_cell.clone();
+                    lazy!(Lazy::Color, {
+                        println!("Evaluated: {:?}", elem.clone().eval());
+                        eval!(res)
+                    })
+                },
+                Lazy::Opaque(ref lazy_cell) => {
+                    let res = lazy_cell.clone();
+                    lazy!(Lazy::Opaque, {
+                        println!("Evaluated: {:?}", elem.clone().eval());
+                        eval!(res)
+                    })
+                },
+                Lazy::Array(ref lazy_cell) => {
+                    let res = lazy_cell.clone();
+                    lazy!(Lazy::Array, {
+                        println!("Evaluated: {:?}", elem.clone().eval());
+                        eval!(res)
+                    })
+                },
+                Lazy::Dict(ref lazy_cell) => {
+                    let res = lazy_cell.clone();
+                    lazy!(Lazy::Dict, {
+                        println!("Evaluated: {:?}", elem.clone().eval());
+                        eval!(res)
+                    })
+                },
+                Lazy::Lambda(ref lazy_cell) => {
+                    let res = lazy_cell.clone();
+                    lazy!(Lazy::Lambda, {
+                        println!("Evaluated: {:?}", elem.clone().eval());
+                        eval!(res)
+                    })
+                },
+            }
         }
 
         #[forall a | message:string() => ret:a]
         fn "panic"(Lazy::String(message)) {
-            panic!("panicked: {}", eval!(message))
+            let message = message.clone();
+            // in this case we just choose any lazy-type
+            // since it will panic if this is evaluated anyway
+            lazy!(Lazy::Int, {
+                panic!("panicked: {}", eval!(message))
+            })
         }
 
         #[| a:int() => b:int() => res:int()]
