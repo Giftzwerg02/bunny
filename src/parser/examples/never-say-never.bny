@@ -13,7 +13,10 @@
 			(def two (a) (if a 2 (panic "two")))
 			(def really-no (panic "really-no"))
 			(def res (+ (two 1) val))
-			(if 0 (panic "final") (res))
+			(if 0 
+				(if (panic "no") (panic "if1") (panic "if2"))
+				(res)
+			)
 		))
 		[1 2 3]
 	)

@@ -188,7 +188,7 @@ impl Value {
 }
 
 // TODO: this seems... wrong
-// NOTE: It w as wrong!
+// NOTE: It was wrong!
 // impl Into<Lazy> for Value {
 //     fn into(self) -> Lazy {
 //         match self {
