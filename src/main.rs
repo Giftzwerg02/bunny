@@ -29,7 +29,7 @@ use crate::library::standard_library;
 use crate::types::{typecheck_pass, InferenceState};
 use crate::types::typed::{PolyTypedStageInfo, TypedValue};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let input = fs::read_to_string("src/parser/examples/pass-lambda.bny")?;
+    let input = fs::read_to_string("src/parser/examples/simpler.bny")?;
     let mut pair = BunnyParser::parse(Rule::program, input.leak())?.filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());
@@ -48,11 +48,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut runner = Runner::new();
     let result = runner.run(typ, std_library.runnable);
-    println!("lazy: {:?}", result);
+    let evalled = result.eval();
+    println!("lazy: {:?}", &evalled);
 
     //println!("{}", render_page(result.eval()));
 
-    let svg = render_page(result.eval());
+    let svg = render_page(evalled);
     let mut file = fs::File::create("out.svg")?;
     file.write_all(svg.as_bytes())?;
 

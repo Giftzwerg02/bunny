@@ -1,12 +1,6 @@
 (
 	(def sum (elems) (
-		(foldl
-			(\ (acc elem) (
-				(+ acc (+ 1 elem))
-			))
-			0
-			elems
-		)
+		(foldl + 0 elems)
 	))
 
 	(sum [1 5 7 69])

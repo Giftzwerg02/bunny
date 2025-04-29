@@ -35,7 +35,8 @@ pub fn standard_library<'a>() -> Library<'a> {
     library! {
         #[| a:int() => ret:int()]
         fn "neg"(Lazy::Int(a)) {
-            Lazy::new_int(-eval!(a))
+            let a = a.clone();
+            lazy!(Lazy::Int, -eval!(a))
         }
 
         #[| a:int() => b:int() => ret:int()]
@@ -60,12 +61,16 @@ pub fn standard_library<'a>() -> Library<'a> {
 
         #[| a:int() => b:int() => ret:int()]
         fn "*"(Lazy::Int(a), Lazy::Int(b)) {
-            Lazy::new_int(eval!(a) * eval!(b))
+            let a = a.clone();
+            let b = b.clone();
+            lazy!(Lazy::Int, eval!(a) * eval!(b))
         }
 
         #[| a:int() => b:int() => ret:int()]
         fn "/"(Lazy::Int(a), Lazy::Int(b)) {
-            Lazy::new_int(eval!(a) / eval!(b))
+            let a = a.clone();
+            let b = b.clone();
+            lazy!(Lazy::Int, eval!(a) / eval!(b))
         }
 
         #[forall a | arr:array(&a) => ret:a ]
@@ -275,53 +280,68 @@ pub fn standard_library<'a>() -> Library<'a> {
 
         #[| x:int() => y:int() => radius:int() => fill:color() => children:array(&opaque()) => ret:opaque()]
         fn "circle"(Lazy::Int(x), Lazy::Int(y), Lazy::Int(radius), Lazy::Color(fill), Lazy::Array(children)){
-            let mut group = Element::new("g");
+            let x = x.clone();
+            let y = y.clone();
+            let radius = radius.clone();
+            let fill = fill.clone();
+            let children = children.clone();
+            lazy!(Lazy::Opaque, {
+                let mut group = Element::new("g");
 
-            let mut circle = esvg::shapes::circle(
-                Point::new(eval!(x) as f32, eval!(y) as f32), // TODO pretty hacky
-                eval!(radius) as i32
-            );
+                let mut circle = esvg::shapes::circle(
+                    Point::new(eval!(x) as f32, eval!(y) as f32), // TODO pretty hacky
+                    eval!(radius) as i32
+                );
 
-            let (r, g, b, a) = eval!(fill).into_components();
+                let (r, g, b, a) = eval!(fill).into_components();
 
-            let color_str = format!("#{:02x}{:02x}{:02x}", r, g, b);  // TODO ignore alpha for now
-            circle.set("fill", color_str);
+                let color_str = format!("#{:02x}{:02x}{:02x}", r, g, b);  // TODO ignore alpha for now
+                circle.set("fill", color_str);
 
-            group.add(&circle);
+                group.add(&circle);
 
-            for child in eval!(children) {
-                let Lazy::Opaque(child) = child else { panic!() };
+                for child in eval!(children) {
+                    let Lazy::Opaque(child) = child else { panic!() };
 
-                group.add(&child);
-            }
+                    group.add(&child);
+                }
 
-            Lazy::new_opaque(group)
+                group
+            })
         }
 
         #[| x:int() => y:int() => w:int() => h:int() => fill:color() => children:array(&opaque()) => ret:opaque()]
         fn "rect"(Lazy::Int(x), Lazy::Int(y), Lazy::Int(w), Lazy::Int(h), Lazy::Color(fill), Lazy::Array(children)){
-            let mut group = Element::new("g");
+            let x = x.clone();
+            let y = y.clone();
+            let w = w.clone();
+            let h = h.clone();
+            let fill = fill.clone();
+            let children = children.clone();
+            lazy!(Lazy::Opaque, {
+                let mut group = Element::new("g");
 
-            let mut rect = esvg::shapes::rectangle(
-                Point::new(eval!(x) as f32, eval!(y) as f32), // TODO pretty hacky
-                eval!(w) as f64,
-                eval!(h) as f64,
-            );
+                let mut rect = esvg::shapes::rectangle(
+                    Point::new(eval!(x) as f32, eval!(y) as f32), // TODO pretty hacky
+                    eval!(w) as f64,
+                    eval!(h) as f64,
+                );
 
-            let (r, g, b, a) = eval!(fill).into_components();
+                let (r, g, b, a) = eval!(fill).into_components();
 
-            let color_str = format!("#{:02x}{:02x}{:02x}", r, g, b); // TODO ignore alpha for now
-            rect.set("fill", color_str);
+                let color_str = format!("#{:02x}{:02x}{:02x}", r, g, b); // TODO ignore alpha for now
+                rect.set("fill", color_str);
 
-            group.add(&rect);
+                group.add(&rect);
 
-            for child in eval!(children) {
-                let Lazy::Opaque(child) = child else { panic!() };
+                for child in eval!(children) {
+                    let Lazy::Opaque(child) = child else { panic!() };
 
-                group.add(&child);
-            }
+                    group.add(&child);
+                }
 
-            Lazy::new_opaque(group)
+                group
+            })
         }
     }
 }
