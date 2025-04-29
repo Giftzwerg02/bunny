@@ -1,0 +1,9 @@
+(
+	(def add2 
+		(\ (elem) (+ elem 2))
+	)
+	(map
+		(return add2)
+		[5 2 3]
+	)
+)
