@@ -35,8 +35,8 @@ pub fn standard_library<'a>() -> Library<'a> {
             let a = a.clone();
             let b = b.clone();
             lazy!(Lazy::Int, {
-                let a = **a;
-                let b = **b;
+                let a = eval!(a);
+                let b = eval!(b);
                 a + b
             })
         }
@@ -46,9 +46,7 @@ pub fn standard_library<'a>() -> Library<'a> {
             let a = a.clone();
             let b = b.clone();
             lazy!(Lazy::Int, {
-                let a = **a;
-                let b = **b;
-                a - b
+                eval!(a) - eval!(b)
             })
         }
 
@@ -129,6 +127,7 @@ pub fn standard_library<'a>() -> Library<'a> {
 
         #[forall a | cond:int() => iftrue:a => iffalse:a => ret:a]
         fn "if"(Lazy::Int(cond), iftrue, iffalse){
+            // TODO: Wrap in lazy like println
             if eval!(cond) != 0 {
                 iftrue.clone()
             }
@@ -159,8 +158,7 @@ pub fn standard_library<'a>() -> Library<'a> {
                     let res = lazy_cell.clone();
                     lazy!(Lazy::String, {
                         println!("Evaluated: {:?}", elem.clone().eval());
-                        let res = eval!(res);
-                        res
+                        eval!(res)
                     })
                 },
                 Lazy::Color(ref lazy_cell) => {
