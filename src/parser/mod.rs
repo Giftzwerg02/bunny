@@ -237,6 +237,32 @@ mod tests {
         }
     }
 
+    mod funccall {
+        use super::*;
+
+        #[test]
+        fn valid_named_argument_list() {
+            parse_valid(Rule::args_list, "(a: 3 b: 5 c d)");
+            parse_valid(Rule::args_list, "(a b: 5 c d)");
+            parse_valid(Rule::func_call, "(def foo (a: 5 b c: 3) \"body\")");
+            parse_valid(Rule::func_call, "(\\ (a: 5 b c: 3) 0) \"body\")");
+        }
+
+        #[test]
+        fn argument_list_can_only_be_put_as_a_func_argument() {
+            let code = r"((a: 5 b c e))";
+            parse_invalid(Rule::func_call, code);
+        }
+
+        #[test]
+        fn valid_multi_funccall() {
+            parse_valid(Rule::func_call, r"(
+                    (+ 1 2)
+                    (+ 4 5)
+            )");
+        }
+    }
+
     mod expr {
         use std::fmt::Display;
 
@@ -245,8 +271,7 @@ mod tests {
 
         use crate::ast::{
             Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallList,
-            FuncCallSingle, Int, NamedArgument, PrettyPrintable, StageInfo,
-            Str, Symbol,
+            FuncCallSingle, Int, NamedArgument, PrettyPrintable, StageInfo, Str, Symbol,
         };
 
         use super::*;
@@ -351,9 +376,7 @@ mod tests {
 
         fn arb_argument(depth: u32) -> impl Strategy<Value = Argument<EmptyStageInfo>> {
             if depth == 0 {
-                return arb_expr(0)
-                    .prop_map(Argument::Positional)
-                    .boxed();
+                return arb_expr(0).prop_map(Argument::Positional).boxed();
             }
 
             prop_oneof![
@@ -440,41 +463,44 @@ mod tests {
 
             let mut pairs = pair.into_inner();
             let first_pair = pairs.next().unwrap();
+            match first_pair.as_rule() {
+                Rule::func_call => {
+                    let FuncCall::List(list) = func else {
+                        prop_assert!(false);
+                        return Ok(());
+                    };
 
-            if first_pair.as_rule() == Rule::func_call {
-                let FuncCall::List(list) = func else {
-                    prop_assert!(false);
-                    return Ok(());
-                };
+                    check_funccall_parse(list.calls[0].clone(), first_pair)?;
 
-                check_funccall_parse(list.calls[0].clone(), first_pair)?;
+                    for call in &list.calls[1..] {
+                        let p = pairs.next().unwrap();
+                        check_funccall_parse(call.clone(), p)?;
+                    }
 
-                for call in &list.calls[1..] {
-                    let p = pairs.next().unwrap();
-                    check_funccall_parse(call.clone(), p)?;
+                    prop_assert!(pairs.next().is_none());
                 }
+                Rule::normal_func_call => {
+                    let mut pairs = first_pair.into_inner();
+                    let FuncCall::Single(single) = func else {
+                        prop_assert!(false);
+                        return Ok(());
+                    };
 
-                prop_assert!(pairs.next().is_none());
-                return Ok(());
-            }
+                    let id = pairs.next().expect("normal_func_call::id");
+                    check_expr_parse(Expr::Symbol(single.id), id)?;
 
-            if first_pair.as_rule() == Rule::identifier {
-                let FuncCall::Single(single) = func else {
-                    prop_assert!(false);
-                    return Ok(());
-                };
-                
-                let mut arg_pairs = pairs.next().expect("funcargs").into_inner();
-                for arg in single.args {
-                    let p = arg_pairs.next().unwrap();
-                    check_argument_parse(arg, p)?;
+                    let mut arg_pairs = pairs.next().expect("funcargs").into_inner();
+                    for arg in single.args {
+                        let p = arg_pairs.next().unwrap();
+                        check_argument_parse(arg, p)?;
+                    }
+
+                    prop_assert!(pairs.next().is_none());
+                },
+                _ => {
+                    prop_assert!(false, "actual: {first_pair}");
                 }
-
-                prop_assert!(pairs.next().is_none());
-                return Ok(());
-            }
-
-            prop_assert!(false, "actual: {first_pair}");
+            };
             Ok(())
         }
 
@@ -487,7 +513,8 @@ mod tests {
                 | Rule::WHITESPACE
                 | Rule::COMMENT
                 | Rule::line_comment
-                | Rule::special_char => Ok(()),
+                | Rule::special_char
+                | Rule::args_list => Ok(()),
                 Rule::program => {
                     prop_assert!(false, "should never happen");
                     Ok(())
@@ -528,7 +555,12 @@ mod tests {
                 }
                 Rule::array => {
                     let Expr::Array(array) = expr else {
-                        prop_assert!(false, "expected Array, but got {} for {}", expr.name(), pair.as_str());
+                        prop_assert!(
+                            false,
+                            "expected Array, but got {} for {}",
+                            expr.name(),
+                            pair.as_str()
+                        );
                         return Ok(());
                     };
 
@@ -543,7 +575,10 @@ mod tests {
                     prop_assert!(pairs.next().is_none());
                     Ok(())
                 }
-                Rule::func_call => {
+                Rule::func_call
+                | Rule::normal_func_call
+                | Rule::def_func_call
+                | Rule::lambda_func_call => {
                     let Expr::FuncCall(func) = expr else {
                         prop_assert!(false);
                         return Ok(());
@@ -554,9 +589,14 @@ mod tests {
                     prop_assert!(false, "should not be checked here");
                     Ok(())
                 }
-                Rule::identifier => {
+                Rule::identifier | Rule::def_id | Rule::lambda_id => {
                     let Expr::Symbol(_) = expr else {
-                        prop_assert!(false, "expected Symbol, but got {} for {}", expr.name(), pair.as_str());
+                        prop_assert!(
+                            false,
+                            "expected Symbol, but got {} for {}",
+                            expr.name(),
+                            pair.as_str()
+                        );
                         return Ok(());
                     };
 
@@ -564,7 +604,12 @@ mod tests {
                 }
                 Rule::int => {
                     let Expr::Int(_) = expr else {
-                        prop_assert!(false, "expected Int, but got {} for {}", expr.name(), pair.as_str());
+                        prop_assert!(
+                            false,
+                            "expected Int, but got {} for {}",
+                            expr.name(),
+                            pair.as_str()
+                        );
                         return Ok(());
                     };
 
@@ -572,7 +617,12 @@ mod tests {
                 }
                 Rule::float => {
                     let Expr::Float(_) = expr else {
-                        prop_assert!(false, "expected Float, but got {} for {}", expr.name(), pair.as_str());
+                        prop_assert!(
+                            false,
+                            "expected Float, but got {} for {}",
+                            expr.name(),
+                            pair.as_str()
+                        );
                         return Ok(());
                     };
 

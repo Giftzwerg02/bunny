@@ -28,8 +28,29 @@ array = {
 	"[" ~ expr* ~ "]"
 }
 
-func_call = {
+args_list = {
+	"(" ~ func_arguments ~ ")"
+}
+
+lambda_id = { "\\" }
+def_id = { "def" }
+
+lambda_func_call = {
+	"(" ~ lambda_id ~ args_list? ~ expr ~ ")"
+}
+
+def_func_call = {
+	"(" ~ def_id ~ identifier ~ args_list? ~ expr ~ ")"
+}
+
+normal_func_call = {
 	"(" ~ identifier ~ func_arguments ~ ")"
+}
+
+func_call = {
+	def_func_call
+	| lambda_func_call
+	| normal_func_call
 	| "(" ~ func_call* ~ ")"
 }
 

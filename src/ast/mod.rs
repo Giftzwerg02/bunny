@@ -570,6 +570,40 @@ impl<I: StageInfo> Argument<I> {
             Argument::Named(named_argument) => Argument::Named(named_argument.map_stage(f)),
         }
     }
+
+    pub fn name(&self) -> String {
+        match self {
+            Argument::Positional(_) => "argument::positional",
+            Argument::Named(_) => "argument::named",
+        }.to_string()
+    }
+
+    // TODO: Maybe create a second "DefArgument" type? e.g.
+    // struct DefArgument {
+    //   name: Symbol<I>,
+    //   default: Option<Expr<I>>,
+    //   info: I,
+    // }
+    pub fn into_def_argument_symbol(&self) -> Symbol<I> {
+        match self {
+            Argument::Positional(expr) => {
+                let Expr::Symbol(sym) = expr else {
+                    panic!("invalid ast");
+                };
+                sym.clone()
+            }
+            Argument::Named(named_argument) => named_argument.name.clone(),
+        }
+    }
+
+    pub fn into_def_argument_expr(&self) -> Option<Expr<I>> {
+        match self {
+            Argument::Positional(_) => { // this is the identifier
+                None
+            }
+            Argument::Named(named_argument) => Some(*named_argument.value.clone()),
+        }
+    }
 }
 
 impl<I: StageInfo> PrettyPrintable for Argument<I> {
@@ -847,13 +881,13 @@ impl<I: StageInfo> Display for DictEntry<I> {
 
 #[derive(Debug, Clone)]
 pub struct Lambda<I: StageInfo> {
-    pub args: Vec<Symbol<I>>,
+    pub args: Vec<Argument<I>>,
     pub body: Box<Expr<I>>,
     pub info: I,
 }
 
 impl<I: StageInfo> Lambda<I> {
-    fn new(args: Vec<Symbol<I>>, body: Expr<I>, info: I) -> Self {
+    fn new(args: Vec<Argument<I>>, body: Expr<I>, info: I) -> Self {
         Self { args, body: Box::new(body), info }
     }
 
@@ -861,7 +895,7 @@ impl<I: StageInfo> Lambda<I> {
         Self::new(vec![], body, info)
     }
 
-    pub fn parametric(args: Vec<Symbol<I>>, body: Expr<I>, info: I) -> Self {
+    pub fn parametric(args: Vec<Argument<I>>, body: Expr<I>, info: I) -> Self {
         Self::new(args, body, info)
     }
 

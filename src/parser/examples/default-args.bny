@@ -1,0 +1,4 @@
+(
+	(def foo (a: 5 b) (+ a b))
+	(foo b: 3)
+)
