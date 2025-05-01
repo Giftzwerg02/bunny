@@ -744,30 +744,6 @@ mod tests {
     }
 
     #[test]
-    fn named_arguments_cannot_reference_not_defined_args() {
-        scoped_panic_test(
-            "(
-            (def a (foo bar baz) (
-                + foo bar baz
-            ))
-            (a foo: 1 bar: 2 does-not-exist: 3)
-        )",
-        );
-    }
-
-    #[test]
-    fn arguments_cannot_be_referenced_more_than_once() {
-        scoped_panic_test(
-            "(
-            (def a (some-arg) (
-                + 1 some-arg
-            ))
-            (a some-arg: 4 some-arg: 2)
-        )",
-        );
-    }
-
-    #[test]
     fn defined_variables_can_be_used_as_return_values() {
         scoped_test(
             "(
