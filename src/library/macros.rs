@@ -1,3 +1,5 @@
+use im::HashMap;
+
 #[macro_export]
 macro_rules! library {
     ( $(
@@ -6,7 +8,7 @@ macro_rules! library {
        )* ) => {{
             let mut scoped: $crate::ast::scoped::SymbolTable<$crate::ast::scoped::ScopedStageInfo> = $crate::ast::scoped::SymbolTable::new();
             let mut typed = $crate::types::InferenceState::new();
-            let mut runnable: $crate::library::InterpreterSymbolTable = $crate::library::InterpreterSymbolTable::new();
+            let mut runnable = $crate::library::InterpreterSymbolTable::new();
 
             scoped.insert("def".to_string(), $crate::ast::scoped::SymbolValue::Defined);
             scoped.insert("\\".to_string(), $crate::ast::scoped::SymbolValue::Defined);

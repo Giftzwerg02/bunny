@@ -1,4 +1,6 @@
 (
-	(def foo (a: 5 b) (+ a b))
-	(foo b: 3)
+	(def add (a b) (+ a b))
+	(def add1 (e) (add 1 b: e))
+	(def foo (c d) (c d))
+	(foo add1 d: 3)
 )

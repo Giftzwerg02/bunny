@@ -1,5 +1,8 @@
 use std::{
-    cell::LazyCell, collections::HashMap, fmt::Display, sync::{Arc, Mutex}
+    cell::LazyCell,
+    collections::HashMap,
+    fmt::Display,
+    sync::{Arc, Mutex},
 };
 
 use im::Vector;
@@ -7,7 +10,10 @@ use palette::Srgba;
 use value::{Lazy, LazyLambda, Value};
 
 use crate::{
-    ast::{Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo}, lazy, library::runnable_expression::{InterpreterSymbolTable, RunnableExpr}, types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue}
+    ast::{Argument, Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo, Symbol},
+    lazy,
+    library::runnable_expression::{InterpreterSymbolTable, RunnableExpr},
+    types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue},
 };
 
 pub mod value;
@@ -88,16 +94,14 @@ impl Runner {
     ) -> Lazy {
         match expr {
             Expr::Int(int) => {
-                lazy!(Lazy::Int, {
-                    int.value.try_into().expect("uint too large")
-                })
-            },
+                lazy!(Lazy::Int, { int.value.try_into().expect("uint too large") })
+            }
             Expr::Float(float) => {
                 lazy!(Lazy::Float, float.value)
-            },
+            }
             Expr::String(string) => {
                 lazy!(Lazy::String, string.value.into())
-            },
+            }
             Expr::Color(color) => {
                 lazy!(Lazy::Color, {
                     // TODO: add alpha to color...?
@@ -197,49 +201,93 @@ impl Runner {
                     return (*native)(args.clone());
                 };
 
-                let Expr::Lambda(implementation) = implementation else {
-                    panic!("invalid ast");
-                };
+                match implementation {
+                    // i.e., the argument is used as a function
+                    Expr::Symbol(symbol) => {
+                        // since the argument is used as a function, the Lazy must be a Lambda
+                        let Lazy::Lambda(lambda) = self.read_var(symbol.value.clone()) else {
+                            panic!("argument must be a lambda")
+                        };
 
-                let lambda = implementation;
-                for (pos, arg) in func.args.iter().cloned().enumerate() {
-                    match arg {
-                        crate::ast::Argument::Positional(arg_expr) => {
-                            let arg_sym = lambda.args[pos].clone();
-                            let arg_value = self.run(arg_expr, syms.clone());
-                            self.push_var(arg_sym.value, arg_value);
-                        }
-                        crate::ast::Argument::Named(named_argument) => {
-                            let arg_value = self.run(*named_argument.value, syms.clone());
-                            self.push_var(named_argument.name.value, arg_value);
-                        }
+                        let args = func.args.into_iter().map(|arg| {
+                            match arg {
+                                Argument::Positional(expr) => {
+                                    self.run(expr, syms.clone())
+                                },
+                                Argument::Named(_) => {
+                                    panic!("named arguments are not allowed when passing to an argument-lambda")
+                                },
+                            }
+                        }).collect();
+
+                        let lambda_call = (**lambda).clone().func;
+                        let mut lambda_call = lambda_call.lock().unwrap();
+                        lambda_call(args)
                     }
+                    Expr::Lambda(lambda) => {
+                        let mut lambda_set_args = lambda.clone();
+                        let lambda_pop_args = lambda.clone();
+                        let mut already_set_arguments = vec![];
+                        for (pos, arg) in func.args.iter().cloned().enumerate() {
+                            match arg {
+                                crate::ast::Argument::Positional(arg_expr) => {
+                                    let arg_sym = lambda.args[pos].into_def_argument_symbol();
+                                    already_set_arguments.push(arg_sym.clone());
+                                    let arg_value = self.run(arg_expr, syms.clone());
+                                    self.push_var(arg_sym.value, arg_value);
+                                }
+                                crate::ast::Argument::Named(named_argument) => {
+                                    already_set_arguments.push(named_argument.name.clone());
+                                    let arg_value = self.run(*named_argument.value, syms.clone());
+                                    self.push_var(named_argument.name.value, arg_value);
+                                }
+                            }
+                        }
+
+                        // remove already set arguments
+                        for already_set_arg in already_set_arguments {
+                            pop_arg_by_name(&mut lambda_set_args.args, &already_set_arg);
+                        }
+
+                        // apply the default-value for the remaining ones
+                        // since this passed the type-checker, we can assume
+                        // that earch remaining argument here actually has a default-value
+                        for arg in lambda_set_args.args {
+                            let name = arg.into_def_argument_symbol();
+                            let default_value = arg
+                                .into_def_argument_expr()
+                                .expect("non-set argument should have a default value");
+                            let default_value = self.run(default_value, syms.clone());
+                            self.push_var(name.value, default_value);
+                        }
+
+                        // TODO: can we get rid of this clone?
+                        let body: Box<Expr<PolyTypedStageInfo<'_>>> = lambda.clone().body;
+                        let result = self.run(*body, syms);
+
+                        for arg in lambda_pop_args.args {
+                            self.pop_var(arg.into_def_argument_symbol().value);
+                        }
+
+                        result
+                    }
+                    _ => panic!("invalid ast"),
                 }
-
-                // TODO: can we get rid of this clone?
-                let body: Box<Expr<PolyTypedStageInfo<'_>>> = lambda.clone().body;
-                let result = self.run(*body, syms);
-
-                for arg in lambda.clone().args {
-                    self.pop_var(arg.value);
-                }
-
-                result
             }
             Expr::Lambda(lambda) => {
                 // A lambda should return a lazy of
                 // a function that takes some arguments and returns a result
-                
+
                 // auto-execute constant definition
                 if lambda.args.len() == 0 {
                     return self.run(*lambda.body, syms.clone());
                 }
-                
+
                 let lambda_args = Arc::new(
                     lambda
                         .args
                         .iter()
-                        .map(|arg| arg.value.clone())
+                        .map(|arg| arg.into_def_argument_symbol().value.clone())
                         .collect::<Vec<_>>(),
                 );
 
@@ -297,6 +345,14 @@ impl Runner {
             .read()
             .expect(&format!("read_var: invalid stack: {sym}"))
     }
+}
+
+fn pop_arg_by_name<I: StageInfo>(args: &mut Vec<Argument<I>>, name: &Symbol<I>) {
+    let idx = args
+        .iter()
+        .position(|arg| arg.into_def_argument_symbol().value == name.value)
+        .expect("called pop_arg_by_name with non-existent symbol-name");
+    args.remove(idx);
 }
 
 // #[derive(Debug, Clone)]

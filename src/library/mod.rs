@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use esvg::Element;
 use polygonical::point::Point;
+pub use runnable_expression::InterpreterSymbolTable;
 
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
-use crate::library::runnable_expression::InterpreterSymbolTable;
 use crate::runner::value::Lazy;
 use crate::types::InferenceState;
 use crate::types::util::*;

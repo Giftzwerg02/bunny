@@ -10,6 +10,8 @@ pub struct BunnyParser;
 mod tests {
     // NOTE: put imports here to use them in sub-modules via `use super::*`
 
+    use crate::ast::parsed::parsed_expr_pass;
+
     use super::*;
     use const_format::formatcp;
     use pest::{error::Error, iterators::Pairs};
@@ -63,6 +65,24 @@ mod tests {
             res.unwrap()
         );
         Ok(res.expect_err("we just checked this..."))
+    }
+        
+    fn pass_valid<'a>(mut pair: Pairs<'a, Rule>) {
+        parsed_expr_pass(pair.next().expect("called pass_valid with a non-program"));
+    }
+
+    fn pass_invalid<'a>(mut pair: Pairs<'a, Rule>) {
+        let p = pair.next().expect("called pass_valid with a non-program");
+        let p_clone = p.clone();
+        let res = std::panic::catch_unwind(move || {
+            parsed_expr_pass(p);
+        });
+
+        assert!(
+            res.is_err(),
+            "Illegally finished parsed_expr_pass on invalid input: {}",
+            p_clone.as_str()
+        )
     }
 
     mod constants {
@@ -246,6 +266,7 @@ mod tests {
             parse_valid(Rule::args_list, "(a b: 5 c d)");
             parse_valid(Rule::func_call, "(def foo (a: 5 b c: 3) \"body\")");
             parse_valid(Rule::func_call, "(\\ (a: 5 b c: 3) 0) \"body\")");
+            parse_valid(Rule::func_call, "((def foo (a: 5 b c: 3) \"body\"))");
         }
 
         #[test]
@@ -256,10 +277,31 @@ mod tests {
 
         #[test]
         fn valid_multi_funccall() {
-            parse_valid(Rule::func_call, r"(
+            parse_valid(
+                Rule::func_call,
+                r"(
                     (+ 1 2)
                     (+ 4 5)
-            )");
+            )",
+            );
+        }
+
+        #[test]
+        fn named_arguments_must_be_after_all_positional_args_in_normal_funccalls() {
+            let fail_pair = parse_valid(Rule::func_call, r"(test a: 5 3)");
+            pass_invalid(fail_pair);
+
+            let fail_pair = parse_valid(Rule::func_call, r"((test a: 5 3))");
+            pass_invalid(fail_pair);
+
+            let fail_pair = parse_valid(Rule::func_call, r"(test 2 6 a: 5 3)");
+            pass_invalid(fail_pair);
+
+            let ok_pair = parse_valid(Rule::func_call, r"(test 2 6 5 a: 3 b: 6)");
+            pass_valid(ok_pair);
+
+            let ok_pair = parse_valid(Rule::func_call, r"((test 2 6 5 a: 3 b: 6))");
+            pass_valid(ok_pair);
         }
     }
 
@@ -496,7 +538,7 @@ mod tests {
                     }
 
                     prop_assert!(pairs.next().is_none());
-                },
+                }
                 _ => {
                     prop_assert!(false, "actual: {first_pair}");
                 }

@@ -208,37 +208,47 @@ pub fn scoped_expr_pass<'a>(
                      *  (aoefjwiaoefj (a b c) (+ a b c))
                      */
 
-                    let SymbolValue::FunctionDefinition(func_declaration) = func_declaration else {
-                        panic!(
-                            "({}): symbol is not a function: {}: {}",
-                            func_call_single.id.value,
-                            type_name_of_val(&func_declaration),
-                            func_declaration.name()
-                        );
-                    };
 
-                    let mut used = vec![];
-                    for arg in &func_call_single.args {
-                        if let Argument::Named(arg) = arg {
-                            let name = &arg.name;
+                    // TODO: need to move this to typcheck-pass
+                    // let func_declaration = match func_declaration {
+                    //     SymbolValue::Argument(argument) => {
+                    //         
+                    //     },
+                    //     SymbolValue::FunctionDefinition(lambda) => {
+                    //         lambda
+                    //     },
+                    //     _ => {
+                    //         panic!(
+                    //             "({}): symbol is not a function (or an arg used as a function): {}: {}",
+                    //             func_call_single.id.value,
+                    //             type_name_of_val(&func_declaration),
+                    //             func_declaration.name(),
+                    //         )
+                    //     }
+                    // };
 
-                            let mut found = false;
-                            for decl_arg in &func_declaration.args {
-                                let decl_arg_sym = decl_arg.into_def_argument_symbol();
-                                if decl_arg_sym.value == name.value {
-                                    found = true;
-                                    if used.contains(&name.value) {
-                                        panic!("used named argument twice");
-                                    }
-                                    used.push(name.value.clone());
-                                }
-                            }
-
-                            if !found {
-                                panic!("named argument references unknown parameter: {}", name);
-                            }
-                        }
-                    }
+                    // let mut used = vec![];
+                    // for arg in &func_call_single.args {
+                    //     if let Argument::Named(arg) = arg {
+                    //         let name = &arg.name;
+                    //
+                    //         let mut found = false;
+                    //         for decl_arg in &func_declaration.args {
+                    //             let decl_arg_sym = decl_arg.into_def_argument_symbol();
+                    //             if decl_arg_sym.value == name.value {
+                    //                 found = true;
+                    //                 if used.contains(&name.value) {
+                    //                     panic!("used named argument twice");
+                    //                 }
+                    //                 used.push(name.value.clone());
+                    //             }
+                    //         }
+                    //
+                    //         if !found {
+                    //             panic!("named argument references unknown parameter: {}", name);
+                    //         }
+                    //     }
+                    // }
 
                     let mapped_args = func_call_single
                         .args
@@ -353,6 +363,7 @@ fn pass_arg_def<'a>(
         Argument::Named(named_argument) => {
             let name = pass_symbol(named_argument.name, syms.clone());
             let expr = *named_argument.value;
+            dbg!(&expr);
             let expr = scoped_expr_pass(expr, syms);
             Argument::Named(NamedArgument::new(
                 name,
@@ -1053,6 +1064,17 @@ mod tests {
                 (+ 30 (a bla: 3))
             )
         ",
+        )
+    }
+
+    #[test]
+    fn def_default_arguments_may_appear_in_any_order_with_non_default_args() {
+        scoped_test(
+            r"
+            (
+                (def foo (a: 5 b c: 2) (+ a (+ b c)))
+            )
+            "
         )
     }
 }

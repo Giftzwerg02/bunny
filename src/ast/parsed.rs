@@ -96,7 +96,7 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
             }
 
             let mut pairs = pair.clone().into_inner().filter(is_not_comment);
-            let next = pairs.next().unwrap_or_else(|| panic!("funccall id {pair}"));
+            let next = pairs.next().unwrap_or_else(|| panic!("funccall id {pair}: {}", pair.as_str()));
 
             match next.as_rule() {
                 // multi-funccall
@@ -234,10 +234,10 @@ fn info(p: Pair<'_, Rule>) -> ParsedStageInfo<'_> {
 }
 
 fn extract_arguments(p: Pair<'_, Rule>) -> Vec<Argument<ParsedStageInfo<'_>>> {
-    println!("extract_arguments: {:?}", p.as_rule());
-
+    let mut is_args_list = false;
     let pairs = match p.as_rule() {
         Rule::args_list => {
+            is_args_list = true;
             p.into_inner().next().unwrap().into_inner()
         },
         Rule::func_arguments => {
@@ -263,8 +263,8 @@ fn extract_arguments(p: Pair<'_, Rule>) -> Vec<Argument<ParsedStageInfo<'_>>> {
                 Argument::Named(NamedArgument::new(symbol, expr, info(pair)))
             }
             Rule::positional_argument => {
-                if no_more_positional_args {
-                    panic!("positonal arguments not allowed after any named arguments");
+                if !is_args_list && no_more_positional_args {
+                    panic!("positional arguments not allowed after any named arguments");
                 }
 
                 let expr = parsed_expr_pass(inner_pairs.next().expect("expr"));

@@ -54,7 +54,7 @@ func_call = {
 	| "(" ~ func_call* ~ ")"
 }
 
-// maybe ensure positonal-args preceed named-args at parse-time?
+// maybe ensure positional-args preceed named-args at parse-time?
 func_arguments = {
 	(named_argument | positional_argument)*
 }
