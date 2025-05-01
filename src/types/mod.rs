@@ -91,7 +91,7 @@ fn type_stage_info<'a>(
     }
 }
 
-fn infer_argument_definition<'a>(
+fn create_argument_definition<'a>(
     sym: &Symbol<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
 ) -> Symbol<TypedStageInfo<'a>> {
@@ -121,11 +121,16 @@ fn infer_symbol<'a>(
         state.hm.enter_level();
 
         let typed_expr = match scoped_expr {
+            SymbolValue::Argument(Argument::Positional(_)) |
             SymbolValue::Defined =>
-                Expr::Symbol(infer_argument_definition(&sym, state)),
+                // TODO Uhhh, when is this used now?
+                Expr::Symbol(create_argument_definition(&sym, state)),
 
             SymbolValue::FunctionDefinition(lambda) =>
-                Expr::Lambda(infer_lambda(lambda, state))
+                Expr::Lambda(infer_lambda(lambda, state)),
+
+            SymbolValue::Argument(Argument::Named(NamedArgument { value, .. })) => 
+                typecheck_pass(value, state)
         };
 
         let poly_expr = typed_expr.map_stage(
@@ -341,19 +346,41 @@ fn infer_lambda<'a>(
         .clone()
         .args
         .into_iter()
-        .map(|Symbol { value, info }| {
+        .map(|argument| {
+            let info = argument.info();
+            let Symbol { value, .. } = argument.into_def_argument_symbol();
+
             let typed_expr = typed_symbols.get(&value)
                 .expect("Argument value to be typed in symbol table of body");
 
             let typ = typed_expr.inst(&mut state.hm);
 
-            Symbol::new(value, type_stage_info(&info, typ, state))
+            let stage_info = type_stage_info(&info, typ.clone(), state);
+            let symbol = Symbol::new(value, stage_info.clone());
+
+            match argument {
+                Argument::Positional(_) =>
+                    Argument::Positional(Expr::Symbol(symbol)),
+
+                Argument::Named(NamedArgument { value, .. }) => {
+                    let default_value = typecheck_pass(&value, state);
+                    typ.unify(default_value.typ());
+
+                    Argument::Named(
+                        NamedArgument::new(
+                        symbol,
+                            default_value,
+                            stage_info
+                        )
+                    )
+                }
+            }
         })
-        .collect::<Vec<Symbol<TypedStageInfo>>>();
+        .collect::<Vec<Argument<TypedStageInfo>>>();
 
     let arg_types = typed_args
         .iter()
-        .map(|Symbol { info, .. }| info.typ.clone())
+        .map(|arg| arg.info().typ.clone())
         .collect::<Vec<Type>>();
 
     let fun_type = func(&arg_types[..], typed_body.typ());
@@ -387,7 +414,7 @@ mod tests {
         }
     }
 
-    fn prepare_expr<'a>(expr: &'static str, library: &Library) -> Expr<ScopedStageInfo<'a>> {
+    fn prepare_expr<'a>(expr: &'static str, library: &Library<'a>) -> Expr<ScopedStageInfo<'a>> {
         let mut pair = BunnyParser::parse(Rule::program, expr)
             .unwrap()
             .filter(is_not_comment)
