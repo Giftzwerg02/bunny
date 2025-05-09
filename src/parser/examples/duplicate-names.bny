@@ -1,5 +1,5 @@
 (
     (def bar (a) (+ a 1))
 	(def foo (a) (strlen a))
-	(bar (foo "aaa"))
+	(strlen 1)
 )

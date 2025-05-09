@@ -126,20 +126,18 @@ fn create_argument_definition<'a>(
 
 fn unification_error<T>(
     hmerror: HMError,
-    expected: &Type,
-    actual: &Type,
     source: &Option<ParsedStageInfo>
 ) -> Result<T> {
     let token = source.clone().map(|source| {
         let span = source.token.as_span();
-        (span.start(), span.end()).into()
+        (span.start(), span.end() - span.start()).into()
     });
 
     let error = match hmerror {
-        HMError::UnificationError(_, _) => 
+        HMError::UnificationError(a, b) => 
             TypeError {
                 token,
-                advice: format!("Types {expected} and {actual} are not compatible")
+                advice: format!("Types {a} and {b} are not compatible")
             },
 
         HMError::OccursCheckError(typ) => 
@@ -232,8 +230,6 @@ fn infer_single_func_call<'a>(
         if let Err(hmerror) = result {
             return unification_error(
                 hmerror,
-                &current_typ,
-                &constructed_func,
                 &call.info.inner
             );
         }
@@ -331,7 +327,7 @@ fn infer_dict<'a>(
                 state
             )
         ))
-    }
+    };
 
     fn infer_dict_entry<'a>(
         entry: &DictEntry<ScopedStageInfo<'a>>,
@@ -423,8 +419,6 @@ fn infer_lambda<'a>(
                     if let Err(hmerror) = hmerror {
                         return unification_error(
                             hmerror,
-                            &typ,
-                            &default_value.typ(),
                             &Some(stage_info.inner) // TODO Please make this pretty
                         );
                     }

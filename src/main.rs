@@ -18,7 +18,7 @@ use clap::Parser as ClapParser;
 #[allow(unused)]
 use cli::Cli;
 use esvg::{create_document, page::Page};
-use miette::NamedSource;
+use miette::{NamedSource, Result};
 use parser::{BunnyParser, Rule};
 use pest::Parser;
 use runner::{value::{Lazy, Value}, Runner};
@@ -28,22 +28,28 @@ use crate::library::standard_library;
 use crate::types::{typecheck_pass, InferenceState};
 use crate::types::typed::{PolyTypedStageInfo, TypedValue};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let input = fs::read_to_string("src/parser/examples/default-args.bny")?;
 
-    let source = NamedSource::new("src/parser/examples/default-args.bny", input.clone())
+fn main() -> Result<()> {
+    let input = fs::read_to_string("src/parser/examples/duplicate-names.bny").unwrap();
+
+    let source = NamedSource::new("src/parser/examples/duplicate-names.bny", input.clone())
         .with_language("lisp");
 
-    let mut pair = BunnyParser::parse(Rule::program, input.leak())?.filter(is_not_comment);
+    // TODO Use the pest-miette interop
+    let mut pair = BunnyParser::parse(Rule::program, input.leak()).unwrap().filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());
 
     let mut std_library = standard_library();
 
-    let ast = timed!(scoped_expr_pass(ast, &std_library.scoped));
-    println!("{}", ast.pretty_print());
+    let ast = scoped_expr_pass(ast, &std_library.scoped);
+    //println!("{}", ast.pretty_print());
 
-    let typ = typecheck_pass(&ast, &mut std_library.typed);
+    let typ = typecheck_pass(&ast, &mut std_library.typed)
+        .map_err(|report|{
+            report.with_source_code(source)
+        })?;
+
     println!("{}", typ.pretty_print());
 
     let typ = typ.map_stage(
@@ -53,13 +59,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut runner = Runner::new();
     let result = runner.run(typ, std_library.runnable);
     let evalled = result.eval();
-    println!("lazy: {:?}", &evalled);
+    println!("result: {:?}", &evalled);
 
     //println!("{}", render_page(result.eval()));
 
     let svg = render_page(evalled);
-    let mut file = fs::File::create("out.svg")?;
-    file.write_all(svg.as_bytes())?;
+    let mut file = fs::File::create("out.svg").unwrap();
+    file.write_all(svg.as_bytes()).unwrap();
 
     Ok(())
 }
