@@ -159,6 +159,15 @@ pub fn standard_library<'a>() -> Library<'a> {
             }
         }
 
+        #[| str:string() => ret:int()]
+        fn "strlen"(Lazy::String(s)) {
+            let s = s.clone();
+            lazy!(Lazy::Int, {
+                let len = eval!(s).len();
+                len as i64
+            })
+        }
+
         #[forall a | elem:a => ret:a]
         fn "print"(elem){
             let elem = elem.clone();

@@ -29,7 +29,7 @@ use crate::library::standard_library;
 use crate::types::{typecheck_pass, InferenceState};
 use crate::types::typed::{PolyTypedStageInfo, TypedValue};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let input = fs::read_to_string("src/parser/examples/unused-args.bny")?;
+    let input = fs::read_to_string("src/parser/examples/default-args.bny")?;
     let mut pair = BunnyParser::parse(Rule::program, input.leak())?.filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());

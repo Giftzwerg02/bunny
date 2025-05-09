@@ -1,6 +1,6 @@
 (
 	(def add (a b) (+ a b))
 	(def add1 (e) (add 1 b: e))
-	(def foo (c d) (c d))
-	(foo add1 d: 3)
+	(def foo (a b) (a b))
+	(foo add1 b: 3)
 )

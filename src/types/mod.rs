@@ -8,6 +8,7 @@ use crate::types::hm::{HMState, Type};
 use crate::types::typed::{TypedStageInfo, TypedSymbolTable, TypedValue};
 use crate::types::util::{array, color, dict, float, func, int, pair, string};
 
+#[derive(Clone)]
 pub struct InferenceState<'a> {
     pub type_assumptions: TypedSymbolTable<'a>,
     pub hm: HMState
@@ -127,7 +128,7 @@ fn infer_symbol<'a>(
                 Expr::Symbol(create_argument_definition(&sym, state)),
 
             SymbolValue::FunctionDefinition(lambda) =>
-                Expr::Lambda(infer_lambda(lambda, state)),
+                Expr::Lambda(infer_lambda(lambda, &mut state.clone())),
 
             SymbolValue::Argument(Argument::Named(NamedArgument { value, .. })) => 
                 typecheck_pass(value, state)
