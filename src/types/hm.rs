@@ -9,6 +9,12 @@ use std::rc::Rc;
  * Mostly translated from https://github.com/jfecher/algorithm-j/blob/master/j.ml
  */
 
+pub enum HMError {
+    UnificationError(Type, Type),
+
+    OccursCheckError(Type)
+}
+
 /// Unique IDs for our types
 type TypeVarId = u64;
 
@@ -204,55 +210,70 @@ impl Type {
 
     /// Unify two types, modifying type variables in-place.
     /// This implements the union-find unification algorithm with occurs check.
-    pub fn unify(&self, other: &Type) {
+    pub fn unify(&self, other: &Type) -> Result<(), HMError> {
         match (self, other) {
             // Dont create recursive bindings
-            (_, _) if self == other => return,
+            (_, _) if self == other => Ok(()),
 
             // This two maches replace the 'find' part of the algorithm
             (Type::TVar(tv), other) |
-            (other, Type::TVar(tv)) => {
-                Self::unify_typevar(tv.clone(), other)
-            }
+            (other, Type::TVar(tv)) =>
+                Self::unify_typevar(tv.clone(), other),
 
             (Type::Fn(a1, b1), Type::Fn(a2, b2)) => {
-                a1.unify(a2);
+                a1.unify(a2)?;
                 b1.unify(b2)
             }
 
-            (Type::TApp(a, a_vars), Type::TApp(b, b_vars)) => {
-                if a != b { panic!() }
-
+            (Type::TApp(a, a_vars), Type::TApp(b, b_vars)) if a == b => {
                 for (a_var, b_var) in a_vars.iter().zip(b_vars) {
-                    a_var.unify(b_var);
+                    a_var.unify(b_var)?;
                 }
+
+                Ok(())
             }
 
             (Type::Fn(a, b), o) |
-            (o, Type::Fn(a, b)) => {
-                if **a != Type::TUnit { panic!() }
-                b.unify(o);
-            }
+            (o, Type::Fn(a, b)) if **a == Type::TUnit =>
+                b.unify(o),
 
-            _ => panic!("{self:?}, {other:?}"),
+            _ => Err(HMError::UnificationError(self.clone(), other.clone())),
         }
     }
 
-    fn unify_typevar(tv_ref: Rc<RefCell<TypeVar>>, other: &Type){
-        tv_ref.replace_with(|tv|{
-            match tv {
-                // This two maches replace the 'find' part of the algorithm
-                TypeVar::Bound(bound_type) => {
-                    other.unify(&bound_type);
-                    tv.clone()
-                }
+    fn unify_typevar(tv_ref: Rc<RefCell<TypeVar>>, other: &Type) -> Result<(), HMError> {
+        let mut tv_guard = tv_ref.borrow_mut();
 
-                TypeVar::Unbound(id, level) => {
-                    if Self::occurs(*id, *level, other) { panic!() }
-                   TypeVar::Bound(other.clone())
+        match &*tv_guard {
+            TypeVar::Bound(bound_type) => {
+                // If tv_ref is already bound to bound_type, we need to unify bound_type with 'other'.
+                // Clone 'bound_type' to avoid borrow checker issues if 'other' refers back to 'tv_ref'
+                // or if 'unify' needs to modify parts of 'bound_type' (which it does by changing TVars).
+                let current_bound_type = bound_type.clone();
+                
+                // Release the mutable borrow on tv_ref *before* calling unify.
+                // This is critical because 'unify' might attempt to borrow 'tv_ref' again,
+                // for example, if 'other' is or contains 'TVar(tv_ref)'.
+                drop(tv_guard);
+                
+                current_bound_type.unify(other)
+            }
+            TypeVar::Unbound(id, level) => {
+                // 'tv_ref' is an unbound type variable.
+                // Before binding it, we must perform an occurs check to prevent infinite types.
+                // Note: The case where 'other' is 'TVar(tv_ref)' (i.e., unifying a TVar with itself)
+                // is handled by the `self == other` check in the main `unify` function.
+                
+                if Self::occurs(*id, *level, other) {
+                    Err(HMError::OccursCheckError(other.clone()))
+                } else {
+                    // Occurs check passed. Bind the type variable tv_ref to 'other'.
+                    // The mutable borrow tv_guard is still active here.
+                    *tv_guard = TypeVar::Bound(other.clone());
+                    Ok(())
                 }
             }
-        });
+        }
     }
 
     /// Checks whether a monomorphic type variable with id a_id occurs in type,
@@ -322,10 +343,10 @@ impl Display for TypeVar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             TypeVar::Bound(t) =>
-                write!(f, "<{}>", t),
+                write!(f, "{}", t),
 
             TypeVar::Unbound(tv_id, _) =>
-                write!(f, "<'{}>", tv_id)
+                write!(f, "'{}", tv_id)
         }
     }
 }

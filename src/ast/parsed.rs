@@ -12,7 +12,7 @@ use super::{
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub struct ParsedStageInfo<'a> {
-    token: Pair<'a, Rule>,
+    pub token: Pair<'a, Rule>,
 }
 
 impl<'a> ParsedStageInfo<'a> {

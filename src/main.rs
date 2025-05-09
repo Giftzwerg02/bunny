@@ -9,17 +9,16 @@ mod library;
 use std::{fs::{self}, io::Write};
 
 use ast::{
-    Expr, PrettyPrintable, StageInfo,
+    PrettyPrintable,
     parsed::{is_not_comment, parsed_expr_pass},
-    scoped::{ScopedStageInfo, SymbolTable, scoped_expr_pass},
+    scoped::scoped_expr_pass,
 };
 #[allow(unused)]
 use clap::Parser as ClapParser;
 #[allow(unused)]
 use cli::Cli;
 use esvg::{create_document, page::Page};
-use library::runnable_expression::RunnableExpr;
-use palette::{encoding::Srgb, Srgba};
+use miette::NamedSource;
 use parser::{BunnyParser, Rule};
 use pest::Parser;
 use runner::{value::{Lazy, Value}, Runner};
@@ -28,8 +27,13 @@ use crate::ast::Symbol;
 use crate::library::standard_library;
 use crate::types::{typecheck_pass, InferenceState};
 use crate::types::typed::{PolyTypedStageInfo, TypedValue};
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = fs::read_to_string("src/parser/examples/default-args.bny")?;
+
+    let source = NamedSource::new("src/parser/examples/default-args.bny", input.clone())
+        .with_language("lisp");
+
     let mut pair = BunnyParser::parse(Rule::program, input.leak())?.filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());

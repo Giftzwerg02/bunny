@@ -2,6 +2,11 @@ pub mod typed;
 mod hm;
 pub mod util;
 
+use hm::HMError;
+use miette::{Diagnostic, SourceSpan, Result};
+use thiserror::Error;
+
+use crate::ast::parsed::ParsedStageInfo;
 use crate::ast::scoped::{ScopedStageInfo, SymbolValue};
 use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, Lambda, NamedArgument, Str, Symbol};
 use crate::types::hm::{HMState, Type};
@@ -23,11 +28,22 @@ impl InferenceState<'_> {
     }
 }
 
+#[derive(Error, Debug, Diagnostic)]
+#[error("type error")]
+#[diagnostic()]
+struct TypeError {
+    #[label("here")]
+    token: Option<SourceSpan>,
+
+    #[help]
+    advice: String
+}
+
 pub fn typecheck_pass<'a>(
     expr: &Expr<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
-) -> Expr<TypedStageInfo<'a>> {
-    match expr {
+) -> Result<Expr<TypedStageInfo<'a>>> {
+    let new_expr = match expr {
         Expr::Int(Int { value, info }) =>
             Expr::Int(
                 Int::new(
@@ -61,23 +77,25 @@ pub fn typecheck_pass<'a>(
             ),
 
         Expr::Symbol(sym) =>
-            Expr::Symbol(infer_symbol(sym, state)),
+            Expr::Symbol(infer_symbol(sym, state)?),
 
         Expr::FuncCall(FuncCall::Single(call)) =>
-            Expr::FuncCall(FuncCall::Single(infer_single_func_call(call, state))),
+            Expr::FuncCall(FuncCall::Single(infer_single_func_call(call, state)?)),
 
         Expr::FuncCall(_) =>
             panic!("list-calls should not be present in typechecking stage"),
 
         Expr::Array(array) =>
-            Expr::Array(infer_array(array, state)),
+            Expr::Array(infer_array(array, state)?),
 
         Expr::Dict(dict) =>
-            Expr::Dict(infer_dict(dict, state)),
+            Expr::Dict(infer_dict(dict, state)?),
 
         Expr::Lambda(lambda) =>
-            Expr::Lambda(infer_lambda(lambda, state))
-    }
+            Expr::Lambda(infer_lambda(lambda, state)?)
+    };
+
+    Ok(new_expr)
 }
 
 fn type_stage_info<'a>(
@@ -106,11 +124,39 @@ fn create_argument_definition<'a>(
     )
 }
 
+fn unification_error<T>(
+    hmerror: HMError,
+    expected: &Type,
+    actual: &Type,
+    source: &Option<ParsedStageInfo>
+) -> Result<T> {
+    let token = source.clone().map(|source| {
+        let span = source.token.as_span();
+        (span.start(), span.end()).into()
+    });
+
+    let error = match hmerror {
+        HMError::UnificationError(_, _) => 
+            TypeError {
+                token,
+                advice: format!("Types {expected} and {actual} are not compatible")
+            },
+
+        HMError::OccursCheckError(typ) => 
+            TypeError {
+                token,
+                advice: format!("Creating an infinite type with {typ} is not allowed")
+            }
+    };
+
+    Err(error.into())
+}
+
 /// Refer to https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L197
 fn infer_symbol<'a>(
     sym: &Symbol<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
-) -> Symbol<TypedStageInfo<'a>> {
+) -> Result<Symbol<TypedStageInfo<'a>>> {
     let key = &sym.value;
 
     // defs are infered as let-binded vars:
@@ -128,10 +174,10 @@ fn infer_symbol<'a>(
                 Expr::Symbol(create_argument_definition(&sym, state)),
 
             SymbolValue::FunctionDefinition(lambda) =>
-                Expr::Lambda(infer_lambda(lambda, &mut state.clone())),
+                Expr::Lambda(infer_lambda(lambda, &mut state.clone())?),
 
             SymbolValue::Argument(Argument::Named(NamedArgument { value, .. })) => 
-                typecheck_pass(value, state)
+                typecheck_pass(value, state)?
         };
 
         let poly_expr = typed_expr.map_stage(
@@ -149,18 +195,18 @@ fn infer_symbol<'a>(
 
     let symbol_type = symbol.inst(&mut state.hm);
 
-    Symbol::new(
+    Ok(Symbol::new(
         sym.value.clone(),
         type_stage_info(&sym.info, symbol_type, state)
-    )
+    ))
 }
 
 /// See: https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L210
 fn infer_single_func_call<'a>(
     call: &FuncCallSingle<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
-) -> FuncCallSingle<TypedStageInfo<'a>> {
-    let fn_sym = infer_symbol(&call.id, state);
+) -> Result<FuncCallSingle<TypedStageInfo<'a>>> {
+    let fn_sym = infer_symbol(&call.id, state)?;
 
     // t0 in the paper
     let mut current_typ = fn_sym.info.typ.clone();
@@ -170,23 +216,32 @@ fn infer_single_func_call<'a>(
     // TODO We have to sort the function arguments here for this to work with named arguments
     for arg in &call.args {
         // t1 in the paper
-        let current_arg_typ = infer_argument(arg, state);
+        let current_arg_typ = infer_argument(arg, state)?;
         arg_types.push(current_arg_typ.clone());
 
         // t' in the paper
         let ret_typ = state.hm.newvar();
 
-        current_typ.unify(
-            &Type::Fn(
-                Box::new(current_arg_typ.info().typ.clone()),
-                Box::new(ret_typ.clone())
-            )
+        let constructed_func = Type::Fn(
+            Box::new(current_arg_typ.info().typ.clone()),
+            Box::new(ret_typ.clone())
         );
+
+        let result = current_typ.unify(&constructed_func);
+
+        if let Err(hmerror) = result {
+            return unification_error(
+                hmerror,
+                &current_typ,
+                &constructed_func,
+                &call.info.inner
+            );
+        }
 
         current_typ = ret_typ;
     }
 
-    FuncCallSingle::new(
+    Ok(FuncCallSingle::new(
         fn_sym,
         arg_types,
         type_stage_info(
@@ -194,18 +249,18 @@ fn infer_single_func_call<'a>(
             current_typ,
             state
         )
-    )
+    ))
 }
 
 fn infer_argument<'a>(
     arg: &Argument<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
-) -> Argument<TypedStageInfo<'a>> {
+) -> Result<Argument<TypedStageInfo<'a>>> {
     match arg {
         Argument::Positional(scoped_expr) => {
-            let typed_expr = typecheck_pass(scoped_expr, state);
+            let typed_expr = typecheck_pass(scoped_expr, state)?;
 
-            Argument::Positional(typed_expr)
+            Ok(Argument::Positional(typed_expr))
         },
 
         // TODO Checking the name?
@@ -213,15 +268,15 @@ fn infer_argument<'a>(
             NamedArgument { name: Symbol { value: name, .. },
                 value: scoped_expr, .. }
         ) => {
-            let expr = typecheck_pass(scoped_expr, state);
+            let expr = typecheck_pass(scoped_expr, state)?;
 
-            Argument::Named(
+            Ok(Argument::Named(
                 NamedArgument::new(
                     Symbol::new(name.clone(), expr.info().clone()),
                     expr.clone(),
                     expr.info().clone(),
                 )
-            )
+            ))
         }
     }
 }
@@ -229,68 +284,63 @@ fn infer_argument<'a>(
 fn infer_array<'a>(
     barray: &Array<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
-) -> Array<TypedStageInfo<'a>> {
+) -> Result<Array<TypedStageInfo<'a>>> {
 
     // TODO InteliJ doesn't like this for some reason
-    /*if let Some(first) = array.value.first() else {
-        return Type::TApp(array_typ_name, vec![ state.hm.newvar() ])
-    }*/
-
-    if barray.value.is_empty() {
-        return Array::new(
+    let Some(first) = barray.value.first() else {
+        return Ok(Array::new(
             vec![],
             type_stage_info(&barray.info, array(&state.hm.newvar()), state)
-        );
-    }
+        ));
+    };
 
     let cloned_values = barray.value.clone();
-    let first = cloned_values.first().unwrap();
 
-    let elem = typecheck_pass(first, state);
+    let elem = typecheck_pass(first, state)?;
 
     let typed_values = cloned_values
         .into_iter()
         .map(|element| typecheck_pass(&element, state))
-        .collect::<Vec<Expr<TypedStageInfo>>>();
+        .collect::<Result<Vec<Expr<TypedStageInfo>>>>()?;
 
     if typed_values.iter().any(|current| current.typ() != elem.typ()) {
         panic!("mixed types in array: {:?}", typed_values.iter().map(|c| c.typ()).collect::<Vec<_>>());
     }
 
-    Array::new(
+    Ok(Array::new(
         typed_values,
         type_stage_info(
             &barray.info,
             array(&elem.typ().clone()),
             state
         )
-    )
+    ))
 }
 
 fn infer_dict<'a>(
     dictionary: &Dict<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
-) -> Dict<TypedStageInfo<'a>> {
+) -> Result<Dict<TypedStageInfo<'a>>> {
 
-    if dictionary.value.is_empty() {
-        return Dict::new(
+    let Some(first) = dictionary.value.first() else {
+        return Ok(Dict::new(
             vec![],
             type_stage_info(
                 &dictionary.info,
                 dict(&state.hm.newvar(), &state.hm.newvar()),
                 state
             )
-        )
+        ))
     }
 
     fn infer_dict_entry<'a>(
         entry: &DictEntry<ScopedStageInfo<'a>>,
         state: &mut InferenceState<'a>
-    ) -> DictEntry<TypedStageInfo<'a>> {
-        let key = typecheck_pass(&entry.key, state);
-        let value = typecheck_pass(&entry.value, state);
+    ) -> Result<DictEntry<TypedStageInfo<'a>>> {
+        let key = typecheck_pass(&entry.key, state)?;
+        let value = typecheck_pass(&entry.value, state)?;
 
-        DictEntry::new(
+        Ok(DictEntry::new(
             key.clone(),
             value.clone(),
             type_stage_info(
@@ -298,19 +348,18 @@ fn infer_dict<'a>(
                 pair(key.typ(), value.typ()),
                 state
             )
-        )
+        ))
     }
 
     let cloned_values = dictionary.value.clone();
 
-    let first = cloned_values.first().unwrap();
-    let entry_expr = infer_dict_entry(first, state);
+    let entry_expr = infer_dict_entry(first, state)?;
     let entry_type = entry_expr.info.typ;
 
     let typed_values = cloned_values
         .iter()
         .map(|entry| infer_dict_entry(entry, state))
-        .collect::<Vec<DictEntry<TypedStageInfo>>>();
+        .collect::<Result<Vec<DictEntry<TypedStageInfo>>>>()?;
 
     let any_type_deviates = typed_values
         .iter()
@@ -322,7 +371,7 @@ fn infer_dict<'a>(
         panic!();
     }
 
-    Dict::new(
+    Ok(Dict::new(
         typed_values,
         type_stage_info(
             &dictionary.info,
@@ -332,14 +381,14 @@ fn infer_dict<'a>(
             ),
             state
         )
-    )
+    ))
 }
 
 fn infer_lambda<'a>(
     lambda: &Lambda<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'a>
-) -> Lambda<TypedStageInfo<'a>> {
-    let typed_body = typecheck_pass(&lambda.body, state);
+) -> Result<Lambda<TypedStageInfo<'a>>> {
+    let typed_body = typecheck_pass(&lambda.body, state)?;
 
     let typed_symbols = &typed_body.info().syms;
 
@@ -365,23 +414,32 @@ fn infer_lambda<'a>(
 
             match argument {
                 Argument::Positional(_) =>
-                    Argument::Positional(Expr::Symbol(symbol)),
+                    Ok(Argument::Positional(Expr::Symbol(symbol))),
 
                 Argument::Named(NamedArgument { value, .. }) => {
-                    let default_value = typecheck_pass(&value, state);
-                    typ.unify(default_value.typ());
+                    let default_value = typecheck_pass(&value, state)?;
+                    let hmerror = typ.unify(default_value.typ());
 
-                    Argument::Named(
+                    if let Err(hmerror) = hmerror {
+                        return unification_error(
+                            hmerror,
+                            &typ,
+                            &default_value.typ(),
+                            &Some(stage_info.inner) // TODO Please make this pretty
+                        );
+                    }
+
+                    Ok(Argument::Named(
                         NamedArgument::new(
                         symbol,
                             default_value,
                             stage_info
                         )
-                    )
+                    ))
                 }
             }
         })
-        .collect::<Vec<Argument<TypedStageInfo>>>();
+        .collect::<Result<Vec<Argument<TypedStageInfo>>>>()?;
 
     let arg_types = typed_args
         .iter()
@@ -390,13 +448,13 @@ fn infer_lambda<'a>(
 
     let fun_type = func(&arg_types[..], typed_body.typ());
 
-    Lambda::parametric(
+    Ok(Lambda::parametric(
         typed_args,
 
         typed_body,
 
         type_stage_info(&lambda.info, fun_type, state)
-    )
+    ))
 }
 
 
@@ -434,10 +492,10 @@ mod tests {
     fn assert_type(expr: &'static str, needed_type: Type) {
         let mut library = test_library();
         let scoped_ast = prepare_expr(expr, &library);
-        let typed_ast = typecheck_pass(&scoped_ast, &mut library.typed);
+        let typed_ast = typecheck_pass(&scoped_ast, &mut library.typed)?;
 
         let result_type = typed_ast.typ();
-        needed_type.unify(result_type)
+        needed_type.unify(result_type);
     }
 
     fn assert_panics(expr: &'static str) {
