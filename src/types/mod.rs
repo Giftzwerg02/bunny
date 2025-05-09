@@ -350,10 +350,14 @@ fn infer_lambda<'a>(
             let info = argument.info();
             let Symbol { value, .. } = argument.into_def_argument_symbol();
 
-            let typed_expr = typed_symbols.get(&value)
-                .expect("Argument value to be typed in symbol table of body");
+            let maybe_typed_expr = typed_symbols.get(&value);
+            
 
-            let typ = typed_expr.inst(&mut state.hm);
+            let typ = match maybe_typed_expr {
+                Some(typed_expr) => typed_expr.inst(&mut state.hm),
+
+                None => state.hm.newvar()
+            };
 
             let stage_info = type_stage_info(&info, typ.clone(), state);
             let symbol = Symbol::new(value, stage_info.clone());
