@@ -431,7 +431,7 @@ mod tests {
         }
 
         fn arb_color() -> impl Strategy<Value = Color<EmptyStageInfo>> {
-            any::<(u8, u8, u8)>().prop_map(|(r, g, b)| Color::new(r, g, b, EmptyStageInfo {}))
+            any::<(u8, u8, u8, u8)>().prop_map(|(r, g, b, alpha)| Color::new(r, g, b, alpha, EmptyStageInfo {}))
         }
 
         fn arb_id() -> impl Strategy<Value = Symbol<EmptyStageInfo>> {

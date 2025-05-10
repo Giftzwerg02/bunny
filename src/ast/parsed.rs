@@ -223,7 +223,12 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
             let r = u8::from_str_radix(&text[1..=2], 16).expect("color");
             let g = u8::from_str_radix(&text[3..=4], 16).expect("color");
             let b = u8::from_str_radix(&text[5..=6], 16).expect("color");
-            Expr::Color(Color::new(r, g, b, info(pair)))
+            if text.len() > 7 {
+                let alpha = u8::from_str_radix(&text[7..=8], 16).expect("color");
+                Expr::Color(Color::new(r, g, b, alpha, info(pair)))
+            } else {
+                Expr::Color(Color::new(r, g, b, 1, info(pair)))
+            }
         },
         _ => panic!("invalid pair {pair}"),
     }

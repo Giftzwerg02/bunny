@@ -68,10 +68,10 @@ pub fn typecheck_pass<'a>(
                 )
             ),
 
-        Expr::Color(Color { r, g, b, info }) =>
+        Expr::Color(Color { r, g, b, alpha, info }) =>
             Expr::Color(
                 Color::new(
-                    *r, *g, *b,
+                    *r, *g, *b, *alpha,
                     type_stage_info(info, color(), state)
                 )
             ),
@@ -486,7 +486,8 @@ mod tests {
     fn assert_type(expr: &'static str, needed_type: Type) {
         let mut library = test_library();
         let scoped_ast = prepare_expr(expr, &library);
-        let typed_ast = typecheck_pass(&scoped_ast, &mut library.typed)?;
+        let typed_ast = typecheck_pass(&scoped_ast, &mut library.typed)
+            .expect("assert_type::typecheck_pass failed");
 
         let result_type = typed_ast.typ();
         needed_type.unify(result_type);

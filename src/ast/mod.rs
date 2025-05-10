@@ -258,6 +258,7 @@ pub struct Color<I: StageInfo> {
     pub r: u8,
     pub g: u8,
     pub b: u8,
+    pub alpha: u8,
     pub info: I,
 }
 
@@ -268,8 +269,8 @@ impl<I: StageInfo> PrettyPrintable for Color<I> {
 }
 
 impl<I: StageInfo> Color<I> {
-    pub fn new(r: u8, g: u8, b: u8, info: I) -> Self {
-        Self { r, g, b, info }
+    pub fn new(r: u8, g: u8, b: u8, alpha: u8, info: I) -> Self {
+        Self { r, g, b, alpha, info }
     }
 
     pub fn as_code(&self) -> String {
@@ -282,6 +283,7 @@ impl<I: StageInfo> Color<I> {
             r: self.r,
             g: self.g,
             b: self.b,
+            alpha: self.alpha,
             // Apply the mapping function f to the StageInfo
             info: f(self.info),
         }

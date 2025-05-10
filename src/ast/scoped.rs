@@ -132,6 +132,7 @@ pub fn scoped_expr_pass<'a>(
             color.r,
             color.g,
             color.b,
+            color.alpha,
             info(color.info, syms.clone()),
         )),
         Expr::Array(array) => {

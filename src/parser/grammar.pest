@@ -80,4 +80,5 @@ float = @{ ASCII_DIGIT+ ~ (("." ~ ASCII_DIGIT* ~ "f") | "f") }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 color = @{
 	"#" ~ (ASCII_DIGIT | 'a'..'f' | 'A'..'F'){6}
+	| "#" ~ (ASCII_DIGIT | 'a'..'f' | 'A'..'F'){8}
 }
