@@ -1,7 +1,9 @@
 use core::panic;
-use std::{collections::HashSet, fmt::Display};
+use std::fmt::Display;
 
 use im::HashMap;
+use miette::{LabeledSpan, Result, SourceSpan, miette};
+use strsim::normalized_levenshtein;
 use text_trees::StringTreeNode;
 
 use crate::ast::{Argument, FuncCallSingle};
@@ -15,6 +17,25 @@ use super::{
 pub struct ScopedStageInfo<'a> {
     pub inner: Option<ParsedStageInfo<'a>>,
     pub syms: SymbolTable<ScopedStageInfo<'a>>,
+}
+
+fn create_source(source: ParsedStageInfo) -> SourceSpan {
+    let span = source.token.as_span();
+    (span.start(), span.end() - span.start()).into()
+}
+
+fn find_similar_vars<'a>(wrong_name: &str, syms: &SymbolTable<ScopedStageInfo<'a>>) -> Vec<(String, SymbolValue<ScopedStageInfo<'a>>)> {
+    fn is_similar(a: &str, b: &str, threshold: f64) -> bool {
+        normalized_levenshtein(a, b) >= threshold
+    }
+
+    // NOTE: I carefully chose this value completely at random
+    let threshold = 0.7;
+
+    syms.inner.iter()
+        .filter(|(k,_)| is_similar(wrong_name, k, threshold))
+        .map(|(k,v)| (k.clone(), v.clone()))
+        .collect()
 }
 
 impl<'a> ScopedStageInfo<'a> {
@@ -105,12 +126,6 @@ impl<I: StageInfo> SymbolTable<I> {
         self.inner.insert(sym, value);
     }
 
-    pub fn with(&self, sym: String, value: SymbolValue<I>) -> Self {
-        let mut cpy = self.clone();
-        cpy.insert(sym, value);
-        cpy
-    }
-
     pub fn contains(&self, sym: &str) -> bool {
         self.inner.contains_key(sym)
     }
@@ -123,8 +138,8 @@ impl<I: StageInfo> SymbolTable<I> {
 pub fn scoped_expr_pass<'a>(
     src: Expr<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Expr<ScopedStageInfo<'a>> {
-    match src {
+) -> Result<Expr<ScopedStageInfo<'a>>> {
+    let new_expr = match src {
         Expr::Int(int) => Expr::Int(Int::new(int.value, info(int.info, syms.clone()))),
         Expr::Float(float) => Expr::Float(Float::new(float.value, info(float.info, syms.clone()))),
         Expr::String(str) => Expr::String(Str::new(str.value, info(str.info, syms.clone()))),
@@ -141,7 +156,7 @@ pub fn scoped_expr_pass<'a>(
                 .value
                 .into_iter()
                 .map(|v| scoped_expr_pass(v, syms))
-                .collect();
+                .collect::<Result<Vec<_>>>()?;
 
             Expr::Array(Array::new(array, info))
         }
@@ -151,12 +166,12 @@ pub fn scoped_expr_pass<'a>(
                 .value
                 .into_iter()
                 .map(|e| {
-                    let k = scoped_expr_pass(e.key, syms);
-                    let v = scoped_expr_pass(e.value, syms);
+                    let k = scoped_expr_pass(e.key, syms)?;
+                    let v = scoped_expr_pass(e.value, syms)?;
                     let dict_entry_info = info(e.info, syms.clone());
-                    DictEntry::new(k, v, dict_entry_info)
+                    Ok(DictEntry::new(k, v, dict_entry_info))
                 })
-                .collect();
+                .collect::<Result<Vec<_>>>()?;
 
             Expr::Dict(Dict::new(dict, dict_info))
         }
@@ -165,7 +180,32 @@ pub fn scoped_expr_pass<'a>(
                 FuncCall::Single(func_call_single) => {
                     // 1. check if function exists
                     if !syms.contains(&func_call_single.id.value) {
-                        panic!("undefined: {:?}", func_call_single.id);
+                        let token = create_source(func_call_single.id.info);
+                        let similar_vars = find_similar_vars(&func_call_single.id.value, syms);
+                        let help = match &similar_vars[..] {
+                            [] => format!("A definition is anything in the form of: (def {} ...)", func_call_single.id.value),
+                            [(a, _)] => format!("A similar name was found: {a}"),
+                            multiple => format!("Multiple similar names were found: {}", multiple.iter().map(|(s,_)| s.clone()).collect::<Vec<String>>().join(", "))
+                        };
+
+
+                        let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
+                        for (s, val) in similar_vars {
+                            if let SymbolValue::FunctionDefinition(lambda) = val {
+                                let lambda_token = create_source(lambda.info.inner.unwrap());
+                                let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
+                                labels.push(span);
+                            }
+                        }
+
+                        let report = miette!(
+                            labels = labels,
+                            help = help,
+                            code = "undefined function call",
+                            "Function \"{}\" is not defined.", func_call_single.id.value
+                        );
+
+                        return Err(report);
                     }
 
                     // 2. check if it is the def-function (special handling)
@@ -179,31 +219,24 @@ pub fn scoped_expr_pass<'a>(
                     //  ^ id  ^ arg       ^ arg (optional)   ^ arg
                     //  i.e., 2 or 3 args
                     if func_call_single.is_def() {
-                        return Expr::Lambda(handle_def(func_call_single, syms));
+                        Expr::Lambda(handle_def(func_call_single, syms)?)
+                    } else if func_call_single.is_lambda() {
+                        Expr::Lambda(handle_lambda(func_call_single, syms)?)
+                    } else {
+                        let mapped_args = func_call_single
+                            .args
+                            .into_iter()
+                            .map(|arg| pass_arg(arg, syms))
+                            .collect::<Result<Vec<_>>>()?;
+
+                        let ret = FuncCall::Single(FuncCallSingle::new(
+                            pass_symbol(func_call_single.id, syms.clone()),
+                            mapped_args,
+                            info(func_call_single.info, syms.clone()),
+                        ));
+
+                        Expr::FuncCall(ret)
                     }
-
-                    if func_call_single.is_lambda() {
-                        return Expr::Lambda(handle_lambda(func_call_single, syms));
-                    }
-
-                    // it is not a def or lambda function -> check the inserted symbols
-                    if !syms.contains(&func_call_single.id.value) {
-                        panic!("not defined: {}: {}", &func_call_single.id.value, syms);
-                    };
-
-                    let mapped_args = func_call_single
-                        .args
-                        .into_iter()
-                        .map(|arg| pass_arg(arg, syms))
-                        .collect::<Vec<_>>();
-
-                    let ret = FuncCall::Single(FuncCallSingle::new(
-                        pass_symbol(func_call_single.id, syms.clone()),
-                        mapped_args,
-                        info(func_call_single.info, syms.clone()),
-                    ));
-
-                    Expr::FuncCall(ret)
                 }
                 FuncCall::List(func_call_list) => {
                     assert!(
@@ -215,7 +248,8 @@ pub fn scoped_expr_pass<'a>(
                     let mut out_func: Option<Expr<_>> = None;
 
                     for (i, call) in func_call_list.calls.iter().enumerate() {
-                        let passed_call = scoped_expr_pass(Expr::FuncCall(call.clone()), &new_syms);
+                        let passed_call =
+                            scoped_expr_pass(Expr::FuncCall(call.clone()), &new_syms)?;
                         new_syms = passed_call.info().syms.clone();
 
                         if i == func_call_list.calls.len() - 1 {
@@ -228,14 +262,41 @@ pub fn scoped_expr_pass<'a>(
             }
         }
         Expr::Symbol(symbol) => {
-            let s = Symbol::new(symbol.value.clone(), info(symbol.info, syms.clone()));
+            let s = Symbol::new(symbol.value.clone(), info(symbol.info.clone(), syms.clone()));
             if !syms.contains(&symbol.value) {
-                panic!("undefined symbol: {}", symbol.value)
+                let token = create_source(symbol.info);
+                let similar_vars = find_similar_vars(&symbol.value, syms);
+                let help = match &similar_vars[..] {
+                    [] => format!("A definition is anything in the form of: (def {} ...)", symbol.value),
+                    [(a, _)] => format!("A similar name was found: {a}"),
+                    multiple => format!("Multiple similar names were found: {}", multiple.iter().map(|(s,_)| s.clone()).collect::<Vec<String>>().join(", "))
+                };
+
+
+                let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
+                for (s, val) in similar_vars {
+                    if let SymbolValue::FunctionDefinition(lambda) = val {
+                        let lambda_token = create_source(lambda.info.inner.unwrap());
+                        let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
+                        labels.push(span);
+                    }
+                }
+
+                let report = miette!(
+                    labels = labels,
+                    help = help,
+                    code = "undefined function call",
+                    "Function \"{}\" is not defined.", symbol.value
+                );
+
+                return Err(report);
             }
             Expr::Symbol(s)
         }
         Expr::Lambda(_) => panic!("shouldn't exist here"),
-    }
+    };
+
+    Ok(new_expr)
 }
 
 fn pass_symbol<'a>(
@@ -262,65 +323,72 @@ fn info_opt<'a>(
     }
 }
 
-fn check_args_are_unique<I: StageInfo>(args: &[Argument<I>]) -> bool {
-    let mut found = HashSet::new();
+fn find_non_unique_args<I: StageInfo>(args: &[Argument<I>]) -> Vec<Argument<I>> {
+    let mut found: HashMap<_, Vec<Argument<I>>> = HashMap::new();
     for arg in args {
         let sym = arg.into_def_argument_symbol();
-        if found.contains(&sym.value) {
-            return false;
+        if found.contains_key(&sym.value) {
+            found.get_mut(&sym.value).unwrap().push(arg.clone());
+        } else {
+            found.insert(sym.value, vec![arg.clone()]);
         }
-        found.insert(sym.value.to_string());
     }
-    true
+
+    found.into_iter()
+        .filter(|(_,v)| v.len() > 1)
+        .flat_map(|(_,v)| v)
+        .collect()
 }
 
 fn pass_arg_def<'a>(
     arg: Argument<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Argument<ScopedStageInfo<'a>> {
-    match arg {
+) -> Result<Argument<ScopedStageInfo<'a>>> {
+    let res = match arg {
         Argument::Positional(_) => {
             let sym = pass_symbol(arg.into_def_argument_symbol(), syms.clone());
             Argument::Positional(Expr::Symbol(sym))
-        },
+        }
         Argument::Named(named_argument) => {
             let name = pass_symbol(named_argument.name, syms.clone());
             let expr = *named_argument.value;
-            dbg!(&expr);
-            let expr = scoped_expr_pass(expr, syms);
-            Argument::Named(NamedArgument::new(
-                name,
-                expr.clone(),
-                info_opt(expr.info().inner.clone(), syms.clone()),
-            ))
-        },
-    }
-}
-
-
-fn pass_arg<'a>(
-    arg: Argument<ParsedStageInfo<'a>>,
-    syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Argument<ScopedStageInfo<'a>> {
-    match arg {
-        Argument::Positional(expr) => Argument::Positional(scoped_expr_pass(expr, syms)),
-        Argument::Named(named_argument) => {
-            let name = pass_symbol(named_argument.name, syms.clone());
-            let expr = *named_argument.value;
-            let expr = scoped_expr_pass(expr, syms);
+            let expr = scoped_expr_pass(expr, syms)?;
             Argument::Named(NamedArgument::new(
                 name,
                 expr.clone(),
                 info_opt(expr.info().inner.clone(), syms.clone()),
             ))
         }
-    }
+    };
+
+    Ok(res)
+}
+
+fn pass_arg<'a>(
+    arg: Argument<ParsedStageInfo<'a>>,
+    syms: &SymbolTable<ScopedStageInfo<'a>>,
+) -> Result<Argument<ScopedStageInfo<'a>>> {
+    let res = match arg {
+        Argument::Positional(expr) => Argument::Positional(scoped_expr_pass(expr, syms)?),
+        Argument::Named(named_argument) => {
+            let name = pass_symbol(named_argument.name, syms.clone());
+            let expr = *named_argument.value;
+            let expr = scoped_expr_pass(expr, syms)?;
+            Argument::Named(NamedArgument::new(
+                name,
+                expr.clone(),
+                info_opt(expr.info().inner.clone(), syms.clone()),
+            ))
+        }
+    };
+
+    Ok(res)
 }
 
 fn handle_def<'a>(
     def: FuncCallSingle<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Lambda<ScopedStageInfo<'a>> {
+) -> Result<Lambda<ScopedStageInfo<'a>>> {
     // create a new sym-table entry with the newly defined value
     let Argument::Positional(ref new_id) = def.args[0] else {
         panic!("invalid ast");
@@ -334,13 +402,13 @@ fn handle_def<'a>(
     let func_id = pass_symbol(new_id.clone(), inner_syms.clone());
     inner_syms.insert(func_id.clone().value, SymbolValue::Defined);
 
-    match &def.args[1..] {
+    let res = match &def.args[1..] {
         [new_call] => {
             let Argument::Positional(new_call) = new_call else {
                 panic!("invalid ast");
             };
 
-            let new_call = scoped_expr_pass(new_call.clone(), &inner_syms);
+            let new_call = scoped_expr_pass(new_call.clone(), &inner_syms)?;
 
             // We just created a "constant" function, i.e., with no arguments
             // Therefore, the created function where the func_id should reference
@@ -359,14 +427,29 @@ fn handle_def<'a>(
             // (in the symbol table) a function with n+1 arguments, that being the
             // n arguments + the body of the function.
 
-            if !check_args_are_unique(func_args) {
-                panic!("duplicate argument names in definition");
+            let non_unique_args = find_non_unique_args(func_args);
+            if !non_unique_args.is_empty() {
+                let mut labels = vec![];
+                for arg in non_unique_args {
+                    let token = create_source(arg.info().clone());
+                    let span = LabeledSpan::at(token, "dup");
+                    labels.push(span);
+                }
+
+                let report = miette!(
+                    labels = labels,
+                    help = "Each argument in a function definition must have a unique name, e.g., (def foo (i am unique <3) ...)",
+                    code = "duplicate argument names in definition",
+                    "Multiple arguments inside of a function-definition have the same name."
+                );
+
+                return Err(report);
             }
 
             let func_args = func_args
                 .iter()
                 .map(|arg| pass_arg_def(arg.clone(), syms))
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
 
             for arg in &func_args {
                 let arg_sym = arg.into_def_argument_symbol();
@@ -377,7 +460,7 @@ fn handle_def<'a>(
                 panic!("invalid ast");
             };
 
-            let new_call = scoped_expr_pass(new_call.clone(), &inner_syms);
+            let new_call = scoped_expr_pass(new_call.clone(), &inner_syms)?;
             let new_call_args = func_args;
 
             let mut lambda = Lambda::parametric(
@@ -392,7 +475,9 @@ fn handle_def<'a>(
             lambda
         }
         _ => panic!("invalid ast"),
-    }
+    };
+
+    Ok(res)
 }
 
 // A lambda is a function call in the form of: (\ (args...) (body))
@@ -404,15 +489,15 @@ fn handle_def<'a>(
 fn handle_lambda<'a>(
     lambda: FuncCallSingle<ParsedStageInfo<'a>>,
     syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Lambda<ScopedStageInfo<'a>> {
-    match &lambda.args[..] {
+) -> Result<Lambda<ScopedStageInfo<'a>>> {
+    let res = match &lambda.args[..] {
         // Case 1: Only function body
         [new_call] => {
             let Argument::Positional(new_call) = new_call else {
                 panic!("invalid ast");
             };
 
-            let new_call = scoped_expr_pass(new_call.clone(), syms);
+            let new_call = scoped_expr_pass(new_call.clone(), syms)?;
             Lambda::constant(new_call, info(lambda.info, syms.clone()))
         }
         // Case 2: Parameters and Function-Body
@@ -424,14 +509,29 @@ fn handle_lambda<'a>(
             // (in the symbol table) a function with n+1 arguments, that being the
             // n arguments + the body of the function.
 
-            if !check_args_are_unique(func_args) {
-                panic!("duplicate argument names in definition");
+            let non_unique_args = find_non_unique_args(func_args);
+            if !non_unique_args.is_empty() {
+                let mut labels = vec![];
+                for arg in non_unique_args {
+                    let token = create_source(arg.info().clone());
+                    let span = LabeledSpan::at(token, "dup");
+                    labels.push(span);
+                }
+
+                let report = miette!(
+                    labels = labels,
+                    help = "Each argument in a function definition must have a unique name, e.g., (def foo (i am unique <3) ...)",
+                    code = "duplicate argument names in definition",
+                    "Multiple arguments inside of a function-definition have the same name."
+                );
+
+                return Err(report);
             }
 
             let func_args = func_args
                 .iter()
                 .map(|arg| pass_arg_def(arg.clone(), syms))
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
 
             for arg in &func_args {
                 let arg_sym = arg.into_def_argument_symbol();
@@ -442,13 +542,15 @@ fn handle_lambda<'a>(
                 panic!("invalid ast");
             };
 
-            let new_call = scoped_expr_pass(new_call.clone(), &inner_syms);
+            let new_call = scoped_expr_pass(new_call.clone(), &inner_syms)?;
             let args = func_args;
 
             Lambda::parametric(args, new_call, info(lambda.info, syms.clone()))
         }
         _ => panic!("invalid ast"),
-    }
+    };
+
+    Ok(res)
 }
 
 #[cfg(test)]
@@ -473,7 +575,7 @@ mod tests {
         Expr::FuncCall(ast::FuncCall::Single(empty_func(info)))
     }
 
-    fn scoped_test(code: &str) {
+    fn scoped_test<'a>(code: &str) -> miette::Result<()> {
         let pair = BunnyParser::parse(Rule::program, code)
             .unwrap()
             .next()
@@ -488,7 +590,11 @@ mod tests {
         syms.insert("+".to_string(), empty.into());
 
         let parsed_expr = parsed_expr_pass(pair);
-        scoped_expr_pass(parsed_expr, &syms);
+        scoped_expr_pass(parsed_expr, &syms)
+            .map_err(|report| {
+                report.with_source_code(code.to_string())
+            })?;
+        Ok(())
     }
 
     fn scoped_panic_test(code: &str) {
@@ -506,12 +612,12 @@ mod tests {
         syms.insert("+".to_string(), empty.into());
 
         let parsed_expr = parsed_expr_pass(pair);
-        let result = std::panic::catch_unwind(|| scoped_expr_pass(parsed_expr, &syms));
-        assert!(result.is_err(), "expected code: {}\nto panic", code)
+        let result = scoped_expr_pass(parsed_expr, &syms);
+        assert!(result.is_err(), "expected code: {}\nto error", code)
     }
 
     #[test]
-    fn defined_variables_can_be_referenced_later() {
+    fn defined_variables_can_be_referenced_later() -> Result<()> {
         scoped_test(
             "
             (
@@ -519,7 +625,7 @@ mod tests {
                 (a)
             )
         ",
-        );
+        )
     }
 
     #[test]
@@ -531,7 +637,7 @@ mod tests {
                 (def a 5)
             )
         ",
-        );
+        )
     }
 
     #[test]
@@ -543,7 +649,7 @@ mod tests {
                 (a)
             )
         ",
-        );
+        )
     }
 
     #[test]
@@ -559,14 +665,14 @@ mod tests {
     }
 
     #[test]
-    fn arguments_can_be_accessed_within_a_funccall() {
+    fn arguments_can_be_accessed_within_a_funccall() -> Result<()> {
         scoped_test(
             "(
             (def a (x y z) (
                 (+ x y z)
             ))
         )",
-        );
+        )
     }
 
     #[test]
@@ -627,7 +733,7 @@ mod tests {
     }
 
     #[test]
-    fn arguments_can_be_accessed_inside_a_nested_scope() {
+    fn arguments_can_be_accessed_inside_a_nested_scope() -> Result<()> {
         scoped_test(
             "(
             (def a (x y z) (
@@ -638,11 +744,11 @@ mod tests {
             ))
             (a 1 2 3)
         )",
-        );
+        )
     }
 
     #[test]
-    fn variables_can_be_accessed_inside_a_nested_scope() {
+    fn variables_can_be_accessed_inside_a_nested_scope() -> Result<()> {
         scoped_test(
             "(
             (def foo (bar baz) (
@@ -653,28 +759,28 @@ mod tests {
             ))
             (a 1 2 3)
         )",
-        );
+        )
     }
 
     #[test]
-    fn arguments_can_be_set_by_their_name() {
+    fn arguments_can_be_set_by_their_name() -> Result<()> {
         scoped_test(
             "(
                 (def a (foo bar baz) (+ foo bar baz))
                 (a foo: 1 bar: 2 baz: 3)
         )",
-        );
+        )
     }
 
     #[test]
-    fn defined_variables_can_be_used_as_return_values() {
+    fn defined_variables_can_be_used_as_return_values() -> Result<()> {
         scoped_test(
             "(
             (def a 5)
             (def b a)
             (b)
         )",
-        );
+        )
     }
 
     #[test]
@@ -753,14 +859,14 @@ mod tests {
     }
 
     #[test]
-    fn lambda_arguments_can_be_accessed_within_a_funccall() {
+    fn lambda_arguments_can_be_accessed_within_a_funccall() -> Result<()> {
         scoped_test(
             r"(
             (\ (x y z) (
                 (+ x y z)
             ))
         )",
-        );
+        )
     }
 
     #[test]
@@ -821,7 +927,7 @@ mod tests {
     }
 
     #[test]
-    fn lambda_arguments_can_be_accessed_inside_a_nested_scope() {
+    fn lambda_arguments_can_be_accessed_inside_a_nested_scope() -> Result<()> {
         scoped_test(
             r"(
             (\ (x y z) (
@@ -830,11 +936,11 @@ mod tests {
                 ))
             ))
         )",
-        );
+        )
     }
 
     #[test]
-    fn previous_defs_can_be_used_inside_lambdas() {
+    fn previous_defs_can_be_used_inside_lambdas() -> Result<()> {
         scoped_test(
             r"
             (
@@ -848,7 +954,7 @@ mod tests {
     }
 
     #[test]
-    fn defs_and_lambdas_can_be_nested_together() {
+    fn defs_and_lambdas_can_be_nested_together() -> Result<()> {
         scoped_test(
             r"
             (
@@ -861,7 +967,7 @@ mod tests {
                 (a 1 2 3)
             )
         ",
-        );
+        )
     }
 
     #[test]
@@ -890,7 +996,7 @@ mod tests {
     }
 
     #[test]
-    fn def_parameters_may_be_shadowed() {
+    fn def_parameters_may_be_shadowed() -> Result<()> {
         scoped_test(
             r"
             (
@@ -933,7 +1039,7 @@ mod tests {
     }
 
     #[test]
-    fn lambda_parameters_may_be_shadowed() {
+    fn lambda_parameters_may_be_shadowed() -> Result<()> {
         scoped_test(
             r"
             (
@@ -948,7 +1054,7 @@ mod tests {
     }
 
     #[test]
-    fn def_and_lambda_parameters_may_be_shadowed() {
+    fn def_and_lambda_parameters_may_be_shadowed() -> Result<()> {
         scoped_test(
             r"
             (
@@ -967,13 +1073,13 @@ mod tests {
     }
 
     #[test]
-    fn def_default_arguments_may_appear_in_any_order_with_non_default_args() {
+    fn def_default_arguments_may_appear_in_any_order_with_non_default_args() -> Result<()> {
         scoped_test(
             r"
             (
                 (def foo (a: 5 b c: 2) (+ a (+ b c)))
             )
-            "
+            ",
         )
     }
 }

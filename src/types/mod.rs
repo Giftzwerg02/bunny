@@ -497,7 +497,7 @@ mod tests {
 
 
         let basic_ast = parsed_expr_pass(pair.clone());
-        scoped_expr_pass(basic_ast, &library.scoped)
+        scoped_expr_pass(basic_ast, &library.scoped).expect("scoped_expr_pass failed")
     }
 
     fn assert_type(expr: &'static str, needed_type: Type) {

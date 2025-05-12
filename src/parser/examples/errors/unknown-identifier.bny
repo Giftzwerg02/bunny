@@ -1,0 +1,8 @@
+(
+	(def what-is-that (
+		(+ 3 5)
+	))
+	(def what-was-this 3)
+	(def you-did-not-mean-this 6)
+	(what-is-this 3)
+)

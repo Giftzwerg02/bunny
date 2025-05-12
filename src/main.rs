@@ -28,9 +28,10 @@ use crate::types::typecheck_pass;
 
 
 fn main() -> Result<()> {
-    let input = fs::read_to_string("src/parser/examples/duplicate-names.bny").unwrap();
+    let input_str = "src/parser/examples/map.bny";
+    let input = fs::read_to_string(input_str).unwrap();
 
-    let source = NamedSource::new("src/parser/examples/duplicate-names.bny", input.clone())
+    let source = NamedSource::new(input_str, input.clone())
         .with_language("lisp");
 
     // TODO Use the pest-miette interop
@@ -40,8 +41,10 @@ fn main() -> Result<()> {
 
     let mut std_library = standard_library();
 
-    let ast = scoped_expr_pass(ast, &std_library.scoped);
-    //println!("{}", ast.pretty_print());
+    let ast = scoped_expr_pass(ast, &std_library.scoped)
+        .map_err(|report| {
+            report.with_source_code(source.clone())
+        })?;
 
     let typ = typecheck_pass(&ast, &mut std_library.typed)
         .map_err(|report|{
@@ -58,8 +61,6 @@ fn main() -> Result<()> {
     let result = runner.run(typ, std_library.runnable);
     let evalled = result.eval();
     println!("result: {:?}", &evalled);
-
-    //println!("{}", render_page(result.eval()));
 
     let svg = render_page(evalled);
     let mut file = fs::File::create("out.svg").unwrap();

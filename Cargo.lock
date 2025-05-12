@@ -182,6 +182,7 @@ dependencies = [
  "polygonical",
  "proptest",
  "rand 0.9.0",
+ "strsim",
  "text_trees",
  "thiserror 2.0.12",
 ]

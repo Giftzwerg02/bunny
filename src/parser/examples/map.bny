@@ -3,5 +3,7 @@
 		(foldl + 0 elems)
 	))
 
-	(sum [1 5 7 69])
+	(def foo (i am unique <3) (sum [i am unique <3]))
+
+	(foo 1 5 7 69)
 )
