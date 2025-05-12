@@ -1,7 +1,5 @@
 use std::{
-    cell::LazyCell,
     collections::HashMap,
-    fmt::Display,
     sync::{Arc, Mutex},
 };
 
@@ -10,10 +8,10 @@ use palette::Srgba;
 use value::{Lazy, LazyLambda, Value};
 
 use crate::{
-    ast::{Argument, Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo, Symbol},
+    ast::{Argument, Expr, FuncCall, StageInfo, Symbol},
     lazy,
-    library::runnable_expression::{InterpreterSymbolTable, RunnableExpr},
-    types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue},
+    library::runnable_expression::InterpreterSymbolTable,
+    types::typed::{PolyTypedStageInfo, TypedValue},
 };
 
 pub mod value;
@@ -103,11 +101,7 @@ impl Runner {
                 lazy!(Lazy::String, string.value.into())
             }
             Expr::Color(color) => {
-                lazy!(Lazy::Color, {
-                    // TODO: add alpha to color...?
-                    let color = Srgba::new(color.r, color.g, color.b, 1);
-                    color.into()
-                })
+                lazy!(Lazy::Color, Srgba::new(color.r, color.g, color.b, color.alpha))
             }
             Expr::Array(array) => {
                 let mut runner = self.clone();
@@ -116,7 +110,7 @@ impl Runner {
 
                     for elem in array.value {
                         let elem = runner.run(elem, syms.clone());
-                        res.push_back(elem.into());
+                        res.push_back(elem);
                     }
 
                     res
@@ -134,7 +128,7 @@ impl Runner {
                         let value = entry.value;
                         let value = runner.run(value, syms.clone());
 
-                        res.insert(key, value.into());
+                        res.insert(key, value);
                     }
                     res
                 })
@@ -155,11 +149,10 @@ impl Runner {
                     TypedValue::FromLibrary(_) => {
                         lazy!(Lazy::Lambda, {
                             let native = syms.get(&symbol.value).unwrap().clone();
-                            let lambda =
-                                LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
+                            
+                            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
                                     (*native)(args.into_iter().collect())
-                                })));
-                            lambda
+                                })))
                         })
                     }
                     TypedValue::FromBunny(scope) => {
@@ -279,7 +272,7 @@ impl Runner {
                 // a function that takes some arguments and returns a result
 
                 // auto-execute constant definition
-                if lambda.args.len() == 0 {
+                if lambda.args.is_empty() {
                     return self.run(*lambda.body, syms.clone());
                 }
 
@@ -296,7 +289,9 @@ impl Runner {
                 let body = *lambda.clone().body;
 
                 lazy!(Lazy::Lambda, {
-                    let value = LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
+                    
+
+                    LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
                         let body = body.clone();
                         let lambda_args = (*lambda_args).clone();
                         for (pos, arg) in args.iter().cloned().enumerate() {
@@ -311,9 +306,7 @@ impl Runner {
                         }
 
                         result
-                    })));
-
-                    value
+                    })))
                 })
             }
         }
@@ -321,10 +314,10 @@ impl Runner {
 
     fn push_var(&mut self, sym: String, val: Lazy) {
         match self.state.get_mut(&sym) {
-            Some(stack) => stack.push(val.into()),
+            Some(stack) => stack.push(val),
             None => {
                 let mut stack = SymbolStack::new();
-                stack.push(val.into());
+                stack.push(val);
                 self.state.insert(sym, stack);
             }
         }
@@ -339,11 +332,11 @@ impl Runner {
         let stack = self
             .state
             .get_mut(&sym)
-            .expect(&format!("read_var: invalid stack: {sym}"));
+            .unwrap_or_else(|| panic!("read_var: invalid stack: {sym}"));
 
         stack
             .read()
-            .expect(&format!("read_var: invalid stack: {sym}"))
+            .unwrap_or_else(|| panic!("read_var: invalid stack: {sym}"))
     }
 }
 

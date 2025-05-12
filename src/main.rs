@@ -21,12 +21,10 @@ use esvg::{create_document, page::Page};
 use miette::{NamedSource, Result};
 use parser::{BunnyParser, Rule};
 use pest::Parser;
-use runner::{value::{Lazy, Value}, Runner};
+use runner::{value::Value, Runner};
 use types::typed::TypedStageInfo;
-use crate::ast::Symbol;
 use crate::library::standard_library;
-use crate::types::{typecheck_pass, InferenceState};
-use crate::types::typed::{PolyTypedStageInfo, TypedValue};
+use crate::types::typecheck_pass;
 
 
 fn main() -> Result<()> {

@@ -1,5 +1,5 @@
 use core::panic;
-use std::{any::type_name_of_val, collections::HashSet, fmt::Display};
+use std::{collections::HashSet, fmt::Display};
 
 use im::HashMap;
 use text_trees::StringTreeNode;
@@ -187,69 +187,9 @@ pub fn scoped_expr_pass<'a>(
                     }
 
                     // it is not a def or lambda function -> check the inserted symbols
-                    let Some(func_declaration) = syms.get(&func_call_single.id.value) else {
+                    if !syms.contains(&func_call_single.id.value) {
                         panic!("not defined: {}: {}", &func_call_single.id.value, syms);
                     };
-
-                    /*
-                     *   (def a (b) (
-                     *       (lambda (c) (
-                     *           (+ b c)
-                     *       ))
-                     *   ))
-                     *
-                     *
-                     *   syms[a] = (a (b) (
-                     *       (aoiefjiaowj (c) (
-                     *           (+ b c)
-                     *       ))
-                     *   ))
-                     *
-                     *
-                     *  (aoefjwiaoefj (a b c) (+ a b c))
-                     */
-
-
-                    // TODO: need to move this to typcheck-pass
-                    // let func_declaration = match func_declaration {
-                    //     SymbolValue::Argument(argument) => {
-                    //         
-                    //     },
-                    //     SymbolValue::FunctionDefinition(lambda) => {
-                    //         lambda
-                    //     },
-                    //     _ => {
-                    //         panic!(
-                    //             "({}): symbol is not a function (or an arg used as a function): {}: {}",
-                    //             func_call_single.id.value,
-                    //             type_name_of_val(&func_declaration),
-                    //             func_declaration.name(),
-                    //         )
-                    //     }
-                    // };
-
-                    // let mut used = vec![];
-                    // for arg in &func_call_single.args {
-                    //     if let Argument::Named(arg) = arg {
-                    //         let name = &arg.name;
-                    //
-                    //         let mut found = false;
-                    //         for decl_arg in &func_declaration.args {
-                    //             let decl_arg_sym = decl_arg.into_def_argument_symbol();
-                    //             if decl_arg_sym.value == name.value {
-                    //                 found = true;
-                    //                 if used.contains(&name.value) {
-                    //                     panic!("used named argument twice");
-                    //                 }
-                    //                 used.push(name.value.clone());
-                    //             }
-                    //         }
-                    //
-                    //         if !found {
-                    //             panic!("named argument references unknown parameter: {}", name);
-                    //         }
-                    //     }
-                    // }
 
                     let mapped_args = func_call_single
                         .args
@@ -320,24 +260,6 @@ fn info_opt<'a>(
         inner: parsed,
         syms,
     }
-}
-
-fn arguments_list<I: StageInfo>(args: FuncCallSingle<I>) -> Vec<Symbol<I>> {
-    let a0 = args.id.clone();
-    let a_n = args.args;
-    let mut res = vec![a0];
-    for a in a_n {
-        let Argument::Positional(Expr::Symbol(a)) = a else {
-            panic!("invalid ast");
-        };
-
-        if res.iter().any(|pushed| pushed.value == a.value) {
-            panic!("duplicate argument in argument list");
-        }
-
-        res.push(a);
-    }
-    res
 }
 
 fn check_args_are_unique<I: StageInfo>(args: &[Argument<I>]) -> bool {
@@ -442,7 +364,7 @@ fn handle_def<'a>(
             }
 
             let func_args = func_args
-                .into_iter()
+                .iter()
                 .map(|arg| pass_arg_def(arg.clone(), syms))
                 .collect::<Vec<_>>();
 
@@ -507,7 +429,7 @@ fn handle_lambda<'a>(
             }
 
             let func_args = func_args
-                .into_iter()
+                .iter()
                 .map(|arg| pass_arg_def(arg.clone(), syms))
                 .collect::<Vec<_>>();
 

@@ -61,13 +61,13 @@ impl PrettyPrintable for TypedStageInfo<'_> {
     }
 }
 
-impl<'a> Expr<TypedStageInfo<'a>> {
+impl Expr<TypedStageInfo<'_>> {
     pub fn typ(&self) -> &Type {
         &self.info().typ
     }
 }
 
-impl<'a> StageInfo for TypedStageInfo<'a> {}
+impl StageInfo for TypedStageInfo<'_> {}
 
 impl<'a> TypedStageInfo<'a> {
     pub fn generalize(self, state: &HMState) -> PolyTypedStageInfo<'a> {
@@ -91,7 +91,7 @@ impl PrettyPrintable for PolyTypedStageInfo<'_> {
     }
 }
 
-impl<'a> StageInfo for PolyTypedStageInfo<'a> {}
+impl StageInfo for PolyTypedStageInfo<'_> {}
 
 impl<'a> PolyTypedStageInfo<'a> {
     pub fn inst(self, state: &mut HMState) -> TypedStageInfo<'a> {

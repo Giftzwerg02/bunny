@@ -1,6 +1,10 @@
+
 use std::sync::Arc;
 
 use esvg::Element;
+use palette::encoding::Srgb;
+use palette::rgb::Rgb;
+use palette::Alpha;
 use polygonical::point::Point;
 pub use runnable_expression::InterpreterSymbolTable;
 
@@ -136,10 +140,10 @@ pub fn standard_library<'a>() -> Library<'a> {
             lazy!(Lazy::Array, {
                 let from = **from;
                 let to = **to;
-                let range = (from..to)
+                
+                (from..to)
                     .map(|i| lazy!(Lazy::Int, i))
-                    .collect();
-                range
+                    .collect()
             })
         }
 
@@ -302,9 +306,7 @@ pub fn standard_library<'a>() -> Library<'a> {
                     eval!(radius) as i32
                 );
 
-                let (r, g, b, a) = eval!(fill).into_components();
-
-                let color_str = format!("#{:02x}{:02x}{:02x}", r, g, b);  // TODO ignore alpha for now
+                let color_str = to_color_str(eval!(fill));
                 circle.set("fill", color_str);
 
                 group.add(&circle);
@@ -336,9 +338,7 @@ pub fn standard_library<'a>() -> Library<'a> {
                     eval!(h) as f64,
                 );
 
-                let (r, g, b, a) = eval!(fill).into_components();
-
-                let color_str = format!("#{:02x}{:02x}{:02x}", r, g, b); // TODO ignore alpha for now
+                let color_str = to_color_str(eval!(fill));
                 rect.set("fill", color_str);
 
                 group.add(&rect);
@@ -353,4 +353,9 @@ pub fn standard_library<'a>() -> Library<'a> {
             })
         }
     }
+}
+
+fn to_color_str(color: Alpha<Rgb<Srgb, u8>, u8>) -> String {
+    let (r,g,b,a) = color.into_components();
+    format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a)
 }

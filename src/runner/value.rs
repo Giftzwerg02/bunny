@@ -31,94 +31,33 @@ impl Debug for LazyLambda {
 }
 
 // pub type ValueLambda<'a> = fn(Vector<Value<'a>>) -> Value<'a>;
+pub type LazyType<T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
 
 #[derive(Debug, Clone)]
 pub enum Lazy {
-    Int(Arc<LazyCell<i64, Box<dyn FnOnce() -> i64>>>),
+    Int(LazyType<i64>),
 
-    Float(Arc<LazyCell<f64, Box<dyn FnOnce() -> f64>>>),
+    Float(LazyType<f64>),
 
-    String(Arc<LazyCell<ImString, Box<dyn FnOnce() -> ImString>>>),
+    String(LazyType<ImString>),
 
     // palette does not seem to have a "general" color type
     // so we just store it as a linear RGBA color for now
-    Color(Arc<LazyCell<Srgba<u8>, Box<dyn FnOnce() -> Srgba<u8>>>>),
+    Color(LazyType<Srgba<u8>>),
 
-    Opaque(Arc<LazyCell<Element, Box<dyn FnOnce() -> Element>>>),
+    Opaque(LazyType<Element>),
 
     // To make it threat safe: Use LazyLock instead of LazyCell and use the
     // thread safe version of the im crate
-    Array(Arc<LazyCell<Vector<Lazy>, Box<dyn FnOnce() -> Vector<Lazy>>>>),
+    Array(LazyType<Vector<Lazy>>),
 
     // Keys are eagerly evaluated, but values are lazy
-    // TODO Maybe restrict to only "reasoably" hashable keys? int, string, color?
-    Dict(
-        Arc<
-            LazyCell<
-                HashMap<Value, Lazy>,
-                Box<dyn FnOnce() -> HashMap<Value, Lazy>>,
-            >,
-        >,
-    ),
+    Dict(LazyType<HashMap<Value, Lazy>>),
 
-    // Wrapper(
-    //     Arc<LazyCell<Lazy, Box<dyn FnOnce() -> Lazy>>>,
-    // ),
-    Lambda(Arc<LazyCell<LazyLambda, Box<dyn FnOnce() -> LazyLambda>>>),
+    Lambda(LazyType<LazyLambda>),
 }
 
 impl Lazy {
-    // pub fn new_int(value: i64) -> Self {
-    //     let callback: Box<dyn FnOnce() -> i64> = Box::new(move || value);
-    //     Lazy::Int(Arc::new(LazyCell::new(callback)))
-    // }
-    //
-    // pub fn new_float(value: f64) -> Self {
-    //     let callback: Box<dyn FnOnce() -> f64> = Box::new(move || value);
-    //     Lazy::Float(Arc::new(LazyCell::new(callback)))
-    // }
-    //
-    // pub fn new_string(value: ImString) -> Self {
-    //     let callback: Box<dyn FnOnce() -> ImString> = Box::new(move || value);
-    //     Lazy::String(Arc::new(LazyCell::new(callback)))
-    // }
-    //
-    // pub fn new_color(value: Srgba) -> Self {
-    //     let callback: Box<dyn FnOnce() -> Srgba> = Box::new(move || value);
-    //     Lazy::Color(Arc::new(LazyCell::new(callback)))
-    // }
-    //
-    // pub fn new_array(value: Vector<Lazy>) -> Self {
-    //     let callback: Box<dyn FnOnce() -> Vector<Lazy>> = Box::new(move || value);
-    //     Lazy::Array(Arc::new(LazyCell::new(callback)))
-    // }
-    //
-    // pub fn new_dict(value: HashMap<Value, Lazy>) -> Self {
-    //     let callback: Box<dyn FnOnce() -> HashMap<Value, Lazy>> = Box::new(move || value);
-    //     Lazy::Dict(Arc::new(LazyCell::new(callback)))
-    // }
-    //
-    // pub fn new_lambda(value: LazyLambda) -> Self {
-    //     let callback: Box<dyn FnOnce() -> LazyLambda> = Box::new(move || value);
-    //     Lazy::Lambda(Arc::new(LazyCell::new(callback)))
-    // }
-
-    // pub fn wrap(f: Box<dyn FnOnce() -> Lazy>) -> Self {
-    //     Lazy::Wrapper(Arc::new(LazyCell::new(f)))
-    // }
-    //
-    // pub fn nowrap(self) -> Self {
-    //     match self {
-    //         Lazy::Wrapper(wrapped) => {
-    //             let a = (*wrapped.clone()).clone();
-    //             a
-    //         },
-    //         _ => {
-    //             self
-    //         }
-    //     }
-    // }
-
     pub fn eval(self) -> Value {
         match self {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
@@ -172,49 +111,6 @@ pub enum Value {
     Lambda(LazyLambda),
 }
 
-impl Value {
-    pub fn name(&self) -> String {
-        match self {
-            Value::Int(_) => "int",
-            Value::Float(_) => "float",
-            Value::String(im_string) => "string",
-            Value::Color(alpha) => "color",
-            Value::Array(vector) => "array",
-            Value::Dict(hash_map) => "dict",
-            Value::Lambda(lazy_lambda) => "lambda",
-            Value::Opaque(_) => "opaque",
-        }.to_string()
-    }
-}
-
-// TODO: this seems... wrong
-// NOTE: It was wrong!
-// impl Into<Lazy> for Value {
-//     fn into(self) -> Lazy {
-//         match self {
-//             Value::Int(int) => Lazy::new_int(int),
-//
-//             Value::Float(float) => Lazy::new_float(float),
-//
-//             Value::String(string) => Lazy::new_string(string),
-//
-//             Value::Color(color) => Lazy::new_color(color),
-//
-//             Value::Array(arr) => {
-//                 let arr = arr.into_iter().map(|e| e.into()).collect();
-//                 Lazy::new_array(arr)
-//             },
-//
-//             Value::Dict(dict) => {
-//                 let dict = dict.into_iter().map(|(k, v)| (k, v.into())).collect();
-//                 Lazy::new_dict(dict)
-//             },
-//
-//             Value::Lambda(lambda) => Lazy::new_lambda(lambda),
-//         }
-//     }
-// }
-
 impl Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
@@ -258,19 +154,6 @@ impl PartialEq for Value {
     }
 }
 
-impl PartialEq for LazyLambda {
-    fn eq(&self, other: &Self) -> bool {
-        todo!("compare lambda by reference?")
-    }
-}
-
-// #[macro_export]
-// macro_rules! lwrap {
-//     ($body:expr) => {
-//         Lazy::wrap(Box::new(move || $body))
-//     };
-// }
-
 #[macro_export]
 macro_rules! lazy {
     ($value:ident, $to:expr) => {{
@@ -290,16 +173,3 @@ macro_rules! lazy {
         $type(Arc::new(core::cell::LazyCell::new(callback)))
     }};
 }
-
-// fn a(val: Lazy) {
-//     match val {
-//         Lazy::Int(lazy_cell) => lazy!(Lazy::Int, $value),
-//         Lazy::Float(lazy_cell) => lazy!(Lazy::Float, $value),
-//         Lazy::String(lazy_cell) => todo!(),
-//         Lazy::Color(lazy_cell) => todo!(),
-//         Lazy::Opaque(lazy_cell) => todo!(),
-//         Lazy::Array(lazy_cell) => todo!(),
-//         Lazy::Dict(lazy_cell) => todo!(),
-//         Lazy::Lambda(lazy_cell) => todo!(),
-//     }
-// }
