@@ -124,8 +124,8 @@ fn create_argument_definition<'a>(
     )
 }
 
-fn unification_error<T>(
-    hmerror: HMError,
+fn custom_type_error<T>(
+    help: String,
     source: &Option<ParsedStageInfo>
 ) -> Result<T> {
     let token = source.clone().map(|source| {
@@ -133,21 +133,29 @@ fn unification_error<T>(
         (span.start(), span.end() - span.start()).into()
     });
 
-    let error = match hmerror {
+    Err(TypeError {
+        token,
+        advice: help
+    }.into())
+}
+
+fn type_error<T>(
+    hmerror: HMError,
+    source: &Option<ParsedStageInfo>
+) -> Result<T> {
+    match hmerror {
         HMError::UnificationError(a, b) => 
-            TypeError {
-                token,
-                advice: format!("Types {a} and {b} are not compatible")
-            },
+            custom_type_error(
+                format!("Types {a} and {b} are not compatible"),
+                source
+            ),
 
         HMError::OccursCheckError(typ) => 
-            TypeError {
-                token,
-                advice: format!("Creating an infinite type with {typ} is not allowed")
-            }
-    };
-
-    Err(error.into())
+            custom_type_error(
+                format!("Creating an infinite type with {typ} is not allowed"),
+                source
+            )
+    }
 }
 
 /// Refer to https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L197
@@ -228,9 +236,9 @@ fn infer_single_func_call<'a>(
         let result = current_typ.unify(&constructed_func);
 
         if let Err(hmerror) = result {
-            return unification_error(
+            return type_error(
                 hmerror,
-                &call.info.inner
+                &Some(current_arg_typ.info().inner.clone())
             );
         }
 
@@ -294,13 +302,21 @@ fn infer_array<'a>(
 
     let elem = typecheck_pass(first, state)?;
 
+    // TODO This checks the first element twice
     let typed_values = cloned_values
-        .into_iter()
-        .map(|element| typecheck_pass(&element, state))
+        .iter()
+        .map(|element| typecheck_pass(element, state))
         .collect::<Result<Vec<Expr<TypedStageInfo>>>>()?;
 
-    if typed_values.iter().any(|current| current.typ() != elem.typ()) {
-        panic!("mixed types in array: {:?}", typed_values.iter().map(|c| c.typ()).collect::<Vec<_>>());
+    for current in &typed_values {
+        let hmerror = elem.typ().unify(current.typ());
+
+        if let Err(_) = hmerror {
+            return custom_type_error(
+                format!("Cannot have element of type {} in array of type {}", current.typ(), elem.typ()),
+                &Some(current.info().inner.clone())
+            );
+        }
     }
 
     Ok(Array::new(
@@ -357,14 +373,15 @@ fn infer_dict<'a>(
         .map(|entry| infer_dict_entry(entry, state))
         .collect::<Result<Vec<DictEntry<TypedStageInfo>>>>()?;
 
-    let any_type_deviates = typed_values
-        .iter()
-        .any(|current_entry|
-            current_entry.info.typ != entry_type
-        );
+    for current in &typed_values {
+        let hmerror = entry_type.unify(&current.info.typ);
 
-    if any_type_deviates {
-        panic!();
+        if let Err(_) = hmerror {
+            return custom_type_error(
+                format!("Cannot have dict entry of type {} in array of type {}", current.info.typ, entry_type),
+                &Some(current.info.inner.clone())
+            );
+        }
     }
 
     Ok(Dict::new(
@@ -412,14 +429,14 @@ fn infer_lambda<'a>(
                 Argument::Positional(_) =>
                     Ok(Argument::Positional(Expr::Symbol(symbol))),
 
-                Argument::Named(NamedArgument { value, .. }) => {
+                Argument::Named(NamedArgument { value, info, .. }) => {
                     let default_value = typecheck_pass(&value, state)?;
                     let hmerror = typ.unify(default_value.typ());
 
                     if let Err(hmerror) = hmerror {
-                        return unification_error(
+                        return type_error(
                             hmerror,
-                            &Some(stage_info.inner) // TODO Please make this pretty
+                            &info.inner
                         );
                     }
 
@@ -491,16 +508,6 @@ mod tests {
 
         let result_type = typed_ast.typ();
         needed_type.unify(result_type);
-    }
-
-    fn assert_panics(expr: &'static str) {
-        let maybe_panic = catch_unwind(|| {
-            let mut library = test_library();
-            let scoped_ast = prepare_expr(expr, &library);
-            typecheck_pass(&scoped_ast, &mut library.typed)
-        });
-
-        assert!(maybe_panic.is_err(), "Panic-Test did not panic")
     }
 
 

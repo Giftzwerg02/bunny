@@ -4,7 +4,6 @@ use std::fmt::{Display, Formatter};
 use im::HashMap;
 use text_trees::StringTreeNode;
 use crate::types::hm::{HMState, PolyType, Type};
-use crate::types::InferenceState;
 
 pub type TypedSymbolTable<'a> = HashMap<String, TypedValue<'a>>;
 
