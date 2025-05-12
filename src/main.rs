@@ -28,14 +28,15 @@ use crate::types::typecheck_pass;
 
 
 fn main() -> Result<()> {
-    let input_str = "src/parser/examples/map.bny";
+    let input_str = "src/parser/examples/errors/syntax-err-1.bny";
     let input = fs::read_to_string(input_str).unwrap();
 
     let source = NamedSource::new(input_str, input.clone())
         .with_language("lisp");
 
-    // TODO Use the pest-miette interop
-    let mut pair = BunnyParser::parse(Rule::program, input.leak()).unwrap().filter(is_not_comment);
+    let mut pair = BunnyParser::parse(Rule::program, input.leak())
+        .map_err(|err| err.into_miette())?
+        .filter(is_not_comment);
     let pair = pair.next().expect("no program :(");
     let ast = parsed_expr_pass(pair.clone());
 
