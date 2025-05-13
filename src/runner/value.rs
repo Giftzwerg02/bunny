@@ -108,6 +108,8 @@ pub enum Value<'a> {
 
     Dict(HashMap<Value<'a>, Value<'a>>),
 
+    // TODO Use this somehow
+    #[allow(dead_code)]
     Lambda(LazyLambda<'a>),
 }
 

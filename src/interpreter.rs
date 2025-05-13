@@ -61,4 +61,8 @@ impl<'a> Interpreter<'a> {
 
         self.run(bunny_source, source_name)
     }
+
+    pub fn add_predefined_variable(&'a mut self, key: String, value: String){
+        
+    }
 }

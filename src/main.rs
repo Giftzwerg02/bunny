@@ -31,6 +31,9 @@ fn main() -> Result<()> {
     if result.is_renderable() {
         output_svg(&result, &cli.render_config);
     }
+    else {
+        println!("{:?}", result);
+    }
     
     Ok(())
 }
