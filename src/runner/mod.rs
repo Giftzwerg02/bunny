@@ -356,23 +356,3 @@ fn pop_arg_by_name<I: StageInfo>(args: &mut Vec<Argument<I>>, name: &Symbol<I>) 
         .expect("called pop_arg_by_name with non-existent symbol-name");
     args.remove(idx);
 }
-
-// #[derive(Debug, Clone)]
-// struct PolyTypedStageInfo<'a> {
-//     // syms: InterpreterSymbolTable<'a, RunnerStageInfo<'a>>,
-//     syms: TypedSymbolTable<'a>
-// }
-
-// impl<'a> StageInfo for PolyTypedStageInfo<'a> {}
-//
-// impl<'a> PrettyPrintable for PolyTypedStageInfo<'a> {
-//     fn pretty_print(&self) -> text_trees::StringTreeNode {
-//         todo!()
-//     }
-// }
-//
-// impl<'a> Display for PolyTypedStageInfo<'a> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         todo!()
-//     }
-// }
