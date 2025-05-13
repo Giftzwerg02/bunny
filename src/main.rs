@@ -11,7 +11,7 @@ use std::{fs::{self}, io::Write};
 
 use ast::{
     PrettyPrintable,
-    parsed::{is_not_comment, parsed_expr_pass},
+    parsed::parsed_expr_pass,
     scoped::scoped_expr_pass,
 };
 #[allow(unused)]
@@ -20,15 +20,11 @@ use clap::Parser as ClapParser;
 use cli::Cli;
 use esvg::{create_document, page::Page};
 use miette::{NamedSource, Result};
-use parser::{pest_parsing_pass, BunnyParser, Rule};
-use pest::Parser;
-use runner::{value::{Lazy, Value}, Runner};
+use parser::pest_parsing_pass;
+use runner::{value::Value, Runner};
 use types::typed::TypedStageInfo;
-use crate::ast::Symbol;
 use crate::library::standard_library;
-use crate::types::{typecheck_pass, InferenceState};
-use crate::types::typed::{PolyTypedStageInfo, TypedValue};
-
+use crate::types::typecheck_pass;
 
 fn main() -> Result<()> {
     let input = fs::read_to_string("examples/duplicate-names.bny").unwrap();
@@ -37,12 +33,12 @@ fn main() -> Result<()> {
         .with_language("lisp");
 
     // TODO Use the pest-miette interop
-    let pair = pest_parsing_pass(&input);
+    let pair = pest_parsing_pass(input.leak())?;
     let ast = parsed_expr_pass(pair.clone());
 
     let mut std_library = standard_library();
 
-    let ast = scoped_expr_pass(ast, &std_library.scoped);
+    let ast = scoped_expr_pass(ast, &std_library.scoped)?;
     //println!("{}", ast.pretty_print());
 
     let typ = typecheck_pass(&ast, &mut std_library.typed)
@@ -57,7 +53,7 @@ fn main() -> Result<()> {
     );
 
     let mut runner = Runner::new();
-    let result = runner.run(typ, &std_library.runnable);
+    let result = runner.run(typ, std_library.runnable);
     let evalled = result.eval();
     println!("result: {:?}", &evalled);
 

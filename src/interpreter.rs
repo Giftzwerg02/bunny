@@ -24,18 +24,18 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn run(&'a mut self, bunny_src: String, source_name: String) -> Result<Value> {
+    pub fn run(&mut self, bunny_src: String, source_name: String) -> Result<Value> {
         self.source_buffer = bunny_src.clone();
 
         let source = NamedSource::new(source_name, bunny_src)
             .with_language("lisp");
 
         let peg = pest_parsing_pass(&self.source_buffer)
-            .map_err(|report|{ report.with_source_code(source.clone()) })?;;
+            .map_err(|report|{ report.with_source_code(source.clone()) })?;
 
         let ast = parsed_expr_pass(peg);
 
-        let scoped_ast = scoped_expr_pass(ast, &self.scope_symbol_table);
+        let scoped_ast = scoped_expr_pass(ast, &self.scope_symbol_table)?;
 
         let typed_ast = typecheck_pass(&scoped_ast, &mut self.typechecker_state)
             .map_err(|report|{ report.with_source_code(source) })?;
@@ -46,12 +46,13 @@ impl<'a> Interpreter<'a> {
             &mut |typed_info| typed_info.generalize(&self.typechecker_state.hm)
         );
 
-        let unevalutated_result = self.runner.run(typ, &self.native_functions);
+        // TODO Make run take a reference and remove clone
+        let unevalutated_result = self.runner.run(typ, self.native_functions.clone());
 
         Ok(unevalutated_result.eval())
     }
     
-    pub fn run_file<P>(&'a mut self, path: String) -> Result<Value> where P: AsRef<Path>  {
+    pub fn run_file<P>(&mut self, path: String) -> Result<Value> where P: AsRef<Path>  {
         let maybe_input = fs::read_to_string(&path);
 
         let Ok(bunny_source) = maybe_input else {

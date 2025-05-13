@@ -2,7 +2,7 @@ use pest::iterators::Pair;
 #[allow(unused)]
 use pest::Parser;
 use pest_derive::Parser;
-use miette::Result
+use miette::Result;
 
 use crate::ast::parsed::is_not_comment;
 
