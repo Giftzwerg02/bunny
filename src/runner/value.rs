@@ -188,17 +188,65 @@ pub fn to_color_str(color: &Alpha<Srgb<u8>, u8>) -> String {
 
 #[macro_export]
 macro_rules! lazy {
-    ($value:ident, $to:expr) => {{
+    ($value:ident, |$name:ident|$to:expr) => {{
         match $value {
-            Lazy::Int(lazy_cell) => lazy!(Lazy::Int, $to),
-            Lazy::Float(lazy_cell) => lazy!(Lazy::Float, $to),
-            Lazy::String(lazy_cell) => lazy!(Lazy::String, $to),
-            Lazy::Color(lazy_cell) => lazy!(Lazy::Color, $to),
-            Lazy::Opaque(lazy_cell) => todo!(),
-            Lazy::Array(lazy_cell) => todo!(),
-            Lazy::Dict(lazy_cell) => todo!(),
-            Lazy::Lambda(lazy_cell) => todo!(),
-        } 
+            Lazy::Int(ref lazy_cell) => {
+                let $name = lazy_cell.clone();
+                lazy!(Lazy::Int, {
+                    $to;
+                    eval!($name)
+                })
+            },
+            Lazy::Float(ref lazy_cell) => {
+                let $name = lazy_cell.clone();
+                lazy!(Lazy::Float, {
+                    $to;
+                    eval!($name)
+                })
+            }
+            Lazy::String(ref lazy_cell) => {
+                let $name = lazy_cell.clone();
+                lazy!(Lazy::String, {
+                    $to;
+                    eval!($name)
+                })
+            },
+            Lazy::Color(ref lazy_cell) => {
+                let $name = lazy_cell.clone();
+                lazy!(Lazy::Color, {
+                    $to;
+                    eval!($name)
+                })
+            },
+            Lazy::Opaque(ref lazy_cell) => {
+                let $name = lazy_cell.clone();
+                lazy!(Lazy::Opaque, {
+                    $to;
+                    eval!($name)
+                })
+            },
+            Lazy::Array(ref lazy_cell) => {
+                let $name = lazy_cell.clone();
+                lazy!(Lazy::Array, {
+                    $to;
+                    eval!($name)
+                })
+            },
+            Lazy::Dict(ref lazy_cell) => {
+                let $name = lazy_cell.clone();
+                lazy!(Lazy::Dict, {
+                    $to;
+                    eval!($name)
+                })
+            },
+            Lazy::Lambda(ref lazy_cell) => {
+                let $name = lazy_cell.clone();
+                lazy!(Lazy::Lambda, {
+                    $to;
+                    eval!($name)
+                })
+            },
+        }
     }};
     ($type:path, $value:expr) => {{
         let callback = Box::new(move || $value);

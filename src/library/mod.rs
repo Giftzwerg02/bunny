@@ -151,13 +151,18 @@ pub fn standard_library() -> Library {
 
         #[forall a | cond:int() => iftrue:a => iffalse:a => ret:a]
         fn "if"(Lazy::Int(cond), iftrue, iffalse){
-            // TODO: Wrap in lazy like println
-            if eval!(cond) != 0 {
-                iftrue.clone()
-            }
-            else {
-                iffalse.clone()
-            }
+            let cond = cond.clone();
+            let iftrue = iftrue.clone();
+            let iffalse = iffalse.clone();
+            
+            lazy!(iftrue, |val|{
+                if eval!(cond) != 0 {
+                    iftrue.clone().eval()
+                }
+                else {
+                    iffalse.clone().eval()
+                }
+            })   
         }
 
         #[| str:string() => ret:int()]
@@ -172,64 +177,11 @@ pub fn standard_library() -> Library {
         #[forall a | elem:a => ret:a]
         fn "print"(elem){
             let elem = elem.clone();
-            match elem {
-                Lazy::Int(ref lazy_cell) => {
-                    let res = lazy_cell.clone();
-                    lazy!(Lazy::Int, {
-                        println!("Evaluated: {:?}", elem.clone().eval());
-                        eval!(res)
-                    })
-                },
-                Lazy::Float(ref lazy_cell) => {
-                    let res = lazy_cell.clone();
-                    lazy!(Lazy::Float, {
-                        println!("Evaluated: {:?}", elem.clone().eval());
-                        eval!(res)
-                    })
-                }
-                Lazy::String(ref lazy_cell) => {
-                    let res = lazy_cell.clone();
-                    lazy!(Lazy::String, {
-                        println!("Evaluated: {:?}", elem.clone().eval());
-                        eval!(res)
-                    })
-                },
-                Lazy::Color(ref lazy_cell) => {
-                    let res = lazy_cell.clone();
-                    lazy!(Lazy::Color, {
-                        println!("Evaluated: {:?}", elem.clone().eval());
-                        eval!(res)
-                    })
-                },
-                Lazy::Opaque(ref lazy_cell) => {
-                    let res = lazy_cell.clone();
-                    lazy!(Lazy::Opaque, {
-                        println!("Evaluated: {:?}", elem.clone().eval());
-                        eval!(res)
-                    })
-                },
-                Lazy::Array(ref lazy_cell) => {
-                    let res = lazy_cell.clone();
-                    lazy!(Lazy::Array, {
-                        println!("Evaluated: {:?}", elem.clone().eval());
-                        eval!(res)
-                    })
-                },
-                Lazy::Dict(ref lazy_cell) => {
-                    let res = lazy_cell.clone();
-                    lazy!(Lazy::Dict, {
-                        println!("Evaluated: {:?}", elem.clone().eval());
-                        eval!(res)
-                    })
-                },
-                Lazy::Lambda(ref lazy_cell) => {
-                    let res = lazy_cell.clone();
-                    lazy!(Lazy::Lambda, {
-                        println!("Evaluated: {:?}", elem.clone().eval());
-                        eval!(res)
-                    })
-                },
-            }
+            lazy!(elem, |lazy|{
+                let value = eval!(lazy);
+                println!("{:?}", value);
+                value
+            })
         }
 
         #[forall a | message:string() => ret:a]
