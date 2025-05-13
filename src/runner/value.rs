@@ -10,55 +10,55 @@ use im::Vector;
 use imstr::ImString;
 use palette::Srgba;
 
-pub type LambdaFunc = dyn FnMut(Vector<Lazy>) -> Lazy;
-pub type LambdaFuncWrap = Arc<Mutex<LambdaFunc>>;
+pub type LambdaFunc<'a> = dyn FnMut(Vector<Lazy<'a>>) -> Lazy<'a> + 'a;
+pub type LambdaFuncWrap<'a> = Arc<Mutex<LambdaFunc<'a>>>;
 
 #[derive(Clone)]
-pub struct LazyLambda {
-    pub func: LambdaFuncWrap,
+pub struct LazyLambda<'a> {
+    pub func: LambdaFuncWrap<'a>,
 }
 
-impl LazyLambda {
-    pub fn new(func: LambdaFuncWrap) -> Self {
+impl<'a> LazyLambda<'a> {
+    pub fn new(func: LambdaFuncWrap<'a>) -> Self {
         Self { func }
     }
 }
 
-impl Debug for LazyLambda {
+impl Debug for LazyLambda<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "(lambda)")
     }
 }
 
 // pub type ValueLambda<'a> = fn(Vector<Value<'a>>) -> Value<'a>;
-pub type LazyType<T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
+pub type LazyType<'a, T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T + 'a>>>;
 
 #[derive(Debug, Clone)]
-pub enum Lazy {
-    Int(LazyType<i64>),
+pub enum Lazy<'a> {
+    Int(LazyType<'a, i64>),
 
-    Float(LazyType<f64>),
+    Float(LazyType<'a, f64>),
 
-    String(LazyType<ImString>),
+    String(LazyType<'a, ImString>),
 
     // palette does not seem to have a "general" color type
     // so we just store it as a linear RGBA color for now
-    Color(LazyType<Srgba<u8>>),
+    Color(LazyType<'a, Srgba<u8>>),
 
-    Opaque(LazyType<Element>),
+    Opaque(LazyType<'a, Element>),
 
     // To make it threat safe: Use LazyLock instead of LazyCell and use the
     // thread safe version of the im crate
-    Array(LazyType<Vector<Lazy>>),
+    Array(LazyType<'a, Vector<Lazy<'a>>>),
 
     // Keys are eagerly evaluated, but values are lazy
-    Dict(LazyType<HashMap<Value, Lazy>>),
+    Dict(LazyType<'a, HashMap<Value<'a>, Lazy<'a>>>),
 
-    Lambda(LazyType<LazyLambda>),
+    Lambda(LazyType<'a, LazyLambda<'a>>),
 }
 
-impl Lazy {
-    pub fn eval(self) -> Value {
+impl<'a> Lazy<'a> {
+    pub fn eval(self) -> Value<'a> {
         match self {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
             Lazy::Float(lazy_cell) => Value::Float(**lazy_cell),
@@ -93,7 +93,7 @@ impl Lazy {
 }
 
 #[derive(Debug, Clone)]
-pub enum Value {
+pub enum Value<'a> {
     Int(i64),
 
     Float(f64),
@@ -104,14 +104,14 @@ pub enum Value {
 
     Opaque(Element),
 
-    Array(Vector<Value>),
+    Array(Vector<Value<'a>>),
 
-    Dict(HashMap<Value, Value>),
+    Dict(HashMap<Value<'a>, Value<'a>>),
 
-    Lambda(LazyLambda),
+    Lambda(LazyLambda<'a>),
 }
 
-impl Hash for Value {
+impl Hash for Value<'_> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
             Value::Int(int) => int.hash(state),
@@ -136,9 +136,9 @@ impl Hash for Value {
     }
 }
 
-impl Eq for Value {}
+impl Eq for Value<'_> {}
 
-impl PartialEq for Value {
+impl PartialEq for Value<'_> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => a == b,

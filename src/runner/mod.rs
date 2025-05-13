@@ -17,35 +17,35 @@ use crate::{
 pub mod value;
 
 #[derive(Debug, Clone)]
-struct SymbolStack {
-    inner: Vec<Lazy>,
+struct SymbolStack<'a> {
+    inner: Vec<Lazy<'a>>,
 }
 
-impl SymbolStack {
+impl<'a> SymbolStack<'a> {
     fn new() -> Self {
         SymbolStack { inner: Vec::new() }
     }
 
-    fn push(&mut self, val: Lazy) {
+    fn push(&mut self, val: Lazy<'a>) {
         self.inner.push(val);
     }
 
-    fn pop(&mut self) -> Option<Lazy> {
+    fn pop(&mut self) -> Option<Lazy<'a>> {
         self.inner.pop()
     }
 
-    fn read(&self) -> Option<Lazy> {
+    fn read(&self) -> Option<Lazy<'a>> {
         self.inner.last().cloned()
     }
 }
 
 #[derive(Clone)]
-pub struct Runner {
-    state: HashMap<String, SymbolStack>,
+pub struct Runner<'a> {
+    state: HashMap<String, SymbolStack<'a>>,
     native_syms: InterpreterSymbolTable,
 }
 
-impl Runner {
+impl<'a> Runner<'a> {
     pub fn new(native_syms: InterpreterSymbolTable) -> Self {
         Runner {
             state: HashMap::new(),
@@ -87,10 +87,10 @@ impl Runner {
     //      references user-written code or a native function.
     //      Note that a native function technically doesn't need any scoping-information anymore
     //      since it will just be provided with the arguments that were passed to it.
-    pub fn run<'a>(
+    pub fn run(
         &mut self,
         expr: Expr<PolyTypedStageInfo<'a>>
-    ) -> Lazy {
+    ) -> Lazy<'a> {
         match expr {
             Expr::Int(int) => {
                 lazy!(Lazy::Int, { int.value.try_into().expect("uint too large") })
@@ -312,7 +312,7 @@ impl Runner {
         }
     }
 
-    fn push_var(&mut self, sym: String, val: Lazy) {
+    fn push_var(&mut self, sym: String, val: Lazy<'a>) {
         match self.state.get_mut(&sym) {
             Some(stack) => stack.push(val),
             None => {
@@ -328,7 +328,7 @@ impl Runner {
         stack.pop().expect("invalid stack");
     }
 
-    fn read_var(&mut self, sym: String) -> Lazy {
+    fn read_var(&mut self, sym: String) -> Lazy<'a> {
         let stack = self
             .state
             .get_mut(&sym)

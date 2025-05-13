@@ -6,7 +6,7 @@ use crate::{ast::{parsed::parsed_expr_pass, scoped::{scoped_expr_pass, ScopedSta
 pub struct Interpreter<'a> {
     scope_symbol_table: SymbolTable<ScopedStageInfo<'a>>,
     typechecker_state: InferenceState<'a>,
-    runner: Runner,
+    runner: Runner<'a>,
     source_buffer: String
 }
 
@@ -22,7 +22,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn run(&mut self, bunny_src: String, source_name: String) -> Result<Value> {
+    pub fn run(&'a mut self, bunny_src: String, source_name: String) -> Result<Value<'a>> {
         self.source_buffer = bunny_src.clone();
 
         let source = NamedSource::new(source_name, bunny_src)
@@ -50,7 +50,7 @@ impl<'a> Interpreter<'a> {
         Ok(unevalutated_result.eval())
     }
     
-    pub fn run_file<P>(&mut self, path: String) -> Result<Value> where P: AsRef<Path>  {
+    pub fn run_file<P>(&'a mut self, path: String) -> Result<Value<'a>> where P: AsRef<Path>  {
         let maybe_input = fs::read_to_string(&path);
 
         let Ok(bunny_source) = maybe_input else {
