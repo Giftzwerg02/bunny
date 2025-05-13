@@ -105,7 +105,6 @@ impl<'a> PolyTypedStageInfo<'a> {
 
 #[derive(Clone, Debug)]
 pub struct AnyTypedStageInfo<'a> {
-    pub inner: ParsedStageInfo<'a>,
     pub syms: TypedSymbolTable<'a>
 }
 
@@ -126,7 +125,6 @@ impl Display for AnyTypedStageInfo<'_> {
 impl<'a> From<PolyTypedStageInfo<'a>> for AnyTypedStageInfo<'a> {
     fn from(poly_typed: PolyTypedStageInfo<'a>) -> Self {
         Self {
-            inner: poly_typed.inner,
             syms: poly_typed.syms
         }
     }
@@ -135,7 +133,6 @@ impl<'a> From<PolyTypedStageInfo<'a>> for AnyTypedStageInfo<'a> {
 impl<'a> From<TypedStageInfo<'a>> for AnyTypedStageInfo<'a> {
     fn from(typed: TypedStageInfo<'a>) -> Self {
         Self {
-            inner: typed.inner,
             syms: typed.syms
         }
     }

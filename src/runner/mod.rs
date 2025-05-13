@@ -11,7 +11,7 @@ use crate::{
     ast::{Argument, Expr, FuncCall, StageInfo, Symbol},
     lazy,
     library::runnable_expression::InterpreterSymbolTable,
-    types::typed::{AnyTypedStageInfo, PolyTypedStageInfo, TypedValue},
+    types::typed::{AnyTypedStageInfo, TypedValue},
 };
 
 pub mod value;

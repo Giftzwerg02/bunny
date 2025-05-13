@@ -28,20 +28,24 @@ impl<'a> Interpreter<'a> {
         let source = NamedSource::new(source_name, bunny_src)
             .with_language("scheme");
 
-        let peg = pest_parsing_pass(&self.source_buffer)
-            .map_err(|report|{ report.with_source_code(source.clone()) })?;
+        let result: Result<Value> = {
+            let peg = pest_parsing_pass(&self.source_buffer)?;
 
-        let ast = parsed_expr_pass(peg);
+            let ast = parsed_expr_pass(peg);
 
-        let scoped_ast = scoped_expr_pass(ast, &self.scope_symbol_table)?;
+            let scoped_ast = scoped_expr_pass(ast, &self.scope_symbol_table)?;
 
-        let typed_ast = typecheck_pass(&scoped_ast, &mut self.typechecker_state)
-            .map_err(|report|{ report.with_source_code(source) })?
-            .map_stage(&mut |info| info.into());
+            let typed_ast = typecheck_pass(&scoped_ast, &mut self.typechecker_state)?
+                .map_stage(&mut |info| info.into());
 
-        let unevalutated_result = self.runner.run(typed_ast);
+            let unevalutated_result = self.runner.run(typed_ast);
 
-        Ok(unevalutated_result.eval())
+            Ok(unevalutated_result.eval())
+        };
+
+        result.map_err(|report| {
+            report.with_source_code(source)
+        })
     }
     
     pub fn run_file<P>(&'a mut self, path: P) -> Result<Value<'a>> where P: AsRef<Path>  {
