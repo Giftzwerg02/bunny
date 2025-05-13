@@ -1,0 +1,5 @@
+(
+	(def foo (a c d c) (+ a b))
+	(def const 3)
+	(foo 1 3)
+)
