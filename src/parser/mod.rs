@@ -707,7 +707,7 @@ mod tests {
 
         #[test]
         fn simple_example_test() {
-            let input = include_str!("./examples/simple.bny");
+            let input = include_str!("../../examples/simple.bny");
             parse_valid(Rule::program, input);
         }
 
@@ -717,7 +717,7 @@ mod tests {
             // since only one paren is removed at a time, a mismatch must be given, resulting in a
             // parsing-failure
 
-            let input = include_str!("./examples/simple.bny");
+            let input = include_str!("../../examples/simple.bny");
             let parens = ['(', ')'];
 
             let to_remove_opts = input

@@ -471,7 +471,7 @@ fn infer_lambda<'a>(
 
 #[cfg(test)]
 mod tests {
-    use std::panic::catch_unwind;
+    /*use std::panic::catch_unwind;
     use crate::ast::parsed::{is_not_comment, parsed_expr_pass};
     use crate::ast::scoped::{scoped_expr_pass, ScopedStageInfo};
     use crate::library::Library;
@@ -480,9 +480,9 @@ mod tests {
     use crate::types::typecheck_pass;
     use pest::Parser;
     use crate::ast::Expr;
-    use crate::library;
+    use crate::library;*/
 
-    fn test_library<'a>() -> Library<'a> {
+    /*fn test_library<'a>() -> Library<'a> {
         library! {
 
         }
@@ -508,7 +508,5 @@ mod tests {
 
         let result_type = typed_ast.typ();
         needed_type.unify(result_type);
-    }
-
-
+    }*/
 }

@@ -148,11 +148,13 @@ impl<'a> Runner<'a> {
                 let scope = symbol.info.syms.get(&symbol.value).expect("scoping err");
                 match scope {
                     TypedValue::FromLibrary(_) => {
+                        let symbol_value_owned = symbol.value.clone();
+                        let native_syms_owned = self.native_syms.clone();
+
                         lazy!(Lazy::Lambda, {
-                            let native = self.native_syms.get(&symbol.value).unwrap().clone();
-                            
-                            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
-                                    (*native)(args.into_iter().collect())
+                            let native_fn = native_syms_owned.get(&symbol_value_owned).unwrap().clone();
+                            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<Lazy<'a>>| {
+                                    (*native_fn)(args.into_iter().collect())
                                 })))
                         })
                     }
