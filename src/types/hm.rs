@@ -1,13 +1,11 @@
+//! Base for of a Hindley-Milner Algorithm J implementation
+//! Mostly translated from https://github.com/jfecher/algorithm-j/blob/master/j.ml
+
 use std::cell::RefCell;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
-
-/**
- * Base for of a Hindley-Milner Algorithm J implementation
- * Mostly translated from https://github.com/jfecher/algorithm-j/blob/master/j.ml
- */
 
 pub enum HMError {
     UnificationError(Type, Type),

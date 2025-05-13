@@ -311,7 +311,7 @@ fn infer_array<'a: 'b, 'b: 'a>(
     for current in &typed_values {
         let hmerror = elem.typ().unify(current.typ());
 
-        if let Err(_) = hmerror {
+        if hmerror.is_err() {
             return custom_type_error(
                 format!("Cannot have element of type {} in array of type {}", current.typ(), elem.typ()),
                 &Some(current.info().inner.clone())
@@ -376,7 +376,7 @@ fn infer_dict<'a: 'b, 'b: 'a>(
     for current in &typed_values {
         let hmerror = entry_type.unify(&current.info.typ);
 
-        if let Err(_) = hmerror {
+        if hmerror.is_err() {
             return custom_type_error(
                 format!("Cannot have dict entry of type {} in array of type {}", current.info.typ, entry_type),
                 &Some(current.info.inner.clone())

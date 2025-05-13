@@ -575,7 +575,7 @@ mod tests {
         Expr::FuncCall(ast::FuncCall::Single(empty_func(info)))
     }
 
-    fn scoped_test<'a>(code: &str) -> miette::Result<()> {
+    fn scoped_test(code: &str) -> miette::Result<()> {
         let pair = BunnyParser::parse(Rule::program, code)
             .unwrap()
             .next()
