@@ -22,7 +22,7 @@ impl Interpreter {
 
     pub fn run(&mut self, bunny_src: String, source_name: String) -> Result<Value> {
         let source = NamedSource::new(source_name, bunny_src.clone())
-            .with_language("scheme");
+            .with_language("Lisp");
 
         fn compute_result(bunny_src: String, interpreter: &mut Interpreter) -> Result<Value> {
             let peg = pest_parsing_pass(bunny_src)?;
@@ -30,6 +30,7 @@ impl Interpreter {
             let ast = parsed_expr_pass(peg);
 
             let scoped_ast = scoped_expr_pass(ast, &interpreter.scope_symbol_table)?;
+            interpreter.scope_symbol_table = scoped_ast.info().syms.clone();
 
             let typed_ast = typecheck_pass(&scoped_ast, &mut interpreter.typechecker_state)?
                 .map_stage(&mut |info| info.into());
@@ -40,7 +41,7 @@ impl Interpreter {
         }
 
         let result: Result<Value> = compute_result(bunny_src, self);
-
+        
         result.map_err(|report| {
             report.with_source_code(source)
         })
@@ -58,5 +59,7 @@ impl Interpreter {
         self.run(bunny_source, source_name)
     }
 
-    //pub fn add_predefined_variable(&'a mut self, key: String, value: String){}
+    pub fn add_predefined_variable(&mut self, key: String, value: String) -> Result<Value> {
+        self.run(format!("(def {} {})", key, value), "script-arguments".to_owned())
+    }
 }

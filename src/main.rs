@@ -21,12 +21,13 @@ use crate::library::standard_library;
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let interpreter = Interpreter::new(standard_library());
+    let mut interpreter = Interpreter::new(standard_library());
 
-    // TODO God that's awful, but one impossible thing at a time
-    let eternal_interpreter = Box::leak(Box::new(interpreter)); 
+    for (name, value) in cli.defined_variables() {
+        interpreter.add_predefined_variable(name, value)?;
+    }
 
-    let result = eternal_interpreter.run_file(cli.file)?;
+    let result = interpreter.run_file(cli.file)?;
 
     if result.is_renderable() {
         output_svg(&result, &cli.render_config);
