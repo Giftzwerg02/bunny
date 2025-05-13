@@ -33,7 +33,7 @@ fn main() -> Result<()> {
         output_svg(&result, &cli.render_config);
     }
     else {
-        println!("{:?}", result);
+        println!("{}", result);
     }
     
     Ok(())

@@ -9,7 +9,7 @@ use polygonical::point::Point;
 pub use runnable_expression::InterpreterSymbolTable;
 
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
-use crate::runner::value::Lazy;
+use crate::runner::value::{to_color_str, Lazy};
 use crate::types::InferenceState;
 use crate::types::util::*;
 use crate::{eval, lazy, library};
@@ -306,7 +306,7 @@ pub fn standard_library() -> Library {
                     eval!(radius) as i32
                 );
 
-                let color_str = to_color_str(eval!(fill));
+                let color_str = to_color_str(&eval!(fill));
                 circle.set("fill", color_str);
 
                 group.add(&circle);
@@ -338,7 +338,7 @@ pub fn standard_library() -> Library {
                     eval!(h) as f64,
                 );
 
-                let color_str = to_color_str(eval!(fill));
+                let color_str = to_color_str(&eval!(fill));
                 rect.set("fill", color_str);
 
                 group.add(&rect);
@@ -353,9 +353,4 @@ pub fn standard_library() -> Library {
             })
         }
     }
-}
-
-fn to_color_str(color: Alpha<Rgb<Srgb, u8>, u8>) -> String {
-    let (r,g,b,a) = color.into_components();
-    format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a)
 }

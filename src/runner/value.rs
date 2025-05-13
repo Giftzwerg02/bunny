@@ -1,5 +1,6 @@
 use std::cell::LazyCell;
 use std::fmt::Debug;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -8,6 +9,9 @@ use esvg::Element;
 use im::HashMap;
 use im::Vector;
 use imstr::ImString;
+use palette::rgb::Rgb;
+use palette::Alpha;
+use palette::Srgb;
 use palette::Srgba;
 
 pub type LambdaFunc = dyn FnMut(Vector<Lazy>) -> Lazy;
@@ -159,6 +163,34 @@ impl PartialEq for Value {
         }
     }
 }
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Value::Int(int) => write!(f, "{}", int),
+            Value::Float(float) => write!(f, "{}", float),
+            Value::String(string) => write!(f, "{}", string),
+            Value::Color(color) => write!(f, "{}", to_color_str(&color)),
+            Value::Array(array) => write!(f, "[{}]", array
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")),
+            Value::Dict(dict) => write!(f, "[{}]", dict.iter()
+                .map(|(k, v)| format!("{}: {}", k.to_string(), v.to_string()))
+                .collect::<Vec<_>>()
+                .join(" ")),
+            Value::Lambda() => write!(f, "(lambda)"),
+            Value::Opaque(opaque) => write!(f, "{}", opaque.to_pretty_string()),
+        }
+    }
+}
+
+pub fn to_color_str(color: &Alpha<Srgb<u8>, u8>) -> String {
+    let (r,g,b,a) = color.into_components();
+    format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a)
+}
+
 
 #[macro_export]
 macro_rules! lazy {
