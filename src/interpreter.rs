@@ -1,12 +1,11 @@
 use std::{fs, path::Path};
 use miette::{NamedSource, Result};
 
-use crate::{ast::{parsed::parsed_expr_pass, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}}, library::{InterpreterSymbolTable, Library}, parser::pest_parsing_pass, runner::{value::Value, Runner}, types::{typecheck_pass, InferenceState}};
+use crate::{ast::{parsed::parsed_expr_pass, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}}, library::Library, parser::pest_parsing_pass, runner::{value::Value, Runner}, types::{typecheck_pass, InferenceState}};
 
 pub struct Interpreter<'a> {
     scope_symbol_table: SymbolTable<ScopedStageInfo<'a>>,
     typechecker_state: InferenceState<'a>,
-    native_functions: InterpreterSymbolTable,
     runner: Runner,
     source_buffer: String
 }
@@ -18,8 +17,7 @@ impl<'a> Interpreter<'a> {
         Self {
             scope_symbol_table: library.scoped,
             typechecker_state: library.typed,
-            native_functions: library.runnable,
-            runner: Runner::new(),
+            runner: Runner::new(library.runnable),
             source_buffer: String::new()
         }
     }
@@ -28,7 +26,7 @@ impl<'a> Interpreter<'a> {
         self.source_buffer = bunny_src.clone();
 
         let source = NamedSource::new(source_name, bunny_src)
-            .with_language("lisp");
+            .with_language("scheme");
 
         let peg = pest_parsing_pass(&self.source_buffer)
             .map_err(|report|{ report.with_source_code(source.clone()) })?;
@@ -47,7 +45,7 @@ impl<'a> Interpreter<'a> {
         );
 
         // TODO Make run take a reference and remove clone
-        let unevalutated_result = self.runner.run(typ, self.native_functions.clone());
+        let unevalutated_result = self.runner.run(typ);
 
         Ok(unevalutated_result.eval())
     }

@@ -52,8 +52,8 @@ fn main() -> Result<()> {
         &mut |typed_info: TypedStageInfo| typed_info.generalize(&std_library.typed.hm)
     );
 
-    let mut runner = Runner::new();
-    let result = runner.run(typ, std_library.runnable);
+    let mut runner = Runner::new(std_library.runnable);
+    let result = runner.run(typ);
     let evalled = result.eval();
     println!("result: {:?}", &evalled);
 
