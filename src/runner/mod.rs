@@ -1,7 +1,5 @@
 use std::{
-    cell::LazyCell,
     collections::HashMap,
-    fmt::Display,
     sync::{Arc, Mutex},
 };
 
@@ -10,10 +8,10 @@ use palette::Srgba;
 use value::{Lazy, LazyLambda, Value};
 
 use crate::{
-    ast::{Argument, Expr, FuncCall, FuncCallSingle, Lambda, PrettyPrintable, StageInfo, Symbol},
+    ast::{Argument, Expr, FuncCall, StageInfo, Symbol},
     lazy,
-    library::runnable_expression::{InterpreterSymbolTable, RunnableExpr},
-    types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue},
+    library::runnable_expression::InterpreterSymbolTable,
+    types::typed::{PolyTypedStageInfo, TypedValue},
 };
 
 pub mod value;
@@ -87,10 +85,10 @@ impl Runner {
     //      references user-written code or a native function.
     //      Note that a native function technically doesn't need any scoping-information anymore
     //      since it will just be provided with the arguments that were passed to it.
-    pub fn run(
+    pub fn run<'a>(
         &mut self,
-        expr: Expr<PolyTypedStageInfo<'static>>,
-        syms: InterpreterSymbolTable,
+        expr: Expr<PolyTypedStageInfo<'a>>,
+        syms: &InterpreterSymbolTable,
     ) -> Lazy {
         match expr {
             Expr::Int(int) => {
@@ -115,7 +113,7 @@ impl Runner {
                     let mut res = Vector::new();
 
                     for elem in array.value {
-                        let elem = runner.run(elem, syms.clone());
+                        let elem = runner.run(elem, syms);
                         res.push_back(elem.into());
                     }
 
@@ -128,11 +126,11 @@ impl Runner {
                     let mut res: im::HashMap<Value, Lazy> = im::HashMap::new();
                     for entry in dict.value {
                         let key = entry.key;
-                        let key = runner.run(key, syms.clone());
+                        let key = runner.run(key, syms);
                         let key = key.eval();
 
                         let value = entry.value;
-                        let value = runner.run(value, syms.clone());
+                        let value = runner.run(value, syms);
 
                         res.insert(key, value.into());
                     }
@@ -164,7 +162,7 @@ impl Runner {
                     }
                     TypedValue::FromBunny(scope) => {
                         if matches!(scope, Expr::Lambda(_)) {
-                            self.run(scope.clone(), syms.clone())
+                            self.run(scope.clone(), syms)
                         } else {
                             self.read_var(symbol.value)
                         }
@@ -185,12 +183,10 @@ impl Runner {
                         .into_iter()
                         .map(|arg| match arg {
                             crate::ast::Argument::Positional(arg_expr) => {
-                                let syms = syms.clone();
                                 let mut runner = self.clone();
                                 runner.run(arg_expr, syms)
                             }
                             crate::ast::Argument::Named(named_argument) => {
-                                let syms = syms.clone();
                                 let mut runner = self.clone();
                                 runner.run(*named_argument.value, syms)
                             }
@@ -212,7 +208,7 @@ impl Runner {
                         let args = func.args.into_iter().map(|arg| {
                             match arg {
                                 Argument::Positional(expr) => {
-                                    self.run(expr, syms.clone())
+                                    self.run(expr, syms)
                                 },
                                 Argument::Named(_) => {
                                     panic!("named arguments are not allowed when passing to an argument-lambda")
@@ -233,12 +229,12 @@ impl Runner {
                                 crate::ast::Argument::Positional(arg_expr) => {
                                     let arg_sym = lambda.args[pos].into_def_argument_symbol();
                                     already_set_arguments.push(arg_sym.clone());
-                                    let arg_value = self.run(arg_expr, syms.clone());
+                                    let arg_value = self.run(arg_expr, syms);
                                     self.push_var(arg_sym.value, arg_value);
                                 }
                                 crate::ast::Argument::Named(named_argument) => {
                                     already_set_arguments.push(named_argument.name.clone());
-                                    let arg_value = self.run(*named_argument.value, syms.clone());
+                                    let arg_value = self.run(*named_argument.value, syms);
                                     self.push_var(named_argument.name.value, arg_value);
                                 }
                             }
@@ -257,7 +253,7 @@ impl Runner {
                             let default_value = arg
                                 .into_def_argument_expr()
                                 .expect("non-set argument should have a default value");
-                            let default_value = self.run(default_value, syms.clone());
+                            let default_value = self.run(default_value, syms);
                             self.push_var(name.value, default_value);
                         }
 
@@ -280,7 +276,7 @@ impl Runner {
 
                 // auto-execute constant definition
                 if lambda.args.len() == 0 {
-                    return self.run(*lambda.body, syms.clone());
+                    return self.run(*lambda.body, syms);
                 }
 
                 let lambda_args = Arc::new(
@@ -304,7 +300,7 @@ impl Runner {
                             lambda_runner.push_var(arg_sym, arg);
                         }
 
-                        let result = lambda_runner.run(body, syms.clone());
+                        let result = lambda_runner.run(body, &syms);
 
                         for arg in (lambda_args).clone() {
                             lambda_runner.pop_var(arg);

@@ -1,5 +1,3 @@
-use im::HashMap;
-
 #[macro_export]
 macro_rules! library {
     ( $(

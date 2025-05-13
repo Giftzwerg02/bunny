@@ -5,6 +5,7 @@ pub mod parser;
 mod types;
 mod runner;
 mod library;
+mod interpreter;
 
 use std::{fs::{self}, io::Write};
 
@@ -19,7 +20,7 @@ use clap::Parser as ClapParser;
 use cli::Cli;
 use esvg::{create_document, page::Page};
 use miette::{NamedSource, Result};
-use parser::{BunnyParser, Rule};
+use parser::{pest_parsing_pass, BunnyParser, Rule};
 use pest::Parser;
 use runner::{value::{Lazy, Value}, Runner};
 use types::typed::TypedStageInfo;
@@ -30,14 +31,13 @@ use crate::types::typed::{PolyTypedStageInfo, TypedValue};
 
 
 fn main() -> Result<()> {
-    let input = fs::read_to_string("src/parser/examples/duplicate-names.bny").unwrap();
+    let input = fs::read_to_string("examples/duplicate-names.bny").unwrap();
 
-    let source = NamedSource::new("src/parser/examples/duplicate-names.bny", input.clone())
+    let source = NamedSource::new("examples/duplicate-names.bny", input.clone())
         .with_language("lisp");
 
     // TODO Use the pest-miette interop
-    let mut pair = BunnyParser::parse(Rule::program, input.leak()).unwrap().filter(is_not_comment);
-    let pair = pair.next().expect("no program :(");
+    let mut pair = pest_parsing_pass(&input);
     let ast = parsed_expr_pass(pair.clone());
 
     let mut std_library = standard_library();
