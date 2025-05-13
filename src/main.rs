@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     let result = interpreter.run_file(cli.file)?;
 
     if result.is_renderable() {
-        output_svg(&result, &cli.render_config);
+        output_svg(&result, &cli.render_config)?;
     }
     else {
         println!("{}", result);
