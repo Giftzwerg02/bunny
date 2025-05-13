@@ -20,8 +20,9 @@ use runner::value::Value;
 use crate::library::standard_library;
 
 fn main() -> Result<()> {
+    // TODO God that's awful, but one impossible thing at a time
     let lib = standard_library();
-    let mut interpreter = Interpreter::new(lib);
+    let interpreter = Box::leak(Box::new(Interpreter::new(lib)));
 
     let result = interpreter.run_file("examples/duplicate-names.bny")?;
 

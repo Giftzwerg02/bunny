@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 use miette::{NamedSource, Result};
 
-use crate::{ast::{parsed::parsed_expr_pass, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}}, library::Library, parser::pest_parsing_pass, runner::{value::Value, Runner}, types::{typecheck_pass, typed::TypedStageInfo, InferenceState}};
+use crate::{ast::{parsed::parsed_expr_pass, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}}, library::Library, parser::pest_parsing_pass, runner::{value::Value, Runner}, types::{typecheck_pass, InferenceState}};
 
 pub struct Interpreter<'a> {
     scope_symbol_table: SymbolTable<ScopedStageInfo<'a>>,
@@ -22,7 +22,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn run(&mut self, bunny_src: String, source_name: String) -> Result<Value<'a>> {
+    pub fn run(&'a mut self, bunny_src: String, source_name: String) -> Result<Value<'a>> {
         self.source_buffer = bunny_src.clone();
 
         let source = NamedSource::new(source_name, bunny_src)
@@ -36,14 +36,15 @@ impl<'a> Interpreter<'a> {
         let scoped_ast = scoped_expr_pass(ast, &self.scope_symbol_table)?;
 
         let typed_ast = typecheck_pass(&scoped_ast, &mut self.typechecker_state)
-            .map_err(|report|{ report.with_source_code(source) })?;
+            .map_err(|report|{ report.with_source_code(source) })?
+            .map_stage(&mut |info| info.into());
 
         let unevalutated_result = self.runner.run(typed_ast);
 
         Ok(unevalutated_result.eval())
     }
     
-    pub fn run_file<P>(&mut self, path: P) -> Result<Value<'a>> where P: AsRef<Path>  {
+    pub fn run_file<P>(&'a mut self, path: P) -> Result<Value<'a>> where P: AsRef<Path>  {
         let maybe_input = fs::read_to_string(&path);
 
         let Ok(bunny_source) = maybe_input else {

@@ -103,27 +103,40 @@ impl<'a> PolyTypedStageInfo<'a> {
     }
 }
 
-pub trait AnyTypedStageInfo<'a> : StageInfo {
-    fn inner(&self) -> &ParsedStageInfo<'a>;
-    fn syms(&self) -> &TypedSymbolTable<'a>;
+#[derive(Clone, Debug)]
+pub struct AnyTypedStageInfo<'a> {
+    pub inner: ParsedStageInfo<'a>,
+    pub syms: TypedSymbolTable<'a>
 }
 
-impl<'a> AnyTypedStageInfo<'a> for TypedStageInfo<'a> {
-    fn inner(&self) -> &ParsedStageInfo<'a> {
-        &self.inner
-    }
+impl StageInfo for AnyTypedStageInfo<'_> {}
 
-    fn syms(&self) -> &TypedSymbolTable<'a> {
-        &self.syms
+impl PrettyPrintable for AnyTypedStageInfo<'_> {
+    fn pretty_print(&self) -> StringTreeNode {
+        todo!("Why is this even required?");
     }
 }
 
-impl<'a> AnyTypedStageInfo<'a> for PolyTypedStageInfo<'a> {
-    fn inner(&self) -> &ParsedStageInfo<'a> {
-        &self.inner
+impl Display for AnyTypedStageInfo<'_> {
+    fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!("Why is this even required?");
     }
+}
 
-    fn syms(&self) -> &TypedSymbolTable<'a> {
-        &self.syms
+impl<'a> From<PolyTypedStageInfo<'a>> for AnyTypedStageInfo<'a> {
+    fn from(poly_typed: PolyTypedStageInfo<'a>) -> Self {
+        Self {
+            inner: poly_typed.inner,
+            syms: poly_typed.syms
+        }
+    }
+}
+
+impl<'a> From<TypedStageInfo<'a>> for AnyTypedStageInfo<'a> {
+    fn from(typed: TypedStageInfo<'a>) -> Self {
+        Self {
+            inner: typed.inner,
+            syms: typed.syms
+        }
     }
 }

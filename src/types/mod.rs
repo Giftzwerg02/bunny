@@ -39,7 +39,7 @@ struct TypeError {
     advice: String
 }
 
-pub fn typecheck_pass<'a, 'b: 'a>(
+pub fn typecheck_pass<'a: 'b, 'b: 'a>(
     expr: &Expr<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'b>
 ) -> Result<Expr<TypedStageInfo<'a>>> {
@@ -98,7 +98,7 @@ pub fn typecheck_pass<'a, 'b: 'a>(
     Ok(new_expr)
 }
 
-fn type_stage_info<'a, 'b: 'a>(
+fn type_stage_info<'a: 'b, 'b: 'a>(
     info: &ScopedStageInfo<'a>,
     typ: Type,
     state: &mut InferenceState<'b>
@@ -110,7 +110,7 @@ fn type_stage_info<'a, 'b: 'a>(
     }
 }
 
-fn create_argument_definition<'a, 'b: 'a>(
+fn create_argument_definition<'a: 'b, 'b: 'a>(
     sym: &Symbol<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'b>
 ) -> Symbol<TypedStageInfo<'a>> {
@@ -159,7 +159,7 @@ fn type_error<T>(
 }
 
 /// Refer to https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L197
-fn infer_symbol<'a, 'b: 'a>(
+fn infer_symbol<'a: 'b, 'b: 'a>(
     sym: &Symbol<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'b>
 ) -> Result<Symbol<TypedStageInfo<'a>>> {
@@ -187,7 +187,7 @@ fn infer_symbol<'a, 'b: 'a>(
         };
 
         let poly_expr = typed_expr.map_stage(
-            &mut |typed_info: TypedStageInfo<'a>| typed_info.generalize(&state.hm)
+            &mut |typed_info: TypedStageInfo| typed_info.generalize(&state.hm)
         );
 
         state.hm.exit_level();
@@ -208,7 +208,7 @@ fn infer_symbol<'a, 'b: 'a>(
 }
 
 /// See: https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L210
-fn infer_single_func_call<'a, 'b: 'a>(
+fn infer_single_func_call<'a: 'b, 'b: 'a>(
     call: &FuncCallSingle<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'b>
 ) -> Result<FuncCallSingle<TypedStageInfo<'a>>> {
@@ -256,7 +256,7 @@ fn infer_single_func_call<'a, 'b: 'a>(
     ))
 }
 
-fn infer_argument<'a, 'b: 'a>(
+fn infer_argument<'a: 'b, 'b: 'a>(
     arg: &Argument<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'b>
 ) -> Result<Argument<TypedStageInfo<'a>>> {
@@ -285,7 +285,7 @@ fn infer_argument<'a, 'b: 'a>(
     }
 }
 
-fn infer_array<'a, 'b: 'a>(
+fn infer_array<'a: 'b, 'b: 'a>(
     barray: &Array<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'b>
 ) -> Result<Array<TypedStageInfo<'a>>> {
@@ -329,7 +329,7 @@ fn infer_array<'a, 'b: 'a>(
     ))
 }
 
-fn infer_dict<'a, 'b: 'a>(
+fn infer_dict<'a: 'b, 'b: 'a>(
     dictionary: &Dict<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'b>
 ) -> Result<Dict<TypedStageInfo<'a>>> {
@@ -345,7 +345,7 @@ fn infer_dict<'a, 'b: 'a>(
         ))
     };
 
-    fn infer_dict_entry<'a, 'b: 'a>(
+    fn infer_dict_entry<'a: 'b, 'b: 'a>(
         entry: &DictEntry<ScopedStageInfo<'a>>,
         state: &mut InferenceState<'b>
     ) -> Result<DictEntry<TypedStageInfo<'a>>> {
@@ -397,7 +397,7 @@ fn infer_dict<'a, 'b: 'a>(
     ))
 }
 
-fn infer_lambda<'a, 'b: 'a>(
+fn infer_lambda<'a: 'b, 'b: 'a>(
     lambda: &Lambda<ScopedStageInfo<'a>>,
     state: &mut InferenceState<'b>
 ) -> Result<Lambda<TypedStageInfo<'a>>> {

@@ -11,7 +11,7 @@ use crate::{
     ast::{Argument, Expr, FuncCall, StageInfo, Symbol},
     lazy,
     library::runnable_expression::InterpreterSymbolTable,
-    types::typed::{PolyTypedStageInfo, TypedValue},
+    types::typed::{AnyTypedStageInfo, PolyTypedStageInfo, TypedValue},
 };
 
 pub mod value;
@@ -89,7 +89,7 @@ impl<'a> Runner<'a> {
     //      since it will just be provided with the arguments that were passed to it.
     pub fn run(
         &mut self,
-        expr: Expr<PolyTypedStageInfo<'a>>
+        expr: Expr<AnyTypedStageInfo<'a>>,
     ) -> Lazy<'a> {
         match expr {
             Expr::Int(int) => {
@@ -160,7 +160,8 @@ impl<'a> Runner<'a> {
                     }
                     TypedValue::FromBunny(scope) => {
                         if matches!(scope, Expr::Lambda(_)) {
-                            self.run(scope.clone())
+                            let new_scope = scope.clone().map_stage(&mut |info| info.into());
+                            self.run(new_scope)
                         } else {
                             self.read_var(symbol.value)
                         }
@@ -222,21 +223,25 @@ impl<'a> Runner<'a> {
                         lambda_call(args)
                     }
                     Expr::Lambda(lambda) => {
-                        let mut lambda_set_args = lambda.clone();
-                        let lambda_pop_args = lambda.clone();
+                        let mut lambda_set_args = lambda.clone().map_stage(&mut |info| info.into());
+
+                        let lambda_pop_args = lambda_set_args.clone();
+
                         let mut already_set_arguments = vec![];
                         for (pos, arg) in func.args.iter().cloned().enumerate() {
                             match arg {
-                                crate::ast::Argument::Positional(arg_expr) => {
-                                    let arg_sym = lambda.args[pos].into_def_argument_symbol();
-                                    already_set_arguments.push(arg_sym.clone());
-                                    let arg_value = self.run(arg_expr);
-                                    self.push_var(arg_sym.value, arg_value);
-                                }
                                 crate::ast::Argument::Named(named_argument) => {
                                     already_set_arguments.push(named_argument.name.clone());
                                     let arg_value = self.run(*named_argument.value);
                                     self.push_var(named_argument.name.value, arg_value);
+                                }
+                                crate::ast::Argument::Positional(arg_expr) => {
+                                    let arg_sym = lambda.args[pos].into_def_argument_symbol()
+                                    .map_stage(&mut |info| info.into());
+
+                                    already_set_arguments.push(arg_sym.clone());
+                                    let arg_value = self.run(arg_expr);
+                                    self.push_var(arg_sym.value, arg_value);
                                 }
                             }
                         }
@@ -259,8 +264,10 @@ impl<'a> Runner<'a> {
                         }
 
                         // TODO: can we get rid of this clone?
-                        let body: Box<Expr<PolyTypedStageInfo<'_>>> = lambda.clone().body;
-                        let result = self.run(*body);
+                        let body= lambda.clone().body
+                            .map_stage(&mut |info| info.into());
+
+                        let result = self.run(body);
 
                         for arg in lambda_pop_args.args {
                             self.pop_var(arg.into_def_argument_symbol().value);

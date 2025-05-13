@@ -135,9 +135,9 @@ impl<I: StageInfo> SymbolTable<I> {
     }
 }
 
-pub fn scoped_expr_pass<'a, 'b: 'a>(
+pub fn scoped_expr_pass<'a>(
     src: Expr<ParsedStageInfo<'a>>,
-    syms: &SymbolTable<ScopedStageInfo<'b>>,
+    syms: &SymbolTable<ScopedStageInfo<'a>>,
 ) -> Result<Expr<ScopedStageInfo<'a>>> {
     let new_expr = match src {
         Expr::Int(int) => Expr::Int(Int::new(int.value, info(int.info, syms.clone()))),
@@ -385,9 +385,9 @@ fn pass_arg<'a>(
     Ok(res)
 }
 
-fn handle_def<'a, 'b: 'a>(
+fn handle_def<'a>(
     def: FuncCallSingle<ParsedStageInfo<'a>>,
-    syms: &SymbolTable<ScopedStageInfo<'b>>,
+    syms: &SymbolTable<ScopedStageInfo<'a>>,
 ) -> Result<Lambda<ScopedStageInfo<'a>>> {
     // create a new sym-table entry with the newly defined value
     let Argument::Positional(ref new_id) = def.args[0] else {
