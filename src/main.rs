@@ -15,7 +15,7 @@ use cli::Cli;
 
 use interpreter::Interpreter;
 use miette::Result;
-use svg::save_svg;
+use svg::output_svg;
 use crate::library::standard_library;
 
 fn main() -> Result<()> {
@@ -28,7 +28,9 @@ fn main() -> Result<()> {
 
     let result = eternal_interpreter.run_file(cli.file)?;
 
-    save_svg(&result, &cli.render_config);
+    if result.is_renderable() {
+        output_svg(&result, &cli.render_config);
+    }
     
     Ok(())
 }

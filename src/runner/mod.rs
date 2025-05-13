@@ -174,7 +174,6 @@ impl<'a> Runner<'a> {
                 };
 
                 let implementation = func.info.syms.get(&func.id.value).expect("scoping err");
-                dbg!(&func.id.value);
 
                 let TypedValue::FromBunny(implementation) = implementation else {
                     let args = func

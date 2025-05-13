@@ -111,6 +111,12 @@ pub enum Value<'a> {
     Lambda(LazyLambda<'a>),
 }
 
+impl Value<'_> {
+    pub fn is_renderable(&self) -> bool {
+        return matches!(self, Value::Opaque(_))
+    }
+}
+
 impl Hash for Value<'_> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
