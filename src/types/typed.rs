@@ -16,9 +16,9 @@ pub enum TypedValue<'a> {
 /// This stage info is used for typed expression in the AST itself
 #[derive(Clone, Debug)]
 pub struct TypedStageInfo<'a> {
-    inner: ParsedStageInfo<'a>,
+    pub inner: ParsedStageInfo<'a>,
     pub typ: Type,
-    syms: TypedSymbolTable<'a>
+    pub syms: TypedSymbolTable<'a>
 }
 
 /// This stage info is used for typed expressions in symbol tables
@@ -26,9 +26,9 @@ pub struct TypedStageInfo<'a> {
 /// types which may be "generic"
 #[derive(Clone, Debug)]
 pub struct PolyTypedStageInfo<'a> {
-    inner: ParsedStageInfo<'a>,
+    pub inner: ParsedStageInfo<'a>,
     pub typ: PolyType,
-    syms: TypedSymbolTable<'a>
+    pub syms: TypedSymbolTable<'a>
 }
 
 impl TypedValue<'_> {
@@ -103,7 +103,7 @@ impl<'a> PolyTypedStageInfo<'a> {
     }
 }
 
-trait AnyTypedStageInfo<'a> {
+pub trait AnyTypedStageInfo<'a> : StageInfo {
     fn inner(&self) -> &ParsedStageInfo<'a>;
     fn syms(&self) -> &TypedSymbolTable<'a>;
 }

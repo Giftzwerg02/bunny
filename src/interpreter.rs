@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 use miette::{NamedSource, Result};
 
-use crate::{ast::{parsed::parsed_expr_pass, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}}, library::Library, parser::pest_parsing_pass, runner::{value::Value, Runner}, types::{typecheck_pass, InferenceState}};
+use crate::{ast::{parsed::parsed_expr_pass, scoped::{scoped_expr_pass, ScopedStageInfo, SymbolTable}}, library::Library, parser::pest_parsing_pass, runner::{value::Value, Runner}, types::{typecheck_pass, typed::TypedStageInfo, InferenceState}};
 
 pub struct Interpreter<'a> {
     scope_symbol_table: SymbolTable<ScopedStageInfo<'a>>,
@@ -38,13 +38,7 @@ impl<'a> Interpreter<'a> {
         let typed_ast = typecheck_pass(&scoped_ast, &mut self.typechecker_state)
             .map_err(|report|{ report.with_source_code(source) })?;
 
-        // TODO Please PLEASE fucking remove this
-        // We should not need to generalize here..
-        let typ = typed_ast.map_stage(
-            &mut |typed_info| typed_info.generalize(&self.typechecker_state.hm)
-        );
-
-        let unevalutated_result = self.runner.run(typ);
+        let unevalutated_result = self.runner.run(typed_ast);
 
         Ok(unevalutated_result.eval())
     }
