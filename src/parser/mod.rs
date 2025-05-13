@@ -2,6 +2,7 @@ use pest::iterators::Pair;
 #[allow(unused)]
 use pest::Parser;
 use pest_derive::Parser;
+use miette::Result
 
 use crate::ast::parsed::is_not_comment;
 
@@ -9,13 +10,12 @@ use crate::ast::parsed::is_not_comment;
 #[grammar = "parser/grammar.pest"]
 pub struct BunnyParser;
 
-pub fn pest_parsing_pass<'a>(src: &'a str) -> Pair<'a, Rule> {
-    // TODO Please put actuall error handling here
-    let mut pair = BunnyParser::parse(Rule::program, &src)
-        .unwrap()
-        .filter(is_not_comment);
-
-    pair.next().expect("no program :(")
+pub fn pest_parsing_pass(src: &str) -> Result<Pair<Rule>> {
+    Ok(BunnyParser::parse(Rule::program, &src)
+        .map_err(|err| err.into_miette())?
+        .filter(is_not_comment)
+        .next()
+        .unwrap())
 }
 
 #[cfg(test)]

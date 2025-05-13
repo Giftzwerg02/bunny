@@ -30,7 +30,8 @@ impl<'a> Interpreter<'a> {
         let source = NamedSource::new(source_name, bunny_src)
             .with_language("lisp");
 
-        let peg = pest_parsing_pass(&self.source_buffer);
+        let peg = pest_parsing_pass(&self.source_buffer)
+            .map_err(|report|{ report.with_source_code(source.clone()) })?;;
 
         let ast = parsed_expr_pass(peg);
 
@@ -38,7 +39,6 @@ impl<'a> Interpreter<'a> {
 
         let typed_ast = typecheck_pass(&scoped_ast, &mut self.typechecker_state)
             .map_err(|report|{ report.with_source_code(source) })?;
-
 
         // TODO Please PLEASE fucking remove this
         // We should not need to generalize here..
