@@ -37,7 +37,7 @@ fn main() -> Result<()> {
         .with_language("lisp");
 
     // TODO Use the pest-miette interop
-    let mut pair = pest_parsing_pass(&input);
+    let pair = pest_parsing_pass(&input);
     let ast = parsed_expr_pass(pair.clone());
 
     let mut std_library = standard_library();
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     );
 
     let mut runner = Runner::new();
-    let result = runner.run(typ, std_library.runnable);
+    let result = runner.run(typ, &std_library.runnable);
     let evalled = result.eval();
     println!("result: {:?}", &evalled);
 

@@ -7,7 +7,8 @@ pub struct Interpreter<'a> {
     scope_symbol_table: SymbolTable<ScopedStageInfo<'a>>,
     typechecker_state: InferenceState<'a>,
     native_functions: InterpreterSymbolTable,
-    runner: Runner
+    runner: Runner,
+    source_buffer: String
 }
 
 impl<'a> Interpreter<'a> {
@@ -18,15 +19,18 @@ impl<'a> Interpreter<'a> {
             scope_symbol_table: library.scoped,
             typechecker_state: library.typed,
             native_functions: library.runnable,
-            runner: Runner::new()
+            runner: Runner::new(),
+            source_buffer: String::new()
         }
     }
 
-    pub fn run(&mut self, bunny_src: String, source_name: String) -> Result<Value> {
+    pub fn run(&'a mut self, bunny_src: String, source_name: String) -> Result<Value> {
+        self.source_buffer = bunny_src.clone();
+
         let source = NamedSource::new(source_name, bunny_src)
             .with_language("lisp");
 
-        let peg = pest_parsing_pass(&bunny_src);
+        let peg = pest_parsing_pass(&self.source_buffer);
 
         let ast = parsed_expr_pass(peg);
 
@@ -42,12 +46,12 @@ impl<'a> Interpreter<'a> {
             &mut |typed_info| typed_info.generalize(&self.typechecker_state.hm)
         );
 
-        let unevalutated_result = self.runner.run(typ, self.native_functions);
+        let unevalutated_result = self.runner.run(typ, &self.native_functions);
 
         Ok(unevalutated_result.eval())
     }
     
-    pub fn run_file<P>(&mut self, path: String) -> Result<Value> where P: AsRef<Path>  {
+    pub fn run_file<P>(&'a mut self, path: String) -> Result<Value> where P: AsRef<Path>  {
         let maybe_input = fs::read_to_string(&path);
 
         let Ok(bunny_source) = maybe_input else {
