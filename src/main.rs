@@ -9,57 +9,23 @@ mod interpreter;
 
 use std::{fs::{self}, io::Write};
 
-use ast::{
-    PrettyPrintable,
-    parsed::parsed_expr_pass,
-    scoped::scoped_expr_pass,
-};
 #[allow(unused)]
 use clap::Parser as ClapParser;
 #[allow(unused)]
 use cli::Cli;
 use esvg::{create_document, page::Page};
-use miette::{NamedSource, Result};
-use parser::pest_parsing_pass;
-use runner::{value::Value, Runner};
-use types::typed::TypedStageInfo;
+use interpreter::Interpreter;
+use miette::Result;
+use runner::value::Value;
 use crate::library::standard_library;
-use crate::types::typecheck_pass;
 
 fn main() -> Result<()> {
-    let input = fs::read_to_string("examples/duplicate-names.bny").unwrap();
+    let lib = standard_library();
+    let mut interpreter = Interpreter::new(lib);
 
-    let source = NamedSource::new("examples/duplicate-names.bny", input.clone())
-        .with_language("lisp");
+    let result = interpreter.run_file("examples/duplicate-names.bny")?;
 
-    // TODO Use the pest-miette interop
-    let pair = pest_parsing_pass(input.leak())?;
-    let ast = parsed_expr_pass(pair.clone());
-
-    let mut std_library = standard_library();
-
-    let ast = scoped_expr_pass(ast, &std_library.scoped)?;
-    //println!("{}", ast.pretty_print());
-
-    let typ = typecheck_pass(&ast, &mut std_library.typed)
-        .map_err(|report|{
-            report.with_source_code(source)
-        })?;
-
-    println!("{}", typ.pretty_print());
-
-    let typ = typ.map_stage(
-        &mut |typed_info: TypedStageInfo| typed_info.generalize(&std_library.typed.hm)
-    );
-
-    let mut runner = Runner::new(std_library.runnable);
-    let result = runner.run(typ);
-    let evalled = result.eval();
-    println!("result: {:?}", &evalled);
-
-    //println!("{}", render_page(result.eval()));
-
-    let svg = render_page(evalled);
+    let svg = render_page(result);
     let mut file = fs::File::create("out.svg").unwrap();
     file.write_all(svg.as_bytes()).unwrap();
 

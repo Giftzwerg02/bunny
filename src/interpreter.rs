@@ -22,7 +22,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn run(&'a mut self, bunny_src: String, source_name: String) -> Result<Value<'a>> {
+    pub fn run(&mut self, bunny_src: String, source_name: String) -> Result<Value<'a>> {
         self.source_buffer = bunny_src.clone();
 
         let source = NamedSource::new(source_name, bunny_src)
@@ -44,19 +44,20 @@ impl<'a> Interpreter<'a> {
             &mut |typed_info| typed_info.generalize(&self.typechecker_state.hm)
         );
 
-        // TODO Make run take a reference and remove clone
         let unevalutated_result = self.runner.run(typ);
 
         Ok(unevalutated_result.eval())
     }
     
-    pub fn run_file<P>(&'a mut self, path: String) -> Result<Value<'a>> where P: AsRef<Path>  {
+    pub fn run_file<P>(&mut self, path: P) -> Result<Value<'a>> where P: AsRef<Path>  {
         let maybe_input = fs::read_to_string(&path);
 
         let Ok(bunny_source) = maybe_input else {
             todo!();
         };
+        
+        let source_name = path.as_ref().display().to_string();
 
-        self.run(bunny_source, path)
+        self.run(bunny_source, source_name)
     }
 }
