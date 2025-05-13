@@ -23,7 +23,7 @@ fn main() -> Result<()> {
 
     let mut interpreter = Interpreter::new(standard_library());
 
-    for (name, value) in cli.defined_variables() {
+    for (name, value) in cli.defined_variables()? {
         interpreter.add_predefined_variable(name, value)?;
     }
 

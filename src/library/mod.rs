@@ -2,9 +2,6 @@
 use std::sync::Arc;
 
 use esvg::Element;
-use palette::encoding::Srgb;
-use palette::rgb::Rgb;
-use palette::Alpha;
 use polygonical::point::Point;
 pub use runnable_expression::InterpreterSymbolTable;
 

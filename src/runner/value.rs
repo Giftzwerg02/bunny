@@ -9,7 +9,6 @@ use esvg::Element;
 use im::HashMap;
 use im::Vector;
 use imstr::ImString;
-use palette::rgb::Rgb;
 use palette::Alpha;
 use palette::Srgb;
 use palette::Srgba;
@@ -67,7 +66,7 @@ impl Lazy {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
             Lazy::Float(lazy_cell) => Value::Float(**lazy_cell),
             Lazy::String(lazy_cell) => {
-                let pain = (*lazy_cell.clone()).clone(); // TODO What the fuck
+                let pain = (**lazy_cell).clone();
                 Value::String(pain)
             }
             Lazy::Color(lazy_cell) => Value::Color(**lazy_cell),
@@ -87,11 +86,6 @@ impl Lazy {
                 Value::Dict(dict)
             }
             Lazy::Lambda(_) => Value::Lambda(),
-
-            // Lazy::Wrapper(_) => {
-            //     let inner = self.nowrap();
-            //     inner.eval()
-            // }
         }
     }
 }

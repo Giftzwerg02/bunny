@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use clap::{command, Args, Parser};
 
+use miette::Result;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
@@ -21,17 +23,16 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn defined_variables(&self) -> Vec<(String, String)> {
+    pub fn defined_variables(&self) -> Result<Vec<(String, String)>> {
         self.custom_args
             .chunks_exact(2)
-            .filter_map(|chunk| {
+            .map(|chunk| {
                 if chunk.len() == 2 && chunk[0].starts_with("--") {
                     let key = chunk[0].trim_start_matches("--").to_string();
                     let value = chunk[1].to_string();
-                    Some((key, value))
+                    Ok((key, value))
                 } else {
-                    // TODO Error here
-                    None
+                    Err(miette::miette!("Invalid argument format"))
                 }
             })
             .collect()

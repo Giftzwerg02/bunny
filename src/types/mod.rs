@@ -493,7 +493,7 @@ mod tests {
             .unwrap()
             .filter(is_not_comment)
             .next()
-            .expect("no program :("); // TODO Write a utility function for this
+            .expect("no program :(");
 
 
         let basic_ast = parsed_expr_pass(pair.clone());

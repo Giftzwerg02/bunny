@@ -48,11 +48,8 @@ impl Interpreter {
     }
     
     pub fn run_file<P>(&mut self, path: P) -> Result<Value> where P: AsRef<Path>  {
-        let maybe_input = fs::read_to_string(&path);
-
-        let Ok(bunny_source) = maybe_input else {
-            todo!();
-        };
+        let bunny_source = fs::read_to_string(&path)
+            .map_err(|_| miette::miette!("Could not read file: {}", path.as_ref().display()))?;
         
         let source_name = path.as_ref().display().to_string();
 

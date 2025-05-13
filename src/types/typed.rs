@@ -81,13 +81,13 @@ impl TypedStageInfo {
 
 impl Display for PolyTypedStageInfo {
     fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        unimplemented!()
     }
 }
 
 impl PrettyPrintable for PolyTypedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -112,13 +112,13 @@ impl StageInfo for AnyTypedStageInfo {}
 
 impl PrettyPrintable for AnyTypedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
-        todo!("Why is this even required?");
+        unimplemented!("Why is this even required?");
     }
 }
 
 impl Display for AnyTypedStageInfo {
     fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!("Why is this even required?");
+        unimplemented!("Why is this even required?");
     }
 }
 
