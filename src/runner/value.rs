@@ -31,40 +31,30 @@ impl Debug for LazyLambda {
 }
 
 // pub type ValueLambda<'a> = fn(Vector<Value<'a>>) -> Value<'a>;
+pub type LazyType<T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
 
 #[derive(Debug, Clone)]
 pub enum Lazy {
-    Int(Arc<LazyCell<i64, Box<dyn FnOnce() -> i64>>>),
+    Int(LazyType<i64>),
 
-    Float(Arc<LazyCell<f64, Box<dyn FnOnce() -> f64>>>),
+    Float(LazyType<f64>),
 
-    String(Arc<LazyCell<ImString, Box<dyn FnOnce() -> ImString>>>),
+    String(LazyType<ImString>),
 
     // palette does not seem to have a "general" color type
     // so we just store it as a linear RGBA color for now
-    Color(Arc<LazyCell<Srgba<u8>, Box<dyn FnOnce() -> Srgba<u8>>>>),
+    Color(LazyType<Srgba<u8>>),
 
-    Opaque(Arc<LazyCell<Element, Box<dyn FnOnce() -> Element>>>),
+    Opaque(LazyType<Element>),
 
     // To make it threat safe: Use LazyLock instead of LazyCell and use the
     // thread safe version of the im crate
-    Array(Arc<LazyCell<Vector<Lazy>, Box<dyn FnOnce() -> Vector<Lazy>>>>),
+    Array(LazyType<Vector<Lazy>>),
 
     // Keys are eagerly evaluated, but values are lazy
-    // TODO Maybe restrict to only "reasoably" hashable keys? int, string, color?
-    Dict(
-        Arc<
-            LazyCell<
-                HashMap<Value, Lazy>,
-                Box<dyn FnOnce() -> HashMap<Value, Lazy>>,
-            >,
-        >,
-    ),
+    Dict(LazyType<HashMap<Value, Lazy>>),
 
-    // Wrapper(
-    //     Arc<LazyCell<Lazy, Box<dyn FnOnce() -> Lazy>>>,
-    // ),
-    Lambda(Arc<LazyCell<LazyLambda, Box<dyn FnOnce() -> LazyLambda>>>),
+    Lambda(LazyType<LazyLambda>),
 }
 
 impl Lazy {
@@ -121,23 +111,6 @@ pub enum Value {
     Lambda(LazyLambda),
 }
 
-/* TODO Commented out so we have no warnings... Do we need this
-impl Value {
-    pub fn name(&self) -> String {
-        match self {
-            Value::Int(_) => "int",
-            Value::Float(_) => "float",
-            Value::String(im_string) => "string",
-            Value::Color(alpha) => "color",
-            Value::Array(vector) => "array",
-            Value::Dict(hash_map) => "dict",
-            Value::Lambda(lazy_lambda) => "lambda",
-            Value::Opaque(_) => "opaque",
-        }.to_string()
-    }
-}
-*/
-
 impl Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
@@ -178,12 +151,6 @@ impl PartialEq for Value {
             (Value::Opaque(a), Value::Opaque(b)) => a.to_pretty_string() == b.to_pretty_string(),
             _ => false,
         }
-    }
-}
-
-impl PartialEq for LazyLambda {
-    fn eq(&self, _: &Self) -> bool {
-        todo!("compare lambda by reference?")
     }
 }
 

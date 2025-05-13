@@ -66,6 +66,12 @@ pub struct HMState {
     current_typevar: TypeVarId
 }
 
+impl Default for HMState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HMState {
     pub fn new() -> HMState {
         HMState {

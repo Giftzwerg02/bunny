@@ -47,7 +47,7 @@ pub fn typecheck_pass<'a>(
         Expr::Int(Int { value, info }) =>
             Expr::Int(
                 Int::new(
-                    value.clone(),
+                    *value,
                     type_stage_info(info, int(), state)
                 )
             ),
@@ -55,7 +55,7 @@ pub fn typecheck_pass<'a>(
         Expr::Float(Float { value, info }) =>
             Expr::Float(
                 Float::new(
-                    value.clone(),
+                    *value,
                     type_stage_info(info, float(), state)
                 )
             ),
@@ -169,7 +169,7 @@ fn infer_symbol<'a>(
     // https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L241
     if !state.type_assumptions.contains_key(key) {
         let scoped_expr = sym.info.syms.get(key)
-            .expect(&format!("The should be no undefined symbols in the type checking stage: {key}"));
+            .unwrap_or_else(|| panic!("The should be no undefined symbols in the type checking stage: {key}"));
 
         state.hm.enter_level();
 
@@ -177,7 +177,7 @@ fn infer_symbol<'a>(
             SymbolValue::Argument(Argument::Positional(_)) |
             SymbolValue::Defined =>
                 // TODO Uhhh, when is this used now?
-                Expr::Symbol(create_argument_definition(&sym, state)),
+                Expr::Symbol(create_argument_definition(sym, state)),
 
             SymbolValue::FunctionDefinition(lambda) =>
                 Expr::Lambda(infer_lambda(lambda, &mut state.clone())?),
@@ -422,7 +422,7 @@ fn infer_lambda<'a>(
                 None => state.hm.newvar()
             };
 
-            let stage_info = type_stage_info(&info, typ.clone(), state);
+            let stage_info = type_stage_info(info, typ.clone(), state);
             let symbol = Symbol::new(value, stage_info.clone());
 
             match argument {
