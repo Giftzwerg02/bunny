@@ -14,12 +14,12 @@ use crate::types::typed::{TypedStageInfo, TypedSymbolTable, TypedValue};
 use crate::types::util::{array, color, dict, float, func, int, pair, string};
 
 #[derive(Clone)]
-pub struct InferenceState<'a> {
-    pub type_assumptions: TypedSymbolTable<'a>,
+pub struct InferenceState {
+    pub type_assumptions: TypedSymbolTable,
     pub hm: HMState
 }
 
-impl InferenceState<'_> {
+impl InferenceState {
     pub fn new() -> Self {
         InferenceState {
             type_assumptions: TypedSymbolTable::new(),
@@ -39,10 +39,10 @@ struct TypeError {
     advice: String
 }
 
-pub fn typecheck_pass<'a: 'b, 'b: 'a>(
-    expr: &Expr<ScopedStageInfo<'a>>,
-    state: &mut InferenceState<'b>
-) -> Result<Expr<TypedStageInfo<'a>>> {
+pub fn typecheck_pass(
+    expr: &Expr<ScopedStageInfo>,
+    state: &mut InferenceState
+) -> Result<Expr<TypedStageInfo>> {
     let new_expr = match expr {
         Expr::Int(Int { value, info }) =>
             Expr::Int(
@@ -98,11 +98,11 @@ pub fn typecheck_pass<'a: 'b, 'b: 'a>(
     Ok(new_expr)
 }
 
-fn type_stage_info<'a: 'b, 'b: 'a>(
-    info: &ScopedStageInfo<'a>,
+fn type_stage_info(
+    info: &ScopedStageInfo,
     typ: Type,
-    state: &mut InferenceState<'b>
-) -> TypedStageInfo<'a> {
+    state: &mut InferenceState
+) -> TypedStageInfo {
     TypedStageInfo {
         inner: info.inner.clone().expect("to be called only with bunny expressions"),
         typ,
@@ -110,10 +110,10 @@ fn type_stage_info<'a: 'b, 'b: 'a>(
     }
 }
 
-fn create_argument_definition<'a: 'b, 'b: 'a>(
-    sym: &Symbol<ScopedStageInfo<'a>>,
-    state: &mut InferenceState<'b>
-) -> Symbol<TypedStageInfo<'a>> {
+fn create_argument_definition(
+    sym: &Symbol<ScopedStageInfo>,
+    state: &mut InferenceState
+) -> Symbol<TypedStageInfo> {
     Symbol::new(
         sym.value.clone(),
         type_stage_info(
@@ -159,10 +159,10 @@ fn type_error<T>(
 }
 
 /// Refer to https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L197
-fn infer_symbol<'a: 'b, 'b: 'a>(
-    sym: &Symbol<ScopedStageInfo<'a>>,
-    state: &mut InferenceState<'b>
-) -> Result<Symbol<TypedStageInfo<'a>>> {
+fn infer_symbol(
+    sym: &Symbol<ScopedStageInfo>,
+    state: &mut InferenceState
+) -> Result<Symbol<TypedStageInfo>> {
     let key = &sym.value;
 
     // defs are infered as let-binded vars:
@@ -208,10 +208,10 @@ fn infer_symbol<'a: 'b, 'b: 'a>(
 }
 
 /// See: https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L210
-fn infer_single_func_call<'a: 'b, 'b: 'a>(
-    call: &FuncCallSingle<ScopedStageInfo<'a>>,
-    state: &mut InferenceState<'b>
-) -> Result<FuncCallSingle<TypedStageInfo<'a>>> {
+fn infer_single_func_call(
+    call: &FuncCallSingle<ScopedStageInfo>,
+    state: &mut InferenceState
+) -> Result<FuncCallSingle<TypedStageInfo>> {
     let fn_sym = infer_symbol(&call.id, state)?;
 
     // t0 in the paper
@@ -256,10 +256,10 @@ fn infer_single_func_call<'a: 'b, 'b: 'a>(
     ))
 }
 
-fn infer_argument<'a: 'b, 'b: 'a>(
-    arg: &Argument<ScopedStageInfo<'a>>,
-    state: &mut InferenceState<'b>
-) -> Result<Argument<TypedStageInfo<'a>>> {
+fn infer_argument(
+    arg: &Argument<ScopedStageInfo>,
+    state: &mut InferenceState
+) -> Result<Argument<TypedStageInfo>> {
     match arg {
         Argument::Positional(scoped_expr) => {
             let typed_expr = typecheck_pass(scoped_expr, state)?;
@@ -285,10 +285,10 @@ fn infer_argument<'a: 'b, 'b: 'a>(
     }
 }
 
-fn infer_array<'a: 'b, 'b: 'a>(
-    barray: &Array<ScopedStageInfo<'a>>,
-    state: &mut InferenceState<'b>
-) -> Result<Array<TypedStageInfo<'a>>> {
+fn infer_array(
+    barray: &Array<ScopedStageInfo>,
+    state: &mut InferenceState
+) -> Result<Array<TypedStageInfo>> {
 
     // TODO InteliJ doesn't like this for some reason
     let Some(first) = barray.value.first() else {
@@ -329,10 +329,10 @@ fn infer_array<'a: 'b, 'b: 'a>(
     ))
 }
 
-fn infer_dict<'a: 'b, 'b: 'a>(
-    dictionary: &Dict<ScopedStageInfo<'a>>,
-    state: &mut InferenceState<'b>
-) -> Result<Dict<TypedStageInfo<'a>>> {
+fn infer_dict(
+    dictionary: &Dict<ScopedStageInfo>,
+    state: &mut InferenceState
+) -> Result<Dict<TypedStageInfo>> {
 
     let Some(first) = dictionary.value.first() else {
         return Ok(Dict::new(
@@ -345,10 +345,10 @@ fn infer_dict<'a: 'b, 'b: 'a>(
         ))
     };
 
-    fn infer_dict_entry<'a: 'b, 'b: 'a>(
-        entry: &DictEntry<ScopedStageInfo<'a>>,
-        state: &mut InferenceState<'b>
-    ) -> Result<DictEntry<TypedStageInfo<'a>>> {
+    fn infer_dict_entry(
+        entry: &DictEntry<ScopedStageInfo>,
+        state: &mut InferenceState
+    ) -> Result<DictEntry<TypedStageInfo>> {
         let key = typecheck_pass(&entry.key, state)?;
         let value = typecheck_pass(&entry.value, state)?;
 
@@ -397,10 +397,10 @@ fn infer_dict<'a: 'b, 'b: 'a>(
     ))
 }
 
-fn infer_lambda<'a: 'b, 'b: 'a>(
-    lambda: &Lambda<ScopedStageInfo<'a>>,
-    state: &mut InferenceState<'b>
-) -> Result<Lambda<TypedStageInfo<'a>>> {
+fn infer_lambda(
+    lambda: &Lambda<ScopedStageInfo>,
+    state: &mut InferenceState
+) -> Result<Lambda<TypedStageInfo>> {
     let typed_body = typecheck_pass(&lambda.body, state)?;
 
     let typed_symbols = &typed_body.info().syms;
@@ -482,13 +482,13 @@ mod tests {
     use crate::ast::Expr;
     use crate::library;*/
 
-    /*fn test_library<'a>() -> Library<'a> {
+    /*fn test_library() -> Library {
         library! {
 
         }
     }
 
-    fn prepare_expr<'a>(expr: &'static str, library: &Library<'a>) -> Expr<ScopedStageInfo<'a>> {
+    fn prepare_expr(expr: &'static str, library: &Library) -> Expr<ScopedStageInfo> {
         let mut pair = BunnyParser::parse(Rule::program, expr)
             .unwrap()
             .filter(is_not_comment)

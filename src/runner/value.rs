@@ -10,55 +10,55 @@ use im::Vector;
 use imstr::ImString;
 use palette::Srgba;
 
-pub type LambdaFunc<'a> = dyn FnMut(Vector<Lazy<'a>>) -> Lazy<'a> + 'a;
-pub type LambdaFuncWrap<'a> = Arc<Mutex<LambdaFunc<'a>>>;
+pub type LambdaFunc = dyn FnMut(Vector<Lazy>) -> Lazy;
+pub type LambdaFuncWrap = Arc<Mutex<LambdaFunc>>;
 
 #[derive(Clone)]
-pub struct LazyLambda<'a> {
-    pub func: LambdaFuncWrap<'a>,
+pub struct LazyLambda {
+    pub func: LambdaFuncWrap,
 }
 
-impl<'a> LazyLambda<'a> {
-    pub fn new(func: LambdaFuncWrap<'a>) -> Self {
+impl LazyLambda {
+    pub fn new(func: LambdaFuncWrap) -> Self {
         Self { func }
     }
 }
 
-impl Debug for LazyLambda<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for LazyLambda<> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "(lambda)")
     }
 }
 
-// pub type ValueLambda<'a> = fn(Vector<Value<'a>>) -> Value<'a>;
-pub type LazyType<'a, T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T + 'a>>>;
+// pub type ValueLambda = fn(Vector<Value>) -> Value;
+pub type LazyType<T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
 
 #[derive(Debug, Clone)]
-pub enum Lazy<'a> {
-    Int(LazyType<'a, i64>),
+pub enum Lazy {
+    Int(LazyType<i64>),
 
-    Float(LazyType<'a, f64>),
+    Float(LazyType<f64>),
 
-    String(LazyType<'a, ImString>),
+    String(LazyType<ImString>),
 
     // palette does not seem to have a "general" color type
     // so we just store it as a linear RGBA color for now
-    Color(LazyType<'a, Srgba<u8>>),
+    Color(LazyType<Srgba<u8>>),
 
-    Opaque(LazyType<'a, Element>),
+    Opaque(LazyType<Element>),
 
     // To make it threat safe: Use LazyLock instead of LazyCell and use the
     // thread safe version of the im crate
-    Array(LazyType<'a, Vector<Lazy<'a>>>),
+    Array(LazyType<Vector<Lazy>>),
 
     // Keys are eagerly evaluated, but values are lazy
-    Dict(LazyType<'a, HashMap<Value<'a>, Lazy<'a>>>),
+    Dict(LazyType<HashMap<Value, Lazy>>),
 
-    Lambda(LazyType<'a, LazyLambda<'a>>),
+    Lambda(LazyType<LazyLambda>),
 }
 
-impl<'a> Lazy<'a> {
-    pub fn eval(self) -> Value<'a> {
+impl Lazy {
+    pub fn eval(self) -> Value {
         match self {
             Lazy::Int(lazy_cell) => Value::Int(**lazy_cell),
             Lazy::Float(lazy_cell) => Value::Float(**lazy_cell),
@@ -82,7 +82,7 @@ impl<'a> Lazy<'a> {
                         .collect();
                 Value::Dict(dict)
             }
-            Lazy::Lambda(lazy_cell) => Value::Lambda((**lazy_cell).clone()),
+            Lazy::Lambda(_) => Value::Lambda(),
 
             // Lazy::Wrapper(_) => {
             //     let inner = self.nowrap();
@@ -93,7 +93,7 @@ impl<'a> Lazy<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Value<'a> {
+pub enum Value {
     Int(i64),
 
     Float(f64),
@@ -104,22 +104,20 @@ pub enum Value<'a> {
 
     Opaque(Element),
 
-    Array(Vector<Value<'a>>),
+    Array(Vector<Value>),
 
-    Dict(HashMap<Value<'a>, Value<'a>>),
+    Dict(HashMap<Value, Value>),
 
-    // TODO Use this somehow
-    #[allow(dead_code)]
-    Lambda(LazyLambda<'a>),
+    Lambda(),
 }
 
-impl Value<'_> {
+impl Value {
     pub fn is_renderable(&self) -> bool {
         return matches!(self, Value::Opaque(_))
     }
 }
 
-impl Hash for Value<'_> {
+impl Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
             Value::Int(int) => int.hash(state),
@@ -136,7 +134,7 @@ impl Hash for Value<'_> {
             }
             Value::Array(vector) => vector.hash(state),
             Value::Dict(hash_map) => hash_map.hash(state),
-            Value::Lambda(_) => panic!("cannot hash lambdas... I think?"),
+            Value::Lambda() => panic!("cannot hash lambdas... I think?"),
             Value::Opaque(opaque) => {
                 opaque.to_pretty_string().hash(state); // Use string representation for hashing
             }
@@ -144,9 +142,9 @@ impl Hash for Value<'_> {
     }
 }
 
-impl Eq for Value<'_> {}
+impl Eq for Value {}
 
-impl PartialEq for Value<'_> {
+impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => a == b,
@@ -155,7 +153,7 @@ impl PartialEq for Value<'_> {
             (Value::Color(a), Value::Color(b)) => a == b,
             (Value::Array(a), Value::Array(b)) => a == b,
             (Value::Dict(a), Value::Dict(b)) => a == b,
-            (Value::Lambda(_), Value::Lambda(_)) => false, // Cannot compare lambdas
+            (Value::Lambda(), Value::Lambda()) => false, // Cannot compare lambdas
             (Value::Opaque(a), Value::Opaque(b)) => a.to_pretty_string() == b.to_pretty_string(),
             _ => false,
         }

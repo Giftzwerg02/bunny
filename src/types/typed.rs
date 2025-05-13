@@ -5,33 +5,33 @@ use im::HashMap;
 use text_trees::StringTreeNode;
 use crate::types::hm::{HMState, PolyType, Type};
 
-pub type TypedSymbolTable<'a> = HashMap<String, TypedValue<'a>>;
+pub type TypedSymbolTable = HashMap<String, TypedValue>;
 
 #[derive(Clone, Debug)]
-pub enum TypedValue<'a> {
+pub enum TypedValue {
     FromLibrary(PolyType),
-    FromBunny(Expr<PolyTypedStageInfo<'a>>)
+    FromBunny(Expr<PolyTypedStageInfo>)
 }
 
 /// This stage info is used for typed expression in the AST itself
 #[derive(Clone, Debug)]
-pub struct TypedStageInfo<'a> {
-    pub inner: ParsedStageInfo<'a>,
+pub struct TypedStageInfo {
+    pub inner: ParsedStageInfo,
     pub typ: Type,
-    pub syms: TypedSymbolTable<'a>
+    pub syms: TypedSymbolTable
 }
 
 /// This stage info is used for typed expressions in symbol tables
 /// The difference is that this stage info contains PolyTypes, e.g.
 /// types which may be "generic"
 #[derive(Clone, Debug)]
-pub struct PolyTypedStageInfo<'a> {
-    pub inner: ParsedStageInfo<'a>,
+pub struct PolyTypedStageInfo {
+    pub inner: ParsedStageInfo,
     pub typ: PolyType,
-    pub syms: TypedSymbolTable<'a>
+    pub syms: TypedSymbolTable
 }
 
-impl TypedValue<'_> {
+impl TypedValue {
     pub fn inst(&self, state: &mut HMState) -> Type {
         match self {
             TypedValue::FromLibrary(polytype) =>
@@ -47,13 +47,13 @@ impl TypedValue<'_> {
     }
 }
 
-impl Display for TypedStageInfo<'_> {
+impl Display for TypedStageInfo {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "type: {}", self.typ)
     }
 }
 
-impl PrettyPrintable for TypedStageInfo<'_> {
+impl PrettyPrintable for TypedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
         StringTreeNode::new(
             format!("type: {}", self.typ)
@@ -61,16 +61,16 @@ impl PrettyPrintable for TypedStageInfo<'_> {
     }
 }
 
-impl Expr<TypedStageInfo<'_>> {
+impl Expr<TypedStageInfo> {
     pub fn typ(&self) -> &Type {
         &self.info().typ
     }
 }
 
-impl StageInfo for TypedStageInfo<'_> {}
+impl StageInfo for TypedStageInfo {}
 
-impl<'a> TypedStageInfo<'a> {
-    pub fn generalize(self, state: &HMState) -> PolyTypedStageInfo<'a> {
+impl TypedStageInfo {
+    pub fn generalize(self, state: &HMState) -> PolyTypedStageInfo {
         PolyTypedStageInfo {
             inner: self.inner,
             syms: self.syms,
@@ -79,22 +79,22 @@ impl<'a> TypedStageInfo<'a> {
     }
 }
 
-impl Display for PolyTypedStageInfo<'_> {
+impl Display for PolyTypedStageInfo {
     fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
 
-impl PrettyPrintable for PolyTypedStageInfo<'_> {
+impl PrettyPrintable for PolyTypedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
         todo!()
     }
 }
 
-impl StageInfo for PolyTypedStageInfo<'_> {}
+impl StageInfo for PolyTypedStageInfo {}
 
-impl<'a> PolyTypedStageInfo<'a> {
-    pub fn inst(self, state: &mut HMState) -> TypedStageInfo<'a> {
+impl PolyTypedStageInfo {
+    pub fn inst(self, state: &mut HMState) -> TypedStageInfo {
         TypedStageInfo {
             inner: self.inner,
             syms: self.syms,
@@ -104,34 +104,34 @@ impl<'a> PolyTypedStageInfo<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct AnyTypedStageInfo<'a> {
-    pub syms: TypedSymbolTable<'a>
+pub struct AnyTypedStageInfo {
+    pub syms: TypedSymbolTable
 }
 
-impl StageInfo for AnyTypedStageInfo<'_> {}
+impl StageInfo for AnyTypedStageInfo {}
 
-impl PrettyPrintable for AnyTypedStageInfo<'_> {
+impl PrettyPrintable for AnyTypedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
         todo!("Why is this even required?");
     }
 }
 
-impl Display for AnyTypedStageInfo<'_> {
+impl Display for AnyTypedStageInfo {
     fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
         todo!("Why is this even required?");
     }
 }
 
-impl<'a> From<PolyTypedStageInfo<'a>> for AnyTypedStageInfo<'a> {
-    fn from(poly_typed: PolyTypedStageInfo<'a>) -> Self {
+impl From<PolyTypedStageInfo> for AnyTypedStageInfo {
+    fn from(poly_typed: PolyTypedStageInfo) -> Self {
         Self {
             syms: poly_typed.syms
         }
     }
 }
 
-impl<'a> From<TypedStageInfo<'a>> for AnyTypedStageInfo<'a> {
-    fn from(typed: TypedStageInfo<'a>) -> Self {
+impl From<TypedStageInfo> for AnyTypedStageInfo {
+    fn from(typed: TypedStageInfo) -> Self {
         Self {
             syms: typed.syms
         }

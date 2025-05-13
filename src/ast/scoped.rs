@@ -14,9 +14,9 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-pub struct ScopedStageInfo<'a> {
-    pub inner: Option<ParsedStageInfo<'a>>,
-    pub syms: SymbolTable<ScopedStageInfo<'a>>,
+pub struct ScopedStageInfo {
+    pub inner: Option<ParsedStageInfo>,
+    pub syms: SymbolTable<ScopedStageInfo>,
 }
 
 fn create_source(source: ParsedStageInfo) -> SourceSpan {
@@ -24,7 +24,7 @@ fn create_source(source: ParsedStageInfo) -> SourceSpan {
     (span.start(), span.end() - span.start()).into()
 }
 
-fn find_similar_vars<'a>(wrong_name: &str, syms: &SymbolTable<ScopedStageInfo<'a>>) -> Vec<(String, SymbolValue<ScopedStageInfo<'a>>)> {
+fn find_similar_vars(wrong_name: &str, syms: &SymbolTable<ScopedStageInfo>) -> Vec<(String, SymbolValue<ScopedStageInfo>)> {
     fn is_similar(a: &str, b: &str, threshold: f64) -> bool {
         normalized_levenshtein(a, b) >= threshold
     }
@@ -38,8 +38,8 @@ fn find_similar_vars<'a>(wrong_name: &str, syms: &SymbolTable<ScopedStageInfo<'a
         .collect()
 }
 
-impl<'a> ScopedStageInfo<'a> {
-    pub fn new(inner: ParsedStageInfo<'a>, syms: SymbolTable<ScopedStageInfo<'a>>) -> Self {
+impl ScopedStageInfo {
+    pub fn new(inner: ParsedStageInfo, syms: SymbolTable<ScopedStageInfo>) -> Self {
         Self {
             inner: Some(inner),
             syms,
@@ -49,24 +49,24 @@ impl<'a> ScopedStageInfo<'a> {
     /// Used for builtin / library functions.
     /// Doesn't provide a inner ParsedStageInfo, since they do not "appear" in the source code and
     /// therefore don't have a position / range (Pair).
-    pub fn libinfo(syms: SymbolTable<ScopedStageInfo<'a>>) -> Self {
+    pub fn libinfo(syms: SymbolTable<ScopedStageInfo>) -> Self {
         Self { inner: None, syms }
     }
 }
 
-impl PrettyPrintable for ScopedStageInfo<'_> {
+impl PrettyPrintable for ScopedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
         StringTreeNode::new(String::new())
     }
 }
 
-impl Display for ScopedStageInfo<'_> {
+impl Display for ScopedStageInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{ syms: {} }}", self.syms)
     }
 }
 
-impl StageInfo for ScopedStageInfo<'_> {}
+impl StageInfo for ScopedStageInfo {}
 
 #[derive(Clone, Debug)]
 pub enum SymbolValue<I: StageInfo> {
@@ -135,10 +135,10 @@ impl<I: StageInfo> SymbolTable<I> {
     }
 }
 
-pub fn scoped_expr_pass<'a>(
-    src: Expr<ParsedStageInfo<'a>>,
-    syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Result<Expr<ScopedStageInfo<'a>>> {
+pub fn scoped_expr_pass(
+    src: Expr<ParsedStageInfo>,
+    syms: &SymbolTable<ScopedStageInfo>,
+) -> Result<Expr<ScopedStageInfo>> {
     let new_expr = match src {
         Expr::Int(int) => Expr::Int(Int::new(int.value, info(int.info, syms.clone()))),
         Expr::Float(float) => Expr::Float(Float::new(float.value, info(float.info, syms.clone()))),
@@ -299,24 +299,24 @@ pub fn scoped_expr_pass<'a>(
     Ok(new_expr)
 }
 
-fn pass_symbol<'a>(
-    symbol: Symbol<ParsedStageInfo<'a>>,
-    table: SymbolTable<ScopedStageInfo<'a>>,
-) -> Symbol<ScopedStageInfo<'a>> {
+fn pass_symbol(
+    symbol: Symbol<ParsedStageInfo>,
+    table: SymbolTable<ScopedStageInfo>,
+) -> Symbol<ScopedStageInfo> {
     Symbol::new(symbol.value.clone(), info(symbol.info.clone(), table))
 }
 
-fn info<'a>(
-    parsed: ParsedStageInfo<'a>,
-    syms: SymbolTable<ScopedStageInfo<'a>>,
-) -> ScopedStageInfo<'a> {
+fn info(
+    parsed: ParsedStageInfo,
+    syms: SymbolTable<ScopedStageInfo>,
+) -> ScopedStageInfo {
     info_opt(Some(parsed), syms)
 }
 
-fn info_opt<'a>(
-    parsed: Option<ParsedStageInfo<'a>>,
-    syms: SymbolTable<ScopedStageInfo<'a>>,
-) -> ScopedStageInfo<'a> {
+fn info_opt(
+    parsed: Option<ParsedStageInfo>,
+    syms: SymbolTable<ScopedStageInfo>,
+) -> ScopedStageInfo {
     ScopedStageInfo {
         inner: parsed,
         syms,
@@ -340,10 +340,10 @@ fn find_non_unique_args<I: StageInfo>(args: &[Argument<I>]) -> Vec<Argument<I>> 
         .collect()
 }
 
-fn pass_arg_def<'a>(
-    arg: Argument<ParsedStageInfo<'a>>,
-    syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Result<Argument<ScopedStageInfo<'a>>> {
+fn pass_arg_def(
+    arg: Argument<ParsedStageInfo>,
+    syms: &SymbolTable<ScopedStageInfo>,
+) -> Result<Argument<ScopedStageInfo>> {
     let res = match arg {
         Argument::Positional(_) => {
             let sym = pass_symbol(arg.into_def_argument_symbol(), syms.clone());
@@ -364,10 +364,10 @@ fn pass_arg_def<'a>(
     Ok(res)
 }
 
-fn pass_arg<'a>(
-    arg: Argument<ParsedStageInfo<'a>>,
-    syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Result<Argument<ScopedStageInfo<'a>>> {
+fn pass_arg(
+    arg: Argument<ParsedStageInfo>,
+    syms: &SymbolTable<ScopedStageInfo>,
+) -> Result<Argument<ScopedStageInfo>> {
     let res = match arg {
         Argument::Positional(expr) => Argument::Positional(scoped_expr_pass(expr, syms)?),
         Argument::Named(named_argument) => {
@@ -385,10 +385,10 @@ fn pass_arg<'a>(
     Ok(res)
 }
 
-fn handle_def<'a>(
-    def: FuncCallSingle<ParsedStageInfo<'a>>,
-    syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Result<Lambda<ScopedStageInfo<'a>>> {
+fn handle_def(
+    def: FuncCallSingle<ParsedStageInfo>,
+    syms: &SymbolTable<ScopedStageInfo>,
+) -> Result<Lambda<ScopedStageInfo>> {
     // create a new sym-table entry with the newly defined value
     let Argument::Positional(ref new_id) = def.args[0] else {
         panic!("invalid ast");
@@ -486,10 +486,10 @@ fn handle_def<'a>(
 //  2. (\ (args...) (body)) -> 2 arguments, the first is the parameter-list, the second is the
 //     function body
 // Note: There is no `new_syms` like in the handle_def function since a lambda does not have a name!
-fn handle_lambda<'a>(
-    lambda: FuncCallSingle<ParsedStageInfo<'a>>,
-    syms: &SymbolTable<ScopedStageInfo<'a>>,
-) -> Result<Lambda<ScopedStageInfo<'a>>> {
+fn handle_lambda(
+    lambda: FuncCallSingle<ParsedStageInfo>,
+    syms: &SymbolTable<ScopedStageInfo>,
+) -> Result<Lambda<ScopedStageInfo>> {
     let res = match &lambda.args[..] {
         // Case 1: Only function body
         [new_call] => {

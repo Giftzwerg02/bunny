@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use pest::iterators::Pair;
 use text_trees::StringTreeNode;
 
 use crate::parser::Rule;
@@ -10,45 +9,47 @@ use super::{
     Int, NamedArgument, PrettyPrintable, StageInfo, Str, Symbol,
 };
 
+pub type Pair = pest::iterators::Pair<'static, Rule>;
+
 #[derive(Debug, Clone, PartialEq, Hash)]
-pub struct ParsedStageInfo<'a> {
-    pub token: Pair<'a, Rule>,
+pub struct ParsedStageInfo {
+    pub token: Pair,
 }
 
-impl<'a> ParsedStageInfo<'a> {
-    pub fn new(token: Pair<'a, Rule>) -> Self {
+impl ParsedStageInfo {
+    pub fn new(token: Pair) -> Self {
         Self { token }
     }
 }
 
-impl PrettyPrintable for ParsedStageInfo<'_> {
+impl PrettyPrintable for ParsedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
         // StringTreeNode::new(format!("parsed_stage_info: {self}"))
         StringTreeNode::new("".to_string())
     }
 }
 
-impl Display for ParsedStageInfo<'_> {
+impl Display for ParsedStageInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // write!(f, "{{ token: {} }}", self.token)
         write!(f, "")
     }
 }
 
-impl StageInfo for ParsedStageInfo<'_> {}
+impl StageInfo for ParsedStageInfo {}
 
-pub fn is_comment(pair: &Pair<'_, Rule>) -> bool {
+pub fn is_comment(pair: &Pair) -> bool {
     matches!(
         pair.as_rule(),
         Rule::EOI | Rule::WHITESPACE | Rule::COMMENT | Rule::line_comment | Rule::program
     )
 }
 
-pub fn is_not_comment(pair: &Pair<'_, Rule>) -> bool {
+pub fn is_not_comment(pair: &Pair) -> bool {
     !is_comment(pair)
 }
 
-pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
+pub fn parsed_expr_pass(pair: Pair) -> Expr<ParsedStageInfo> {
     let text = pair.as_str();
     let len = text.len();
     match pair.as_rule() {
@@ -101,7 +102,7 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
             match next.as_rule() {
                 // multi-funccall
                 Rule::func_call => {
-                    let mut nested: Vec<FuncCall<ParsedStageInfo<'a>>> = vec![];
+                    let mut nested: Vec<FuncCall<ParsedStageInfo>> = vec![];
 
                     let f = parsed_expr_pass(next);
                     let Expr::FuncCall(f) = f else {
@@ -234,11 +235,11 @@ pub fn parsed_expr_pass<'a>(pair: Pair<'a, Rule>) -> Expr<ParsedStageInfo<'a>> {
     }
 }
 
-fn info(p: Pair<'_, Rule>) -> ParsedStageInfo<'_> {
+fn info(p: Pair) -> ParsedStageInfo{
     ParsedStageInfo { token: p }
 }
 
-fn extract_arguments(p: Pair<'_, Rule>) -> Vec<Argument<ParsedStageInfo<'_>>> {
+fn extract_arguments(p: Pair) -> Vec<Argument<ParsedStageInfo>> {
     let mut is_args_list = false;
     let pairs = match p.as_rule() {
         Rule::args_list => {

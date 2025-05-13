@@ -17,9 +17,9 @@ use crate::{eval, lazy, library};
 pub mod macros;
 pub mod runnable_expression;
 
-pub struct Library<'a> {
-    pub scoped: SymbolTable<ScopedStageInfo<'a>>,
-    pub typed: InferenceState<'a>,
+pub struct Library {
+    pub scoped: SymbolTable<ScopedStageInfo>,
+    pub typed: InferenceState,
     pub runnable: InterpreterSymbolTable,
 }
 
@@ -35,7 +35,7 @@ macro_rules! lfalse {
     };
 }
 
-pub fn standard_library<'a>() -> Library<'a> {
+pub fn standard_library() -> Library {
     library! {
         #[| a:int() => ret:int()]
         fn "neg"(Lazy::Int(a)) {

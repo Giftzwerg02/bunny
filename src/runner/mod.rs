@@ -17,35 +17,35 @@ use crate::{
 pub mod value;
 
 #[derive(Debug, Clone)]
-struct SymbolStack<'a> {
-    inner: Vec<Lazy<'a>>,
+struct SymbolStack {
+    inner: Vec<Lazy>,
 }
 
-impl<'a> SymbolStack<'a> {
+impl SymbolStack {
     fn new() -> Self {
         SymbolStack { inner: Vec::new() }
     }
 
-    fn push(&mut self, val: Lazy<'a>) {
+    fn push(&mut self, val: Lazy) {
         self.inner.push(val);
     }
 
-    fn pop(&mut self) -> Option<Lazy<'a>> {
+    fn pop(&mut self) -> Option<Lazy> {
         self.inner.pop()
     }
 
-    fn read(&self) -> Option<Lazy<'a>> {
+    fn read(&self) -> Option<Lazy> {
         self.inner.last().cloned()
     }
 }
 
 #[derive(Clone)]
-pub struct Runner<'a> {
-    state: HashMap<String, SymbolStack<'a>>,
+pub struct Runner {
+    state: HashMap<String, SymbolStack>,
     native_syms: InterpreterSymbolTable,
 }
 
-impl<'a> Runner<'a> {
+impl Runner {
     pub fn new(native_syms: InterpreterSymbolTable) -> Self {
         Runner {
             state: HashMap::new(),
@@ -89,8 +89,8 @@ impl<'a> Runner<'a> {
     //      since it will just be provided with the arguments that were passed to it.
     pub fn run(
         &mut self,
-        expr: Expr<AnyTypedStageInfo<'a>>,
-    ) -> Lazy<'a> {
+        expr: Expr<AnyTypedStageInfo>,
+    ) -> Lazy {
         match expr {
             Expr::Int(int) => {
                 lazy!(Lazy::Int, { int.value.try_into().expect("uint too large") })
@@ -153,7 +153,7 @@ impl<'a> Runner<'a> {
 
                         lazy!(Lazy::Lambda, {
                             let native_fn = native_syms_owned.get(&symbol_value_owned).unwrap().clone();
-                            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<Lazy<'a>>| {
+                            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<Lazy>| {
                                     (*native_fn)(args.into_iter().collect())
                                 })))
                         })
@@ -296,7 +296,8 @@ impl<'a> Runner<'a> {
 
                 let mut lambda_runner = self.clone();
 
-                let body = *lambda.clone().body;
+                let body = (*lambda.clone().body)
+                    .map_stage(&mut |info| info.into());
 
                 lazy!(Lazy::Lambda, {
                     LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
@@ -320,7 +321,7 @@ impl<'a> Runner<'a> {
         }
     }
 
-    fn push_var(&mut self, sym: String, val: Lazy<'a>) {
+    fn push_var(&mut self, sym: String, val: Lazy) {
         match self.state.get_mut(&sym) {
             Some(stack) => stack.push(val),
             None => {
@@ -336,7 +337,7 @@ impl<'a> Runner<'a> {
         stack.pop().expect("invalid stack");
     }
 
-    fn read_var(&mut self, sym: String) -> Lazy<'a> {
+    fn read_var(&mut self, sym: String) -> Lazy {
         let stack = self
             .state
             .get_mut(&sym)

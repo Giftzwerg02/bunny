@@ -1,19 +1,23 @@
-use pest::iterators::Pair;
 #[allow(unused)]
 use pest::Parser;
 use pest_derive::Parser;
 use miette::Result;
 
-use crate::ast::parsed::is_not_comment;
+use crate::ast::parsed::{is_not_comment, Pair};
 
 #[derive(Parser)]
 #[grammar = "parser/grammar.pest"]
 pub struct BunnyParser;
 
-pub fn pest_parsing_pass(src: &str) -> Result<Pair<Rule>> {
-    Ok(BunnyParser::parse(Rule::program, src)
+pub fn pest_parsing_pass(src: String) -> Result<Pair> {
+    // We're leaking the source here as it has to have a static lifetime anyway
+    let src = src.leak();
+
+    let parsed = BunnyParser::parse(Rule::program, src)
         .map_err(|err| err.into_miette())?.find(is_not_comment)
-        .unwrap())
+        .unwrap();
+
+    Ok(parsed)
 }
 
 #[cfg(test)]
