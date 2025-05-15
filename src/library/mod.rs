@@ -154,15 +154,41 @@ pub fn standard_library() -> Library {
             let cond = cond.clone();
             let iftrue = iftrue.clone();
             let iffalse = iffalse.clone();
-            
-            lazy!(iftrue, |val|{
+
+            lazy!([iftrue -> i1, iffalse -> i2], {
                 if eval!(cond) != 0 {
-                    iftrue.clone().eval()
+                    eval!(i1)
+                } else {
+                    eval!(i2)
                 }
-                else {
-                    iffalse.clone().eval()
-                }
-            })   
+            })
+
+            // match (iftrue, iffalse) {
+            //     Lazy::Int(lazy_cell) => lazy!(Lazy::Int, {
+            //         if eval!(cond) != 0 {
+            //             iftrue.clone().eval()
+            //         }
+            //         else {
+            //             iffalse.clone().eval()
+            //         }
+            //     }),
+            //     Lazy::Float(lazy_cell) => todo!(),
+            //     Lazy::String(lazy_cell) => todo!(),
+            //     Lazy::Color(lazy_cell) => todo!(),
+            //     Lazy::Opaque(lazy_cell) => todo!(),
+            //     Lazy::Array(lazy_cell) => todo!(),
+            //     Lazy::Dict(lazy_cell) => todo!(),
+            //     Lazy::Lambda(lazy_cell) => todo!(),
+            // }
+            // 
+            // lazy!(iftrue, |val|{
+            //     if eval!(cond) != 0 {
+            //         iftrue.clone().eval()
+            //     }
+            //     else {
+            //         iffalse.clone().eval()
+            //     }
+            // })   
         }
 
         #[| str:string() => ret:int()]
@@ -177,8 +203,8 @@ pub fn standard_library() -> Library {
         #[forall a | elem:a => ret:a]
         fn "print"(elem){
             let elem = elem.clone();
-            lazy!(elem, |lazy|{
-                let value = eval!(lazy);
+            lazy!([elem -> l], {
+                let value = eval!(l);
                 println!("{:?}", value);
                 value
             })
@@ -189,7 +215,7 @@ pub fn standard_library() -> Library {
             let message = message.clone();
             // in this case we just choose any lazy-type
             // since it will panic if this is evaluated anyway
-            lazy!(Lazy::Int, {
+            lazy!(Lazy::Never, {
                 panic!("panicked: {}", eval!(message))
             })
         }

@@ -58,6 +58,8 @@ pub enum Lazy {
     Dict(LazyType<HashMap<Value, Lazy>>),
 
     Lambda(LazyType<LazyLambda>),
+
+    Never(LazyType<()>),
 }
 
 impl Lazy {
@@ -86,6 +88,7 @@ impl Lazy {
                 Value::Dict(dict)
             }
             Lazy::Lambda(_) => Value::Lambda(),
+            Lazy::Never(_) => panic!("never cannot be evaluated")
         }
     }
 }
@@ -188,65 +191,107 @@ pub fn to_color_str(color: &Alpha<Srgb<u8>, u8>) -> String {
 
 #[macro_export]
 macro_rules! lazy {
-    ($value:ident, |$name:ident|$to:expr) => {{
-        match $value {
-            Lazy::Int(ref lazy_cell) => {
-                let $name = lazy_cell.clone();
-                lazy!(Lazy::Int, {
-                    $to;
-                    eval!($name)
-                })
-            },
-            Lazy::Float(ref lazy_cell) => {
-                let $name = lazy_cell.clone();
-                lazy!(Lazy::Float, {
-                    $to;
-                    eval!($name)
-                })
+    ([$($value:ident -> $into:ident),+], $to:expr) => {{
+        $(
+            if let Lazy::Never(_) = $value {
+                return lazy!(Lazy::Never, {
+                    ()
+                });
             }
-            Lazy::String(ref lazy_cell) => {
-                let $name = lazy_cell.clone();
-                lazy!(Lazy::String, {
-                    $to;
-                    eval!($name)
-                })
+        )+
+        match ($($value),+) {
+            #[allow(unused_parens)]
+            ($(Lazy::Int($into)),+) => {
+                lazy!(Lazy::Int, $to)
+            }
+            #[allow(unused_parens)]
+            ($(Lazy::Float($into)),+) => {
+                lazy!(Lazy::Float, $to)
+            }
+            #[allow(unused_parens)]
+            ($(Lazy::String($into)),+) => {
+                lazy!(Lazy::String, $to)
+            }
+            #[allow(unused_parens)]
+            ($(Lazy::Color($into)),+) => {
+                lazy!(Lazy::Color, $to)
+            }
+            #[allow(unused_parens)]
+            ($(Lazy::Opaque($into)),+) => {
+                lazy!(Lazy::Opaque, $to)
+            }
+            #[allow(unused_parens)]
+            ($(Lazy::Array($into)),+) => {
+                lazy!(Lazy::Array, $to)
+            }
+            #[allow(unused_parens)]
+            ($(Lazy::Dict($into)),+) => {
+                lazy!(Lazy::Dict, $to)
+            }
+            #[allow(unused_parens)]
+            ($(Lazy::Lambda($into)),+) => {
+                lazy!(Lazy::Lambda, $to)
             },
-            Lazy::Color(ref lazy_cell) => {
-                let $name = lazy_cell.clone();
-                lazy!(Lazy::Color, {
-                    $to;
-                    eval!($name)
-                })
-            },
-            Lazy::Opaque(ref lazy_cell) => {
-                let $name = lazy_cell.clone();
-                lazy!(Lazy::Opaque, {
-                    $to;
-                    eval!($name)
-                })
-            },
-            Lazy::Array(ref lazy_cell) => {
-                let $name = lazy_cell.clone();
-                lazy!(Lazy::Array, {
-                    $to;
-                    eval!($name)
-                })
-            },
-            Lazy::Dict(ref lazy_cell) => {
-                let $name = lazy_cell.clone();
-                lazy!(Lazy::Dict, {
-                    $to;
-                    eval!($name)
-                })
-            },
-            Lazy::Lambda(ref lazy_cell) => {
-                let $name = lazy_cell.clone();
-                lazy!(Lazy::Lambda, {
-                    $to;
-                    eval!($name)
-                })
-            },
+            _ => panic!("illegal variadic return type")
         }
+        // match $value {
+        //     Lazy::Int(ref lazy_cell) => {
+        //         let $name = lazy_cell.clone();
+        //         lazy!(Lazy::Int, {
+        //             $to;
+        //             eval!($name)
+        //         })
+        //     },
+        //     Lazy::Float(ref lazy_cell) => {
+        //         let $name = lazy_cell.clone();
+        //         lazy!(Lazy::Float, {
+        //             $to;
+        //             eval!($name)
+        //         })
+        //     }
+        //     Lazy::String(ref lazy_cell) => {
+        //         let $name = lazy_cell.clone();
+        //         lazy!(Lazy::String, {
+        //             $to;
+        //             eval!($name)
+        //         })
+        //     },
+        //     Lazy::Color(ref lazy_cell) => {
+        //         let $name = lazy_cell.clone();
+        //         lazy!(Lazy::Color, {
+        //             $to;
+        //             eval!($name)
+        //         })
+        //     },
+        //     Lazy::Opaque(ref lazy_cell) => {
+        //         let $name = lazy_cell.clone();
+        //         lazy!(Lazy::Opaque, {
+        //             $to;
+        //             eval!($name)
+        //         })
+        //     },
+        //     Lazy::Array(ref lazy_cell) => {
+        //         let $name = lazy_cell.clone();
+        //         lazy!(Lazy::Array, {
+        //             $to;
+        //             eval!($name)
+        //         })
+        //     },
+        //     Lazy::Dict(ref lazy_cell) => {
+        //         let $name = lazy_cell.clone();
+        //         lazy!(Lazy::Dict, {
+        //             $to;
+        //             eval!($name)
+        //         })
+        //     },
+        //     Lazy::Lambda(ref lazy_cell) => {
+        //         let $name = lazy_cell.clone();
+        //         lazy!(Lazy::Lambda, {
+        //             $to;
+        //             eval!($name)
+        //         })
+        //     },
+        // }
     }};
     ($type:path, $value:expr) => {{
         let callback = Box::new(move || $value);
