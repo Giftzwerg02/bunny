@@ -1,5 +1,5 @@
 pub mod typed;
-mod hm;
+pub mod hm;
 pub mod util;
 
 use hm::HMError;

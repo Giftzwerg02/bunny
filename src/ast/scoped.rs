@@ -192,9 +192,11 @@ pub fn scoped_expr_pass(
                         let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
                         for (s, val) in similar_vars {
                             if let SymbolValue::FunctionDefinition(lambda) = val {
-                                let lambda_token = create_source(lambda.info.inner.unwrap());
-                                let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
-                                labels.push(span);
+                                if let Some(parsed) = lambda.info.inner {
+                                    let lambda_token = create_source(parsed);
+                                    let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
+                                    labels.push(span);
+                                }
                             }
                         }
 
@@ -276,9 +278,11 @@ pub fn scoped_expr_pass(
                 let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
                 for (s, val) in similar_vars {
                     if let SymbolValue::FunctionDefinition(lambda) = val {
-                        let lambda_token = create_source(lambda.info.inner.unwrap());
-                        let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
-                        labels.push(span);
+                        if let Some(parsed) = lambda.info.inner {
+                            let lambda_token = create_source(parsed);
+                            let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
+                            labels.push(span);
+                        }
                     }
                 }
 
@@ -575,7 +579,7 @@ mod tests {
         Expr::FuncCall(ast::FuncCall::Single(empty_func(info)))
     }
 
-    fn scoped_test(code: &str) -> miette::Result<()> {
+    fn scoped_test(code: &'static str) -> miette::Result<()> {
         let pair = BunnyParser::parse(Rule::program, code)
             .unwrap()
             .next()
@@ -597,7 +601,7 @@ mod tests {
         Ok(())
     }
 
-    fn scoped_panic_test(code: &str) {
+    fn scoped_panic_test(code: &'static str) {
         let pair = BunnyParser::parse(Rule::program, code)
             .unwrap()
             .next()

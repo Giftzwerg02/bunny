@@ -13,6 +13,9 @@ use palette::Alpha;
 use palette::Srgb;
 use palette::Srgba;
 
+use crate::types::hm::Type;
+use crate::types::hm::TypeVar;
+
 pub type LambdaFunc = dyn FnMut(Vector<Lazy>) -> Lazy;
 pub type LambdaFuncWrap = Arc<Mutex<LambdaFunc>>;
 
@@ -27,7 +30,7 @@ impl LazyLambda {
     }
 }
 
-impl Debug for LazyLambda<> {
+impl Debug for LazyLambda {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "(lambda)")
     }
@@ -58,8 +61,6 @@ pub enum Lazy {
     Dict(LazyType<HashMap<Value, Lazy>>),
 
     Lambda(LazyType<LazyLambda>),
-
-    Never(LazyType<()>),
 }
 
 impl Lazy {
@@ -82,13 +83,10 @@ impl Lazy {
             }
             Lazy::Dict(lazy_cell) => {
                 let init = (**lazy_cell).clone();
-                let dict = init.into_iter()
-                        .map(|(k, v)| (k, v.eval()))
-                        .collect();
+                let dict = init.into_iter().map(|(k, v)| (k, v.eval())).collect();
                 Value::Dict(dict)
             }
             Lazy::Lambda(_) => Value::Lambda(),
-            Lazy::Never(_) => panic!("never cannot be evaluated")
         }
     }
 }
@@ -114,7 +112,7 @@ pub enum Value {
 
 impl Value {
     pub fn is_renderable(&self) -> bool {
-        return matches!(self, Value::Opaque(_))
+        return matches!(self, Value::Opaque(_));
     }
 }
 
@@ -168,15 +166,23 @@ impl Display for Value {
             Value::Float(float) => write!(f, "{}", float),
             Value::String(string) => write!(f, "{}", string),
             Value::Color(color) => write!(f, "{}", to_color_str(&color)),
-            Value::Array(array) => write!(f, "[{}]", array
-                .iter()
-                .map(|v| v.to_string())
-                .collect::<Vec<_>>()
-                .join(" ")),
-            Value::Dict(dict) => write!(f, "[{}]", dict.iter()
-                .map(|(k, v)| format!("{}: {}", k.to_string(), v.to_string()))
-                .collect::<Vec<_>>()
-                .join(" ")),
+            Value::Array(array) => write!(
+                f,
+                "[{}]",
+                array
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+            Value::Dict(dict) => write!(
+                f,
+                "[{}]",
+                dict.iter()
+                    .map(|(k, v)| format!("{}: {}", k.to_string(), v.to_string()))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
             Value::Lambda() => write!(f, "(lambda)"),
             Value::Opaque(opaque) => write!(f, "{}", opaque.to_pretty_string()),
         }
@@ -184,22 +190,62 @@ impl Display for Value {
 }
 
 pub fn to_color_str(color: &Alpha<Srgb<u8>, u8>) -> String {
-    let (r,g,b,a) = color.into_components();
+    let (r, g, b, a) = color.into_components();
     format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a)
 }
 
+pub enum LT {
+    Int,
+    Float,
+    String,
+    Color,
+    Opaque,
+    Array,
+    Dict,
+    Lambda,
+}
+
+pub fn resolve_to_lazy_type(t: Type) -> LT {
+    fn to_concrete(t: Type) -> Type {
+        let Type::TVar(tvar) = t else {
+            panic!("invalid type parameter");
+        };
+
+        let TypeVar::Bound(bound) = tvar.borrow().clone() else {
+            panic!("invalid typevar bound: {tvar:?}");
+        };
+
+        match bound {
+            Type::TVar(_) => to_concrete(bound),
+            Type::TUnit => panic!("invalid type bound"),
+            _ => bound,
+        }
+    }
+
+    let concrete = to_concrete(t);
+    match concrete {
+        crate::types::hm::Type::Basic(basic) => match basic.as_ref() {
+            "int" => LT::Int,
+            "float" => LT::Float,
+            "string" => LT::String,
+            "color" => LT::Color,
+            "opaque" => LT::Opaque,
+            _ => panic!("invalid basic type"),
+        },
+        crate::types::hm::Type::TApp(app, _) => match app.as_ref() {
+            "array" => LT::Array,
+            "dict" => LT::Dict,
+            _ => panic!("invalid app type"),
+        },
+        crate::types::hm::Type::Fn(_, _) => LT::Lambda,
+        _ => panic!("invalid type bound: {concrete:?}"),
+    }
+}
 
 #[macro_export]
 macro_rules! lazy {
     ([$($value:ident -> $into:ident),+], $to:expr) => {{
-        $(
-            if let Lazy::Never(_) = $value {
-                return lazy!(Lazy::Never, {
-                    ()
-                });
-            }
-        )+
-        match ($($value),+) {
+       match ($($value),+) {
             #[allow(unused_parens)]
             ($(Lazy::Int($into)),+) => {
                 lazy!(Lazy::Int, $to)
@@ -232,69 +278,25 @@ macro_rules! lazy {
             ($(Lazy::Lambda($into)),+) => {
                 lazy!(Lazy::Lambda, $to)
             },
+            #[allow(unreachable_patterns)]
             _ => panic!("illegal variadic return type")
         }
-        // match $value {
-        //     Lazy::Int(ref lazy_cell) => {
-        //         let $name = lazy_cell.clone();
-        //         lazy!(Lazy::Int, {
-        //             $to;
-        //             eval!($name)
-        //         })
-        //     },
-        //     Lazy::Float(ref lazy_cell) => {
-        //         let $name = lazy_cell.clone();
-        //         lazy!(Lazy::Float, {
-        //             $to;
-        //             eval!($name)
-        //         })
-        //     }
-        //     Lazy::String(ref lazy_cell) => {
-        //         let $name = lazy_cell.clone();
-        //         lazy!(Lazy::String, {
-        //             $to;
-        //             eval!($name)
-        //         })
-        //     },
-        //     Lazy::Color(ref lazy_cell) => {
-        //         let $name = lazy_cell.clone();
-        //         lazy!(Lazy::Color, {
-        //             $to;
-        //             eval!($name)
-        //         })
-        //     },
-        //     Lazy::Opaque(ref lazy_cell) => {
-        //         let $name = lazy_cell.clone();
-        //         lazy!(Lazy::Opaque, {
-        //             $to;
-        //             eval!($name)
-        //         })
-        //     },
-        //     Lazy::Array(ref lazy_cell) => {
-        //         let $name = lazy_cell.clone();
-        //         lazy!(Lazy::Array, {
-        //             $to;
-        //             eval!($name)
-        //         })
-        //     },
-        //     Lazy::Dict(ref lazy_cell) => {
-        //         let $name = lazy_cell.clone();
-        //         lazy!(Lazy::Dict, {
-        //             $to;
-        //             eval!($name)
-        //         })
-        //     },
-        //     Lazy::Lambda(ref lazy_cell) => {
-        //         let $name = lazy_cell.clone();
-        //         lazy!(Lazy::Lambda, {
-        //             $to;
-        //             eval!($name)
-        //         })
-        //     },
-        // }
     }};
     ($type:path, $value:expr) => {{
         let callback = Box::new(move || $value);
         $type(Arc::new(core::cell::LazyCell::new(callback)))
     }};
+    (fromtype[$t:ident], $value:expr) => {{
+            let lt = crate::runner::value::resolve_to_lazy_type($t.clone());
+            match lt {
+                crate::runner::value::LT::Int => lazy!(Lazy::Int, $value),
+                crate::runner::value::LT::Float => lazy!(Lazy::Float, $value),
+                crate::runner::value::LT::String => lazy!(Lazy::String, $value),
+                crate::runner::value::LT::Color => lazy!(Lazy::Color, $value),
+                crate::runner::value::LT::Opaque => lazy!(Lazy::Opaque, $value),
+                crate::runner::value::LT::Array => lazy!(Lazy::Array, $value),
+                crate::runner::value::LT::Dict => lazy!(Lazy::Dict, $value),
+                crate::runner::value::LT::Lambda => lazy!(Lazy::Lambda, $value),
+            }
+    }}
 }

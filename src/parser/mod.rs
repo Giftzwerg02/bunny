@@ -81,11 +81,11 @@ mod tests {
         Ok(res.expect_err("we just checked this..."))
     }
         
-    fn pass_valid(mut pair: Pairs<'_, Rule>) {
+    fn pass_valid(mut pair: Pairs<'static, Rule>) {
         parsed_expr_pass(pair.next().expect("called pass_valid with a non-program"));
     }
 
-    fn pass_invalid(mut pair: Pairs<'_, Rule>) {
+    fn pass_invalid(mut pair: Pairs<'static, Rule>) {
         let p = pair.next().expect("called pass_valid with a non-program");
         let p_clone = p.clone();
         let res = std::panic::catch_unwind(move || {

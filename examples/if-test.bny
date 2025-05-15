@@ -1,3 +1,5 @@
 (
-	(if 1 (print "true") (panic "false"))
+	(def r1 (rect 10 20 30 40 #ff0000 []))
+	(def r2 (rect 100 200 300 400 #ff0000 []))
+	(if 1 (print r1) (print r2))
 )

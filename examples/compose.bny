@@ -1,0 +1,24 @@
+(
+	(def assert (bool ret message: "assert failed") (
+		if bool
+		   ret
+		   (panic message)
+	))
+
+	(def assert-eq (x y ret message: "assert-eq failed") (
+		if (= x y)
+			[]
+			(panic message)
+	))
+
+	(def compose1Many (funcs) (foldl compose1 return funcs))
+
+	(def add1 (x) (+ x 1))
+	(def mul2 (x) (* x 2))
+	(def divBy (x) (assert 
+		bool: (not (= x 0)) 
+		ret: (/ 1 x) 
+		message: "cannot divide by 0"))
+
+	(apply1 (compose1Many [add1 add1 mul2]) 3)
+)

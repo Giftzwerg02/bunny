@@ -1,12 +1,13 @@
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use esvg::Element;
+use im::Vector;
 use polygonical::point::Point;
 pub use runnable_expression::InterpreterSymbolTable;
 
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
-use crate::runner::value::{to_color_str, Lazy};
+use crate::runner::value::{to_color_str, Lazy, LazyLambda};
 use crate::types::InferenceState;
 use crate::types::util::*;
 use crate::{eval, lazy, library};
@@ -34,6 +35,28 @@ macro_rules! lfalse {
 
 pub fn standard_library() -> Library {
     library! {
+        #[forall a, b, c | f1:func1(&a, &b) => f2:func1(&b, &c) => f3:func1(&a, &c)]
+        fn "compose1"(Lazy::Lambda(f1), Lazy::Lambda(f2)) {
+            let f1 = f1.clone();    
+            let f2 = f2.clone();    
+            lazy!(Lazy::Lambda, {
+                LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
+                    let mut f1 = f1.func.lock().unwrap();
+                    let mut f2 = f2.func.lock().unwrap();
+                    f2(vec![f1(args)].into())
+                })))
+            })
+        }
+
+        #[forall a, b | f:func1(&a, &b) => input:a => ret:b]
+        fn "apply1"(Lazy::Lambda(f), input) {
+            let f = f.clone();
+            let mut f = f.func.lock().unwrap();
+            let input = input.clone();
+            f(vec![input].into())
+        }
+
+
         #[| a:int() => ret:int()]
         fn "neg"(Lazy::Int(a)) {
             let a = a.clone();
@@ -101,8 +124,8 @@ pub fn standard_library() -> Library {
             lazy!(Lazy::Array, {
                 let mut f = f.func.lock().unwrap();
                 let mut res = vec![];
-                for elem in (**v).clone() {
-                    let mapped = f(vec![elem.clone()].into());
+                for elem in eval!(v) {
+                    let mapped = f(vec![elem].into());
                     res.push(mapped);
                 }
                 res.into()
@@ -162,33 +185,6 @@ pub fn standard_library() -> Library {
                     eval!(i2)
                 }
             })
-
-            // match (iftrue, iffalse) {
-            //     Lazy::Int(lazy_cell) => lazy!(Lazy::Int, {
-            //         if eval!(cond) != 0 {
-            //             iftrue.clone().eval()
-            //         }
-            //         else {
-            //             iffalse.clone().eval()
-            //         }
-            //     }),
-            //     Lazy::Float(lazy_cell) => todo!(),
-            //     Lazy::String(lazy_cell) => todo!(),
-            //     Lazy::Color(lazy_cell) => todo!(),
-            //     Lazy::Opaque(lazy_cell) => todo!(),
-            //     Lazy::Array(lazy_cell) => todo!(),
-            //     Lazy::Dict(lazy_cell) => todo!(),
-            //     Lazy::Lambda(lazy_cell) => todo!(),
-            // }
-            // 
-            // lazy!(iftrue, |val|{
-            //     if eval!(cond) != 0 {
-            //         iftrue.clone().eval()
-            //     }
-            //     else {
-            //         iffalse.clone().eval()
-            //     }
-            // })   
         }
 
         #[| str:string() => ret:int()]
@@ -203,19 +199,17 @@ pub fn standard_library() -> Library {
         #[forall a | elem:a => ret:a]
         fn "print"(elem){
             let elem = elem.clone();
-            lazy!([elem -> l], {
-                let value = eval!(l);
-                println!("{:?}", value);
-                value
+            let e2 = elem.clone();
+            lazy!([elem -> value], {
+                println!("{}", e2.eval());
+                eval!(value)
             })
         }
 
         #[forall a | message:string() => ret:a]
         fn "panic"(Lazy::String(message)) {
             let message = message.clone();
-            // in this case we just choose any lazy-type
-            // since it will panic if this is evaluated anyway
-            lazy!(Lazy::Never, {
+            lazy!(fromtype[a], {
                 panic!("panicked: {}", eval!(message))
             })
         }
@@ -264,6 +258,18 @@ pub fn standard_library() -> Library {
             } else {
                 lfalse!()
             }
+        }
+
+        #[| a:int() => ret:int()]
+        fn "not"(Lazy::Int(a)) {
+            let a = a.clone();
+            lazy!(Lazy::Int, {
+                if eval!(a) == 0 {
+                    1
+                } else {
+                    0
+                }
+            })
         }
 
         #[| x:int() => y:int() => radius:int() => fill:color() => children:array(&opaque()) => ret:opaque()]
