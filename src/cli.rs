@@ -12,7 +12,7 @@ pub struct Cli {
     pub debug: bool,
 
     /// The input source file
-    pub file: PathBuf,
+    pub file: Option<PathBuf>,
 
     #[clap(flatten)]
     pub render_config: RenderConfig,
