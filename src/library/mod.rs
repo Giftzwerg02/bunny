@@ -1,4 +1,3 @@
-
 use std::sync::{Arc, Mutex};
 
 use esvg::Element;
@@ -7,7 +6,7 @@ use polygonical::point::Point;
 pub use runnable_expression::InterpreterSymbolTable;
 
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
-use crate::runner::value::{to_color_str, Lazy, LazyLambda};
+use crate::runner::value::{Lazy, LazyLambda, LazyType, to_color_str};
 use crate::types::InferenceState;
 use crate::types::util::*;
 use crate::{eval, lazy, library};
@@ -37,8 +36,8 @@ pub fn standard_library() -> Library {
     library! {
         #[forall a, b, c | f1:func1(&a, &b) => f2:func1(&b, &c) => f3:func1(&a, &c)]
         fn "compose1"(Lazy::Lambda(f1), Lazy::Lambda(f2)) {
-            let f1 = f1.clone();    
-            let f2 = f2.clone();    
+            let f1 = f1.clone();
+            let f2 = f2.clone();
             lazy!(Lazy::Lambda, {
                 LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
                     let mut f1 = f1.func.lock().unwrap();
@@ -160,7 +159,7 @@ pub fn standard_library() -> Library {
             lazy!(Lazy::Array, {
                 let from = **from;
                 let to = **to;
-                
+
                 (from..to)
                     .map(|i| lazy!(Lazy::Int, i))
                     .collect()
@@ -333,5 +332,45 @@ pub fn standard_library() -> Library {
                 group
             })
         }
+
+        #[| x1:int() => y1:int() => x2:int() => y2:int() => stroke:color() => ret:opaque()]
+        fn "line"(Lazy::Int(x1),Lazy::Int(y1),Lazy::Int(x2),Lazy::Int(y2),Lazy::Color(stroke)) {
+            let x1 = x1.clone();
+            let y1 = y1.clone();
+            let x2 = x2.clone();
+            let y2 = y2.clone();
+            let stroke = stroke.clone();
+            lazy!(Lazy::Opaque, {
+                let mut group = Element::new("g");
+                let mut line = esvg::path::create(&[
+                    eval_point(x1, y1),
+                    eval_point(x2, y2),
+                ]);
+
+                let color_str = to_color_str(&eval!(stroke));
+                line.set("stroke", color_str);
+
+                group.add(&line);
+
+                group
+            })
+        }
+
+        #[| elems:array(&opaque()) => ret:opaque()]
+        fn "group"(Lazy::Array(elems)) {
+            let elems = elems.clone();
+            lazy!(Lazy::Opaque, {
+                let mut group = Element::new("g");
+                for elem in eval!(elems) {
+                    let Lazy::Opaque(elem) = elem else { panic!(); };
+                    group.add(&elem);
+                }
+                group
+            })
+        }
     }
+}
+
+fn eval_point(x: LazyType<i64>, y: LazyType<i64>) -> Point {
+    Point::new(eval!(x) as f32, eval!(y) as f32)
 }

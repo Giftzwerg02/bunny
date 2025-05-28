@@ -1,0 +1,8 @@
+(
+	(def axes (origin-x origin-y width height) (group [
+		(line origin-x origin-y (+ origin-x width) origin-y #ff000)
+		(line origin-x origin-y origin-x (+ origin-y height) #00ff00)
+	]))
+
+	(axes 0 0 100 100)
+)
