@@ -312,11 +312,9 @@ pub fn standard_library() -> Library {
             lazy!(Lazy::Opaque, {
                 let mut group = Element::new("g");
 
-                let mut rect = esvg::shapes::rectangle(
-                    Point::new(eval!(x) as f32, eval!(y) as f32), // TODO pretty hacky
-                    eval!(w) as f64,
-                    eval!(h) as f64,
-                );
+                // TODO pretty hacky
+                let pos = Point::new(eval!(x) as f32, eval!(y) as f32);
+                let mut rect = rectangle(pos, eval!(w) as f64, eval!(h) as f64);
 
                 let color_str = to_color_str(&eval!(fill));
                 rect.set("fill", color_str);
@@ -368,9 +366,88 @@ pub fn standard_library() -> Library {
                 group
             })
         }
+
+        #[| s:string() => x:int() => y:int() => ret:opaque()]
+        fn "text"(Lazy::String(s), Lazy::Int(x), Lazy::Int(y)) {
+            let s = s.clone();
+            let x = x.clone();
+            let y = y.clone();
+            lazy!(Lazy::Opaque, {
+                let loc = eval_point(x, y);
+                let style = esvg::text::create_text_style(
+                    "Roboto",
+                    14,
+                    "normal",
+                    0.0,
+                    "#000000",
+                    "#000000",
+                    1.0
+                );
+                esvg::text::create_text(eval!(s).to_string(), loc, &style)
+            })
+        }
+
+
+        #[| s:string() => x:int() => y:int() => style:string() => ret:opaque()]
+        fn "text-with-style"(Lazy::String(s), Lazy::Int(x), Lazy::Int(y), Lazy::String(style)) {
+            let s = s.clone();
+            let x = x.clone();
+            let y = y.clone();
+            let style = style.clone();
+            lazy!(Lazy::Opaque, {
+                let loc = eval_point(x, y);
+                esvg::text::create_text(eval!(s).to_string(), loc, &eval!(style))
+            })
+        }
+
+        #[| elem:opaque() => x:int() => y:int() => ret:opaque()]
+        fn "translate"(Lazy::Opaque(elem), Lazy::Int(x), Lazy::Int(y)) {
+            let elem = elem.clone();
+            let x = x.clone();
+            let y = y.clone();
+            lazy!(Lazy::Opaque, {
+                let mut elem = eval!(elem);
+                let x = eval!(x);
+                let y = eval!(y);
+                elem.set("transform", format!("translate({x},{y})"));
+                elem
+            })
+        }
+
+        #[| elem:opaque() => degrees:float() => ret:opaque()]
+        fn "rotate"(Lazy::Opaque(elem), Lazy::Float(degrees)) {
+            let elem = elem.clone();
+            let degrees = degrees.clone();
+            lazy!(Lazy::Opaque, {
+                let mut elem = eval!(elem);
+                let degrees = eval!(degrees);
+                elem.set("transform", format!("rotate({degrees})"));
+                elem
+            })
+        }
+
+        #[| elem:opaque() => degrees:float() => ret:opaque()]
+        fn "rotate-self"(Lazy::Opaque(elem), Lazy::Float(degrees)) {
+            let elem = elem.clone();
+            let degrees = degrees.clone();
+            lazy!(Lazy::Opaque, {
+                let mut elem = eval!(elem);
+                let degrees = eval!(degrees);
+                let x = elem.get("x").unwrap_or("0".to_owned());
+                let y = elem.get("y").unwrap_or("0".to_owned());
+                elem.set("transform", format!("rotate({degrees},{x},{y})"));
+                elem
+            })
+        }
     }
 }
 
 fn eval_point(x: LazyType<i64>, y: LazyType<i64>) -> Point {
     Point::new(eval!(x) as f32, eval!(y) as f32)
+}
+
+fn rectangle(pos: Point, width: f64, height: f64) -> Element {
+    let offset = Point::new(width / 2.0, height / 2.0);
+    let center = pos.translate(&offset);
+    esvg::shapes::rectangle(center, width, height)
 }

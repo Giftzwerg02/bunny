@@ -16,7 +16,7 @@ pub fn output_svg(val: &Value, config: &RenderConfig) -> Result<()> {
     .map_err(|err| miette!("Invalid page format: {err}"))?;
 
     let mut doc = create_document(&page);
-    doc.add(&child);
+    doc.add(child);
 
     let svg = doc.to_pretty_string();
 

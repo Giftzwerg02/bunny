@@ -1,3 +1,25 @@
 (
-	#ff000000
+	(def axes (origin-x origin-y width height stroke) (group [
+		(line origin-x origin-y (+ origin-x width) origin-y stroke)
+		(line origin-x origin-y origin-x (+ origin-y height) stroke)
+	]))
+
+	(def bar-text (str x y) (rotate-self (text str x y) 80f))
+
+	(def bar-chart (
+		origin-x 
+		origin-y
+		width
+		height
+		bars
+	) (group [
+		(axes origin-x origin-y width height #000000)
+		(translate (group bars) (+ origin-x 10) origin-y)
+	]))
+	(bar-chart 100 100 200 200 [
+		(rect 0 0 10 50 #ff0000 [ (bar-text "sussy wussy" 0 100) ])
+		(rect 15 0 10 40 #00ff00 [ (bar-text "mogus bogus" 15 100) ])
+		(rect 30 0 10 60 #0000ff [ (bar-text "hihi hoho" 30 100)])
+		(rect 45 0 10 90 #ff00ff [ (bar-text "Diplomarbeit" 45 100)])
+	])
 )

@@ -44,12 +44,16 @@ pub struct RenderConfig {
     /// The output for the generated SVG
     pub output_file: Option<PathBuf>,
 
+    /// NOTE: The width and height works in correlation with the DPI
+    ///       !A width of 10 does *not* mean that a point with x=11 does not get drawn!
+    ///       Rather: Given a DPI of 96 and a width of 10, the range of drawn points along
+    ///       the x-axis is [0; DPI * width = 960]
     /// The output for the generated PNG
-    #[arg(long, default_value_t = 256)]
+    #[arg(long, default_value_t = 5)]
     pub width: i32,
 
     /// The height of the canvas
-    #[arg(long, default_value_t = 256)]
+    #[arg(long, default_value_t = 5)]
     pub height: i32,
 
     #[arg(long, default_value_t = 96)]

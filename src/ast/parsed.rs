@@ -213,7 +213,7 @@ pub fn parsed_expr_pass(pair: Pair) -> Expr<ParsedStageInfo> {
             Expr::Int(Int::new(int, info(pair)))
         }
         Rule::float => {
-            let float = text[0..len].parse().expect("float");
+            let float = text[0..len - 1].parse().expect("float");
             Expr::Float(Float::new(float, info(pair)))
         }
         Rule::string => {
@@ -228,7 +228,7 @@ pub fn parsed_expr_pass(pair: Pair) -> Expr<ParsedStageInfo> {
                 let alpha = u8::from_str_radix(&text[7..=8], 16).expect("color");
                 Expr::Color(Color::new(r, g, b, alpha, info(pair)))
             } else {
-                Expr::Color(Color::new(r, g, b, 1, info(pair)))
+                Expr::Color(Color::new(r, g, b, 255, info(pair)))
             }
         },
         _ => panic!("invalid pair {pair}"),
