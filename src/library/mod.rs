@@ -116,7 +116,7 @@ pub fn standard_library() -> Library {
             v[idx as usize].clone()
         }
 
-        #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => ret:b ]
+        #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => ret:array(&b) ]
         fn "map"(Lazy::Lambda(f), Lazy::Array(v)) {
             let f = f.clone();
             let v = v.clone();
