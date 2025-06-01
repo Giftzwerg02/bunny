@@ -23,7 +23,7 @@ use crate::library::standard_library;
 use interpreter::Interpreter;
 use miette::Result;
 use reedline::{
-    default_vi_insert_keybindings, default_vi_normal_keybindings, Highlighter, Prompt, Reedline, Signal, StyledText, ValidationResult, Validator, Vi
+    default_vi_insert_keybindings, default_vi_normal_keybindings, Highlighter, Hinter, Prompt, Reedline, Signal, StyledText, ValidationResult, Validator, Vi
 };
 use svg::output_svg;
 
@@ -31,17 +31,7 @@ struct BunnyReplValidator;
 
 impl Validator for BunnyReplValidator {
     fn validate(&self, line: &str) -> reedline::ValidationResult {
-        // TODO: I would much rather have something like this, where the input is marked as
-        // complete if the number of parens is balanced. But self is passed as a read-only
-        // reference, so I am unsure how to do this nicely.
-        // let popen = line.chars().filter(|c| *c == '(').count() as i64;
-        // let pclose = line.chars().filter(|c| *c == ')').count() as i64;
-        // let balance = self.paren_balance.get_mut();
-        // *balance += popen;
-        // *balance -= pclose;
-        // if *balance == 0 {
-
-        if line.ends_with("\n\n") {
+        if line.trim().is_empty() || Interpreter::is_valid_expression(line.to_owned()) {
             ValidationResult::Complete
         } else {
             ValidationResult::Incomplete
@@ -75,6 +65,29 @@ impl Prompt for BunnyReplPrompt {
         &self,
         history_search: reedline::PromptHistorySearch,
     ) -> std::borrow::Cow<str> {
+        todo!()
+    }
+}
+
+struct BunnyReplHinter;
+
+impl Hinter for BunnyReplHinter {
+    fn handle(
+        &mut self,
+        line: &str,
+        pos: usize,
+        history: &dyn reedline::History,
+        use_ansi_coloring: bool,
+        cwd: &str,
+    ) -> String {
+        todo!()
+    }
+
+    fn complete_hint(&self) -> String {
+        todo!()
+    }
+
+    fn next_hint_token(&self) -> String {
         todo!()
     }
 }
@@ -141,7 +154,7 @@ fn main() -> Result<()> {
 
     match cli.file {
         Some(file) => {
-            let result = interpreter.run_file(file)?;
+            let (result, _) = interpreter.run_file(file)?;
 
             if result.is_renderable() {
                 output_svg(&result, &cli.render_config)?;
@@ -152,7 +165,6 @@ fn main() -> Result<()> {
             Ok(())
         }
         None => {
-            let mut source = "".to_owned();
             let validator = Box::new(BunnyReplValidator);
             let highlighter = Box::new(BunnyReplHighlighter);
             let mut line_editor = Reedline::create()
@@ -168,11 +180,15 @@ fn main() -> Result<()> {
                 let sig = line_editor.read_line(&prompt);
                 match sig {
                     Ok(Signal::Success(buffer)) => {
+                        if buffer.trim().is_empty() {
+                            continue;
+                        }
+
                         let wrapped = format!("({buffer})");
                         let res = interpreter.run(wrapped, "repl".to_owned());
                         match res {
-                            Ok(value) => {
-                                println!(":: {value}");
+                            Ok((result, typ)) => {
+                                println!(":: {result} : {typ}");
                             }
                             Err(err) => {
                                 println!("{err:?}");
