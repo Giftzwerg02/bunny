@@ -10,8 +10,10 @@ mod types;
 
 use nu_ansi_term::{Color, Style};
 use lazy_static::lazy_static;
-use parser::{BunnyParser, Rule};
+use parser::{pest_parsing_pass, try_highlight, BunnyParser, Rule};
 use pest::{iterators::Pairs, Parser};
+use runner::value::Value;
+use types::hm::Type;
 use std::borrow::Cow;
 
 #[allow(unused)]
@@ -96,6 +98,7 @@ lazy_static! {
     static ref DEFAULT_STYLE: Style = Style::new().fg(Color::White);
     static ref UNKNOWN_STYLE: Style = Style::new().fg(Color::Red);
     static ref REPL_COMMAND_STYLE: Style = DEFAULT_STYLE.bold();
+    static ref REPL_RESULT_TYPE_STYLE: Style = Style::new().bold();
     static ref ASSIGMENT_STYLE: Style = Style::new().fg(Color::Cyan).bold();
     static ref GET_STYLE: Style = Style::new().fg(Color::LightBlue).bold();
     static ref STRING_STYLE: Style = Style::new().fg(Color::Green);
@@ -109,7 +112,7 @@ lazy_static! {
 struct BunnyReplHighlighter;
 
 impl BunnyReplHighlighter {
-    fn apply_styles_from_pairs(&self, styled: &mut StyledText, pairs: Pairs<'_, Rule>) {
+    fn apply_styles_from_pairs(styled: &mut StyledText, pairs: Pairs<'_, Rule>) {
         for pair in pairs {
             let range = pair.as_span();
             let style = match pair.as_rule() {
@@ -123,7 +126,7 @@ impl BunnyReplHighlighter {
             };
             styled.style_range(range.start(), range.end(), style);
             let children = pair.into_inner();
-            self.apply_styles_from_pairs(styled, children);
+            Self::apply_styles_from_pairs(styled, children);
         }
     }
 }
@@ -137,10 +140,26 @@ impl Highlighter for BunnyReplHighlighter {
             return text;
         };
 
-        self.apply_styles_from_pairs(&mut text, pairs);
+        Self::apply_styles_from_pairs(&mut text, pairs);
         
         text
     }
+}
+
+fn print_result(result: Value, typ: Type) {
+    let mut text = StyledText::new();
+
+    text.push((*DEFAULT_STYLE, result.to_string()));
+
+    let parsed = try_highlight(result.to_string());
+
+    if let Ok(pairs) = parsed {
+       BunnyReplHighlighter::apply_styles_from_pairs(&mut text, pairs.into_inner());
+    }
+
+    text.push((*REPL_RESULT_TYPE_STYLE, format!(" : {typ}")));
+    
+    println!(":: {}", text.render_simple())
 }
 
 fn main() -> Result<()> {
@@ -188,7 +207,7 @@ fn main() -> Result<()> {
                         let res = interpreter.run(wrapped, "repl".to_owned());
                         match res {
                             Ok((result, typ)) => {
-                                println!(":: {result} : {typ}");
+                                print_result(result, typ);
                             }
                             Err(err) => {
                                 println!("{err:?}");

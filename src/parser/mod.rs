@@ -10,11 +10,20 @@ use crate::ast::parsed::{is_not_comment, Pair};
 pub struct BunnyParser;
 
 pub fn pest_parsing_pass(src: String) -> Result<Pair> {
+    parse(Rule::program, src)
+}
+
+pub fn try_highlight(src: String) -> Result<Pair> {
+    parse(Rule::expr, src)
+}
+
+fn parse(rule: Rule, src: String) -> Result<Pair> {
     // We're leaking the source here as it has to have a static lifetime anyway
     let src = src.leak();
 
-    let parsed = BunnyParser::parse(Rule::program, src)
-        .map_err(|err| err.into_miette())?.find(is_not_comment)
+    let parsed = BunnyParser::parse(rule, src)
+        .map_err(|err| err.into_miette())?
+        .find(is_not_comment)
         .unwrap();
 
     Ok(parsed)

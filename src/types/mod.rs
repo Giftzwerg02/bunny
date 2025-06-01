@@ -92,7 +92,12 @@ pub fn typecheck_pass(
             Expr::Dict(infer_dict(dict, state)?),
 
         Expr::Lambda(lambda) =>
-            Expr::Lambda(infer_lambda(lambda, state)?)
+            if lambda.args.is_empty(){
+                typecheck_pass(&lambda.body, state)?
+            }
+            else {
+                Expr::Lambda(infer_lambda(lambda, state)?)
+            }
     };
 
     Ok(new_expr)
@@ -223,13 +228,13 @@ fn infer_single_func_call(
     for arg in &call.args {
         // t1 in the paper
         let current_arg_typ = infer_argument(arg, state)?;
-        arg_types.push(current_arg_typ.clone());
+        let arg_typ = current_arg_typ.info().typ.clone();
 
         // t' in the paper
         let ret_typ = state.hm.newvar();
 
         let constructed_func = Type::Fn(
-            Box::new(current_arg_typ.info().typ.clone()),
+            Box::new(arg_typ),
             Box::new(ret_typ.clone())
         );
 
@@ -242,6 +247,7 @@ fn infer_single_func_call(
             );
         }
 
+        arg_types.push(current_arg_typ.clone());
         current_typ = ret_typ;
     }
 
