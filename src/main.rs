@@ -10,7 +10,7 @@ mod types;
 
 use nu_ansi_term::{Color, Style};
 use lazy_static::lazy_static;
-use parser::{pest_parsing_pass, try_highlight, BunnyParser, Rule};
+use parser::{try_highlight, BunnyParser, Rule};
 use pest::{iterators::Pairs, Parser};
 use runner::value::Value;
 use types::hm::Type;
@@ -25,7 +25,7 @@ use crate::library::standard_library;
 use interpreter::Interpreter;
 use miette::Result;
 use reedline::{
-    default_vi_insert_keybindings, default_vi_normal_keybindings, Completer, Highlighter, Hinter, Prompt, Reedline, Signal, StyledText, ValidationResult, Validator, Vi
+    default_vi_insert_keybindings, default_vi_normal_keybindings, Highlighter, Hinter, Prompt, Reedline, Signal, StyledText, ValidationResult, Validator, Vi
 };
 use svg::output_svg;
 
@@ -54,7 +54,7 @@ impl Prompt for BunnyReplPrompt {
 
     fn render_prompt_indicator(
         &self,
-        prompt_mode: reedline::PromptEditMode,
+        _prompt_mode: reedline::PromptEditMode,
     ) -> std::borrow::Cow<str> {
         Cow::Owned("> ".to_owned())
     }
@@ -237,7 +237,8 @@ fn main() -> Result<()> {
                 )))
                 .with_validator(validator)
                 .with_highlighter(highlighter)
-                .with_hinter(hinter); // Add the hinter
+                .with_hinter(hinter);
+            
             let prompt = BunnyReplPrompt;
 
             loop {
