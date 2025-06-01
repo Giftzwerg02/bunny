@@ -228,6 +228,8 @@ fn infer_single_func_call(
     for arg in &call.args {
         // t1 in the paper
         let current_arg_typ = infer_argument(arg, state)?;
+        arg_types.push(current_arg_typ.clone());
+        
         let arg_typ = current_arg_typ.info().typ.clone();
 
         // t' in the paper
@@ -247,7 +249,6 @@ fn infer_single_func_call(
             );
         }
 
-        arg_types.push(current_arg_typ.clone());
         current_typ = ret_typ;
     }
 

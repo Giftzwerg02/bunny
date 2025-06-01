@@ -24,6 +24,14 @@ impl Interpreter {
         pest_parsing_pass(bunny_src).is_ok()
     }
 
+    pub fn get_defined_variables(&self) -> Vec<String> {
+        self.scope_symbol_table
+            .inner
+            .iter()
+            .map(|(key, _)| key.to_string())
+            .collect()
+    }
+
     pub fn run(&mut self, bunny_src: String, source_name: String) -> Result<(Value, Type)> {
         let source = NamedSource::new(source_name, bunny_src.clone())
             .with_language("Lisp");

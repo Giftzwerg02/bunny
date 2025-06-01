@@ -14,7 +14,7 @@ use parser::{pest_parsing_pass, try_highlight, BunnyParser, Rule};
 use pest::{iterators::Pairs, Parser};
 use runner::value::Value;
 use types::hm::Type;
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::{Arc, Mutex}};
 
 #[allow(unused)]
 use clap::Parser as ClapParser;
@@ -25,7 +25,7 @@ use crate::library::standard_library;
 use interpreter::Interpreter;
 use miette::Result;
 use reedline::{
-    default_vi_insert_keybindings, default_vi_normal_keybindings, Highlighter, Hinter, Prompt, Reedline, Signal, StyledText, ValidationResult, Validator, Vi
+    default_vi_insert_keybindings, default_vi_normal_keybindings, Completer, Highlighter, Hinter, Prompt, Reedline, Signal, StyledText, ValidationResult, Validator, Vi
 };
 use svg::output_svg;
 
@@ -65,32 +65,67 @@ impl Prompt for BunnyReplPrompt {
 
     fn render_prompt_history_search_indicator(
         &self,
-        history_search: reedline::PromptHistorySearch,
+        _history_search: reedline::PromptHistorySearch,
     ) -> std::borrow::Cow<str> {
-        todo!()
+        // todo: render history search indicator
+        Cow::Owned("".to_string())
     }
 }
 
-struct BunnyReplHinter;
+struct BunnyReplHinter {
+    symbols: Arc<Mutex<Vec<String>>>,
+    hint_candidate: String,
+}
 
 impl Hinter for BunnyReplHinter {
     fn handle(
         &mut self,
         line: &str,
         pos: usize,
-        history: &dyn reedline::History,
+        _history: &dyn reedline::History,
         use_ansi_coloring: bool,
-        cwd: &str,
+        _cwd: &str,
     ) -> String {
-        todo!()
+        self.hint_candidate = "".to_string();
+
+        if line.is_empty() || pos == 0 {
+            return self.hint_candidate.clone();
+        }
+
+        let start_of_word = line[..pos]
+            .rfind(|c: char| !c.is_alphanumeric() && c != '_')
+            .map_or(0, |i| i + 1);
+        let current_word = &line[start_of_word..pos];
+
+        if current_word.is_empty() {
+            return self.hint_candidate.clone();
+        }
+
+        let symbols = self.symbols.lock().unwrap();
+        for symbol in symbols.iter() {
+            if symbol.starts_with(current_word) && symbol.len() > current_word.len() {
+                self.hint_candidate = symbol[current_word.len()..].to_string();
+                break;
+            }
+        }
+
+        if use_ansi_coloring {
+            HINTER_STYLE
+                .paint(self.hint_candidate.clone())
+                .to_string()
+        }
+        else {
+            self.hint_candidate.clone()
+        }
+        
     }
 
     fn complete_hint(&self) -> String {
-        todo!()
+        self.hint_candidate.clone()
     }
 
     fn next_hint_token(&self) -> String {
-        todo!()
+        String::new() // Not implementing cycling for now
     }
 }
 
@@ -104,9 +139,10 @@ lazy_static! {
     static ref STRING_STYLE: Style = Style::new().fg(Color::Green);
     static ref NUMBER_STYLE: Style = Style::new().fg(Color::Magenta);
     static ref PAREN_STYLE: Style = Style::new().fg(Color::Fixed(7)).dimmed();
-    static ref COMMENT_STYLE: Style = Style::new().fg(Color::Fixed(7)).dimmed();
+    static ref COMMENT_STYLE: Style = *PAREN_STYLE;
+    static ref HINTER_STYLE: Style = *PAREN_STYLE;
     static ref IDENTIFIER_STYLE: Style = Style::new().fg(Color::Blue).bold();
-    static ref DEF_STYLE: Style = Style::new().fg(Color::Red).bold();
+    static ref DEF_STYLE: Style = Style::new().fg(Color::Cyan).bold();
 }
 
 struct BunnyReplHighlighter;
@@ -132,7 +168,7 @@ impl BunnyReplHighlighter {
 }
 
 impl Highlighter for BunnyReplHighlighter {
-    fn highlight(&self, line: &str, cursor: usize) -> reedline::StyledText {
+    fn highlight(&self, line: &str, _cursor: usize) -> reedline::StyledText {
         let mut text = StyledText::new();
         text.push((*DEFAULT_STYLE, line.to_string()));
 
@@ -162,6 +198,7 @@ fn print_result(result: Value, typ: Type) {
     println!(":: {}", text.render_simple())
 }
 
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -184,15 +221,23 @@ fn main() -> Result<()> {
             Ok(())
         }
         None => {
+            let symbols_for_hinter = Arc::new(Mutex::new(interpreter.get_defined_variables()));
+
             let validator = Box::new(BunnyReplValidator);
             let highlighter = Box::new(BunnyReplHighlighter);
+            let hinter = Box::new(BunnyReplHinter {
+                symbols: symbols_for_hinter.clone(),
+                hint_candidate: "".to_string()
+            });
+
             let mut line_editor = Reedline::create()
                 .with_edit_mode(Box::new(Vi::new(
                     default_vi_insert_keybindings(),
                     default_vi_normal_keybindings(),
                 )))
                 .with_validator(validator)
-                .with_highlighter(highlighter);
+                .with_highlighter(highlighter)
+                .with_hinter(hinter); // Add the hinter
             let prompt = BunnyReplPrompt;
 
             loop {
@@ -208,6 +253,9 @@ fn main() -> Result<()> {
                         match res {
                             Ok((result, typ)) => {
                                 print_result(result, typ);
+
+                                let mut symbols = symbols_for_hinter.lock().unwrap();
+                                *symbols = interpreter.get_defined_variables();
                             }
                             Err(err) => {
                                 println!("{err:?}");
