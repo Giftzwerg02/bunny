@@ -20,7 +20,7 @@ pub fn output_svg(val: &Value, config: &RenderConfig) -> Result<()> {
 
     let svg = doc.to_pretty_string();
 
-    if let Some(output_file) = &config.output_file {
+    if let Some(output_file) = &config.output {
         let mut file = fs::File::create(output_file)
             .map_err(|err| miette!("Error creating file: {err}"))?;
 

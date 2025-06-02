@@ -14,7 +14,7 @@ use parser::{try_highlight, BunnyParser, Rule};
 use pest::{iterators::Pairs, Parser};
 use runner::value::Value;
 use types::hm::Type;
-use std::{borrow::Cow, sync::{Arc, Mutex}};
+use std::{borrow::Cow, process::Stdio, sync::{Arc, Mutex}};
 
 #[allow(unused)]
 use clap::Parser as ClapParser;
@@ -182,7 +182,7 @@ impl Highlighter for BunnyReplHighlighter {
     }
 }
 
-fn print_result(result: Value, typ: Type) {
+fn print_result(result: &Value, typ: &Type) {
     let mut text = StyledText::new();
 
     text.push((*DEFAULT_STYLE, result.to_string()));
@@ -196,6 +196,39 @@ fn print_result(result: Value, typ: Type) {
     text.push((*REPL_RESULT_TYPE_STYLE, format!(" : {typ}")));
     
     println!(":: {}", text.render_simple())
+}
+
+use std::process::Command;
+use std::env;
+
+fn open_file(path: &str) {
+    match env::consts::OS {
+        "windows" => {
+            let _ = Command::new("start")
+                .arg(path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .spawn();
+        },
+        "macos" | "ios" => {
+            let _ = Command::new("open")
+                .arg(path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .spawn();
+        },
+        "linux" => {
+            let _ = Command::new("xdg-open")
+                .arg(path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .spawn();
+        },
+        _ => unreachable!(), // No ones gonna run this on BSD on something... no really pls dont
+    }
 }
 
 
@@ -241,6 +274,8 @@ fn main() -> Result<()> {
             
             let prompt = BunnyReplPrompt;
 
+            let mut opened = false;
+
             loop {
                 let sig = line_editor.read_line(&prompt);
                 match sig {
@@ -253,10 +288,25 @@ fn main() -> Result<()> {
                         let res = interpreter.run(wrapped, "repl".to_owned());
                         match res {
                             Ok((result, typ)) => {
-                                print_result(result, typ);
-
                                 let mut symbols = symbols_for_hinter.lock().unwrap();
                                 *symbols = interpreter.get_defined_variables();
+
+                                if let Some(output_file) = &cli.render_config.output && result.is_renderable() {
+                                    output_svg(&result, &cli.render_config).unwrap_or_else(|err| {
+                                        println!("Error rendering SVG: {err}");
+                                    });
+
+                                    
+                                    if !opened {
+                                        opened = true;
+                                        open_file(output_file.to_str().unwrap_or_default());
+                                    }
+
+                                    println!(":: {}", REPL_COMMAND_STYLE.paint(format!("Written to {}", output_file.display())));
+                                }
+                                else {
+                                    print_result(&result, &typ);
+                                }
                             }
                             Err(err) => {
                                 println!("{err:?}");

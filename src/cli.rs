@@ -42,7 +42,8 @@ impl Cli {
 #[derive(Debug, Args)]
 pub struct RenderConfig {
     /// The output for the generated SVG
-    pub output_file: Option<PathBuf>,
+    #[arg(long)]
+    pub output: Option<PathBuf>,
 
     /// NOTE: The width and height works in correlation with the DPI
     ///       !A width of 10 does *not* mean that a point with x=11 does not get drawn!
