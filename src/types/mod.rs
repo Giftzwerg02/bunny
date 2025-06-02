@@ -91,13 +91,8 @@ pub fn typecheck_pass(
         Expr::Dict(dict) =>
             Expr::Dict(infer_dict(dict, state)?),
 
-        Expr::Lambda(lambda) =>
-            if lambda.args.is_empty(){
-                typecheck_pass(&lambda.body, state)?
-            }
-            else {
-                Expr::Lambda(infer_lambda(lambda, state)?)
-            }
+        Expr::Lambda(lambda) => 
+            infer_lambda(lambda, state)?,
     };
 
     Ok(new_expr)
@@ -185,7 +180,7 @@ fn infer_symbol(
                 Expr::Symbol(create_argument_definition(sym, state)),
 
             SymbolValue::FunctionDefinition(lambda) =>
-                Expr::Lambda(infer_lambda(lambda, &mut state.clone())?),
+                infer_lambda(lambda, &mut state.clone())?,
 
             SymbolValue::Argument(Argument::Named(NamedArgument { value, .. })) => 
                 typecheck_pass(value, state)?
@@ -407,7 +402,11 @@ fn infer_dict(
 fn infer_lambda(
     lambda: &Lambda<ScopedStageInfo>,
     state: &mut InferenceState
-) -> Result<Lambda<TypedStageInfo>> {
+) -> Result<Expr<TypedStageInfo>> {
+    if lambda.args.is_empty(){
+        return typecheck_pass(&lambda.body, state);
+    }
+
     let typed_body = typecheck_pass(&lambda.body, state)?;
 
     let typed_symbols = &typed_body.info().syms;
@@ -466,13 +465,13 @@ fn infer_lambda(
 
     let fun_type = func(&arg_types[..], typed_body.typ());
 
-    Ok(Lambda::parametric(
+    Ok(Expr::Lambda(Lambda::parametric(
         typed_args,
 
         typed_body,
 
         type_stage_info(&lambda.info, fun_type, state)
-    ))
+    )))
 }
 
 

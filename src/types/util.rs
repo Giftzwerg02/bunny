@@ -48,10 +48,7 @@ pub fn func2(arg1: &Type, arg2: &Type, ret: &Type) -> Type {
 
 pub fn func(args: &[Type], ret: &Type) -> Type {
     match args {
-        [] => Type::Fn(
-            Box::new(Type::TUnit),
-            Box::new(ret.clone())
-        ),
+        [] => panic!("Function type must have at least one argument"),
 
         [ a ] => Type::Fn(
             Box::new(a.clone()),
