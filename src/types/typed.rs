@@ -80,14 +80,14 @@ impl TypedStageInfo {
 }
 
 impl Display for PolyTypedStageInfo {
-    fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
-        unimplemented!()
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "poly type: {}", self.typ.typ)
     }
 }
 
 impl PrettyPrintable for PolyTypedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
-        unimplemented!()
+        StringTreeNode::new(format!("poly type: {}", self.typ.typ))
     }
 }
 
@@ -112,13 +112,13 @@ impl StageInfo for AnyTypedStageInfo {}
 
 impl PrettyPrintable for AnyTypedStageInfo {
     fn pretty_print(&self) -> StringTreeNode {
-        unimplemented!("Why is this even required?");
+        StringTreeNode::new("any stage info".to_owned())
     }
 }
 
 impl Display for AnyTypedStageInfo {
-    fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
-        unimplemented!("Why is this even required?");
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "any stage info")
     }
 }
 

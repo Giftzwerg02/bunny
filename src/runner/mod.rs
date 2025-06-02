@@ -159,11 +159,11 @@ impl Runner {
                         })
                     }
                     TypedValue::FromBunny(scope) => {
-                        if matches!(scope, Expr::Lambda(_)) {
+                        if matches!(scope, Expr::Symbol(_))  {
+                            self.read_var(symbol.value)
+                        } else {
                             let new_scope = scope.clone().map_stage(&mut |info| info.into());
                             self.run(new_scope)
-                        } else {
-                            self.read_var(symbol.value)
                         }
                     }
                 }
@@ -181,7 +181,7 @@ impl Runner {
                         .into_iter()
                         .map(|arg| match arg {
                             crate::ast::Argument::Positional(arg_expr) => {
-                                let mut runner = self.clone();
+                                let mut runner = self.clone();                                
                                 runner.run(arg_expr)
                             }
                             crate::ast::Argument::Named(named_argument) => {
@@ -274,17 +274,17 @@ impl Runner {
 
                         result
                     }
-                    _ => panic!("invalid ast"),
+
+                    thing => {
+                        let right_thing = thing.clone().map_stage(&mut |info| info.into());
+
+                        self.run(right_thing)
+                    } 
                 }
             }
             Expr::Lambda(lambda) => {
                 // A lambda should return a lazy of
                 // a function that takes some arguments and returns a result
-
-                // auto-execute constant definition
-                if lambda.args.is_empty() {
-                    return self.run(*lambda.body);
-                }
 
                 let lambda_args = Arc::new(
                     lambda
