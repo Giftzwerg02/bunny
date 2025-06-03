@@ -18,7 +18,7 @@
       in {
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
-            rust-bin.stable."latest".default
+            rust-bin.nightly."latest".default
 
             rust-analyzer
             gcc
