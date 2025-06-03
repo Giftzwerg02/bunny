@@ -202,9 +202,10 @@ impl Runner {
                 match implementation {
                     // i.e., the argument is used as a function
                     Expr::Symbol(symbol) => {
-                        // since the argument is used as a function, the Lazy must be a Lambda
-                        let Lazy::Lambda(lambda) = self.read_var(symbol.value.clone()) else {
-                            panic!("argument must be a lambda")
+                        
+                        let value = self.read_var(symbol.value.clone());
+                        let Lazy::Lambda(lambda) = value else {
+                            return value;
                         };
 
                         let args = func.args.into_iter().map(|arg| {
