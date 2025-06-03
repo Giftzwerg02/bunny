@@ -1,0 +1,5 @@
+(
+    (def foo (x) (+ x 1))
+    (def bar (compose1 foo foo))
+    (bar 5)
+)

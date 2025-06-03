@@ -168,6 +168,7 @@ impl Runner {
                     }
                 }
             }
+
             Expr::FuncCall(func) => {
                 let FuncCall::Single(func) = func else {
                     panic!("invalid ast");
@@ -276,12 +277,31 @@ impl Runner {
                     }
 
                     thing => {
-                        let right_thing = thing.clone().map_stage(&mut |info| info.into());
+                        let right_thing = thing.clone()
+                            .map_stage(&mut |info| info.into());
 
-                        self.run(right_thing)
+                        let Lazy::Lambda(lambda) = self.run(right_thing) else {
+                            panic!("argument must be a lambda")
+                        };
+
+                        let args = func.args.into_iter().map(|arg| {
+                            match arg {
+                                Argument::Positional(expr) => {
+                                    self.run(expr)
+                                },
+                                Argument::Named(_) => {
+                                    panic!("named arguments are not allowed when passing to an argument-lambda")
+                                },
+                            }
+                        }).collect();
+
+                        let lambda_call = (**lambda).clone().func;
+                        let mut lambda_call = lambda_call.lock().unwrap();
+                        lambda_call(args)
                     } 
                 }
             }
+            
             Expr::Lambda(lambda) => {
                 // A lambda should return a lazy of
                 // a function that takes some arguments and returns a result
