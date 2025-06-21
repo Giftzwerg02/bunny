@@ -1,0 +1,6 @@
+(
+    (def first-a (x) (first x))
+    (def first-b (x) (first x))
+    (def arr [ [1 2] [3 4] [5 6] ])
+    (first-a (first-b arr))
+)

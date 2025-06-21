@@ -1,0 +1,5 @@
+(
+    (def id (x) x)
+    (def arr [ [1 2] [3 4] [5 6] ])
+    (get (id arr) (id 0))
+)

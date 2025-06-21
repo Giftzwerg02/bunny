@@ -1,0 +1,6 @@
+(
+    (def arr [ [1 2] [3 4] [5 6] ])
+    (def last (a) (get a (- (len a) 1)))
+    (def first-of-last (compose1 last first))
+    (first-of-last arr)
+)

@@ -271,6 +271,66 @@ pub fn standard_library() -> Library {
             })
         }
 
+        #[| x:int() => y:int() => command:string()]
+        fn "move"(Lazy::Int(x), Lazy::Int(y)){
+            let x = x.clone();
+            let y = y.clone();
+            lazy!(Lazy::String, {
+                format!("M {},{}", eval!(x), eval!(y)).into()
+            })
+        }
+
+        #[| size:int() => command:string()]
+        fn "horizontal-line"(Lazy::Int(size)){
+            let size = size.clone();
+            lazy!(Lazy::String, {
+                format!("h {}", eval!(size)).into()
+            })
+        }
+
+        #[| size:int() => command:string()]
+        fn "vertical-line"(Lazy::Int(size)){
+            let size = size.clone();
+            lazy!(Lazy::String, {
+                format!("v {}", eval!(size)).into()
+            })
+        }
+
+        #[| x1:int() => y1:int() => x2:int() => y2:int() => x:int() => y:int() => command:string()]
+        fn "curve"(Lazy::Int(x1), Lazy::Int(y1), Lazy::Int(x2), Lazy::Int(y2), Lazy::Int(x), Lazy::Int(y)){
+            let x1 = x1.clone();
+            let y1 = y1.clone();
+            let x2 = x2.clone();
+            let y2 = y2.clone();
+            let x = x.clone();
+            let y = y.clone();
+            lazy!(Lazy::String, {
+                format!("C {} {}, {} {}, {} {}", eval!(x1), eval!(y1), eval!(x2), eval!(y2), eval!(x), eval!(y)).into()
+            })
+        }
+
+        #[| commands:array(&string()) => fill:color() => ret:opaque()]
+        fn "path"(Lazy::Array(commands), Lazy::Color(fill)) {
+            let commands = commands.clone();
+            let fill = fill.clone();
+            lazy!(Lazy::Opaque, {
+                let mut path_str = String::new();
+                for command in eval!(commands) {
+                    let Lazy::String(cmd) = command else { panic!() };
+                    path_str += &eval!(cmd);
+                    path_str += " ";
+                }
+                
+                let mut path = Element::new("path");
+                path.set("d", path_str.trim_end().to_string());
+
+                let color_str = to_color_str(&eval!(fill));
+                path.set("fill", color_str);
+
+                path
+            })
+        }
+
         #[| points:array(&array(&int())) => fill:color() => ret:opaque() ]
         fn "polygon"(Lazy::Array(points), Lazy::Color(fill)){
             let points = points.clone();

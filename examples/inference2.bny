@@ -1,0 +1,4 @@
+(
+    (def arr [ [1 2] [3 4] [5 6] ])
+    (def first2d (compose1 first first))
+)
