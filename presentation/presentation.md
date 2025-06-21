@@ -69,7 +69,8 @@ Implements Hindley-Milner's _Algorithm J_
 (def arr [[1 2] [3 4] [5 6]]) ; array[array[int]]
 
 ; Does not require type annotations, even for complex types
-<TODO EXAMPLE HERE>
+(def last (a) (get a (- (len a) 1)))
+(def first-of-last (compose1 last first)) ; array[array['6]] -> '6
 
 ; Supports let-polymorphism
 (def id (x) x) 

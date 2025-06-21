@@ -6,7 +6,7 @@ use polygonical::point::Point;
 pub use runnable_expression::InterpreterSymbolTable;
 
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
-use crate::runner::value::{Lazy, LazyLambda, LazyType, to_color_str};
+use crate::runner::value::{to_color_str, Lazy, LazyLambda, LazyType, Value};
 use crate::types::InferenceState;
 use crate::types::util::*;
 use crate::{eval, lazy, library};
@@ -268,6 +268,32 @@ pub fn standard_library() -> Library {
                 } else {
                     0
                 }
+            })
+        }
+
+        #[| points:array(&array(&int())) => fill:color() => ret:opaque() ]
+        fn "polygon"(Lazy::Array(points), Lazy::Color(fill)){
+            let points = points.clone();
+            let fill = fill.clone();
+            lazy!(Lazy::Opaque, {
+                let mut polygon = Element::new("polygon");
+
+                let mut point_str = String::new();
+                for point in eval!(points) {
+                    let Lazy::Array(coords) = point else { panic!() };
+                    let coords = eval!(coords);
+
+                    let Value::Int(x) = coords[0].clone().eval() else { panic!() };
+                    let Value::Int(y) = coords[1].clone().eval() else { panic!() };
+
+                    point_str += &format!("{},{} ", x, y);
+                }
+
+                polygon.set("points", point_str);
+                let color_str = to_color_str(&eval!(fill));
+                polygon.set("fill", color_str);
+
+                polygon
             })
         }
 
