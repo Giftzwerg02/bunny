@@ -30,6 +30,9 @@ macro_rules! library {
                     .into()
                 );
 
+                // Enter a higher level for library function type variable creation
+                typed.hm.enter_level();
+                
                 // Generate let bindings for forall variables if they exist
                 $( $(let $var = typed.hm.newvar();)* )?
 
@@ -41,9 +44,14 @@ macro_rules! library {
                 // Clone the last element safely
                 let ret_ty = all_types.last().expect("Should have at least one type").clone(); // The last one is the return type
 
-                // Use the parsed types here
-                let func_type = $crate::types::util::func(&args_ty[..], &ret_ty)
-                    .generalize(&mut typed.hm);
+                // Build the function type
+                let func_typ = $crate::types::util::func(&args_ty[..], &ret_ty);
+                
+                // Exit the level before generalization so the type variables get captured
+                typed.hm.exit_level();
+                
+                // Now generalize at the original level
+                let func_type = func_typ.generalize(&mut typed.hm);
 
                 typed.type_assumptions.insert(
                     name.to_string(),
