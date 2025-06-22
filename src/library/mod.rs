@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+use regex::Regex;
+
 use esvg::Element;
 use im::Vector;
 use polygonical::point::Point;
@@ -166,6 +168,19 @@ pub fn standard_library() -> Library {
                 }
 
                 format_str.into()
+            })
+        }
+
+        #[| regex_str:string() => input:string() => with:string() => ret:string()]
+        fn "replace-all"(Lazy::String(regex_str), Lazy::String(input), Lazy::String(with)) {
+            let regex_str = regex_str.clone();
+            let input = input.clone();
+            let with = with.clone();
+            lazy!(Lazy::String, {
+                let re = Regex::new(&regex_str).unwrap();
+                let with = eval!(with).to_string();
+                let new_text = re.replace_all(&input, &with);
+                new_text.into()
             })
         }
 
@@ -609,6 +624,26 @@ pub fn standard_library() -> Library {
             lazy!(Lazy::String, {
                 let a = input.eval();
                 format!("{a}").into()
+            })
+        }
+
+        #[| a:array(&string()) => sep:string() => ret:string()]
+        fn "join"(Lazy::Array(a), Lazy::String(sep)) {
+            let a = a.clone();
+            let sep = sep.clone();
+            lazy!(Lazy::String, {
+                let a = eval!(a);
+                let a = a.into_iter()
+                    .map(|e| e.eval())
+                    .map(|e| {
+                        let Value::String(e) = e else { panic!(); };
+                        e
+                    })
+                    .map(|e| e.to_string())
+                    .collect::<Vec<String>>();
+                let sep = eval!(sep);
+                let joined = a.join(&sep);
+                joined.into()
             })
         }
     }
