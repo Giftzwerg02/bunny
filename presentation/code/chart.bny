@@ -1,10 +1,31 @@
 (
-	(def axes (origin-x origin-y width height stroke) (group [
-		(line origin-x origin-y (+ origin-x width) origin-y stroke)
-		(line origin-x origin-y origin-x (+ origin-y height) stroke)
-	]))
+	(def normalize (in) (floor (*f 500f in)))
+	(def de-normalize (in) (/f in 500f))
 
-	(def bar-text (str x y) (rotate-self (text str x y) 80f))
+	(def axes (origin-x origin-y width height stroke) (
+		(def lines (x y w h s) [
+			(line x y (+ x w) y s)
+			(line x y x (+ y h) s)
+		])
+
+		(group 
+			(append-all 
+				(map 
+					(\ (x) (group [
+						(line (+ origin-x (* 20 x)) (- origin-y 5) (+ origin-x (* 20 x)) (+ origin-y 5) #777777)
+						(rotate-self
+							(text (to-string (de-normalize (to-float x))) (+ origin-x (* 20 x)) (- origin-y 8))
+							300f
+						)
+					]))
+					(range 0 10)
+				) 
+				(lines origin-x origin-y width height stroke)
+			)
+		)
+	))
+
+	(def bar-text (str x y) (text str x y))
 
 	(def bar-chart (
 		origin-x 
@@ -12,14 +33,81 @@
 		width
 		height
 		bars
+		title
+		legend
 	) (group [
 		(axes origin-x origin-y width height #000000)
-		(translate (group bars) (+ origin-x 10) origin-y)
+		(translate (group bars) origin-x (+ origin-y 10))
+		(text title 100 (+ 30 (+ origin-y height)))
+		(text legend 100 (+ 55 (+ origin-y height)))
 	]))
-	(bar-chart 100 100 200 200 [
-		(rect 0 0 10 50 #ff0000 [ (bar-text "sussy wussy" 0 100) ])
-		(rect 15 0 10 40 #00ff00 [ (bar-text "mogus bogus" 15 100) ])
-		(rect 30 0 10 60 #0000ff [ (bar-text "hihi hoho" 30 100)])
-		(rect 45 0 10 90 #ff00ff [ (bar-text "Diplomarbeit" 45 100)])
-	])
+
+	(def bny-bar (width children)
+		(rect 0 0 width 10 #ff0000 children)
+	)
+
+	(def py-bar (width children)
+		(rect 0 0 width 10 #00ff00 children)
+	)
+
+	(def over-bar (bunny-width py-width content offset-y)
+		(if (> bunny-width py-width)
+			(translate (group [
+				(bny-bar bunny-width [])
+				(py-bar py-width [])
+				(bar-text content (- 0 75) 10)
+			]) 0 offset-y)
+			(translate (group [
+				(py-bar py-width [])
+				(bny-bar bunny-width [])
+				(bar-text content (- 0 75) 10)
+			]) 0 offset-y)
+		)
+	)
+
+	(bar-chart 100 100 200 150 [
+		(over-bar 
+			(normalize 0.28149663182000007f)
+			(normalize 0.11169801916000002f)
+			"mean"
+			0
+		)
+		(over-bar 
+			(normalize 0.011480392796876954f)
+			(normalize 0.004978955899905649f)
+			"stddev"
+			20
+		)
+		(over-bar 
+			(normalize 0.27988438242f)
+			(normalize 0.11009116992000001f)
+			"median"
+			40
+		)
+		(over-bar 
+			(normalize 0.27407146000000004f)
+			(normalize 0.0930639f)
+			"user"
+			60
+		)
+		(over-bar 
+			(normalize 0.00504886f)
+			(normalize 0.017301040000000004f)
+			"system"
+			80
+		)
+		(over-bar 
+			(normalize 0.25950006992f)
+			(normalize 0.10570431892000001f)
+			"min"
+			100
+		)
+		(over-bar 
+			(normalize 0.29811913292000003f)
+			(normalize 0.12835516992f)
+			"max"
+			120
+		)
+	] "Bunny vs. Python: Fibonacci" "Red: Bunny, Green: Python (milliseconds, lower is better)")
+
 )

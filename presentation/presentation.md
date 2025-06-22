@@ -138,6 +138,14 @@ fn "if"(Lazy::Int(cond), iftrue, iffalse){
 
 ---
 
+# Fibonacci
+
+notice something?
+
+![bg right w:700px h:700px](./imgs/hyperfine.svg)
+
+---
+
 # Demo Time
 
 ![demo-gif](./imgs/giphy.webp)

@@ -89,11 +89,25 @@ pub fn standard_library() -> Library {
             lazy!(Lazy::Int, eval!(a) * eval!(b))
         }
 
+        #[| a:float() => b:float() => ret:float()]
+        fn "*f"(Lazy::Float(a), Lazy::Float(b)) {
+            let a = a.clone();
+            let b = b.clone();
+            lazy!(Lazy::Float, eval!(a) * eval!(b))
+        }
+
         #[| a:int() => b:int() => ret:int()]
         fn "/"(Lazy::Int(a), Lazy::Int(b)) {
             let a = a.clone();
             let b = b.clone();
             lazy!(Lazy::Int, eval!(a) / eval!(b))
+        }
+
+        #[| a:float() => b:float() => ret:float()]
+        fn "/f"(Lazy::Float(a), Lazy::Float(b)) {
+            let a = a.clone();
+            let b = b.clone();
+            lazy!(Lazy::Float, eval!(a) / eval!(b))
         }
 
         #[forall a | arr:array(&a) => ret:a ]
@@ -148,6 +162,18 @@ pub fn standard_library() -> Library {
             lazy!(Lazy::Array, {
                 let mut res = eval!(a);
                 res.push_back(val);
+                res
+            })
+        }
+
+        #[forall a | arr:array(&a) => another:array(&a) => ret:array(&a)]
+        fn "append-all"(Lazy::Array(a), Lazy::Array(b)) {
+            let a = a.clone();
+            let b = b.clone();
+            lazy!(Lazy::Array, {
+                let mut res = eval!(a);
+                let to_add = eval!(b);
+                res.append(to_add);
                 res
             })
         }
@@ -346,7 +372,7 @@ pub fn standard_library() -> Library {
                     let Value::Int(x) = coords[0].clone().eval() else { panic!() };
                     let Value::Int(y) = coords[1].clone().eval() else { panic!() };
 
-                    point_str += &format!("{},{} ", x, y);
+                    point_str += &format!("{x},{y} ");
                 }
 
                 polygon.set("points", point_str);
@@ -523,6 +549,27 @@ pub fn standard_library() -> Library {
                 let y = elem.get("y").unwrap_or("0".to_owned());
                 elem.set("transform", format!("rotate({degrees},{x},{y})"));
                 elem
+            })
+        }
+
+        #[| f:float() => ret:int()]
+        fn "floor"(Lazy::Float(f)) {
+            let f = f.clone();
+            lazy!(Lazy::Int, eval!(f) as i64)
+        }
+
+        #[| i:int() => ret:float()]
+        fn "to-float"(Lazy::Int(i)) {
+            let i = i.clone();
+            lazy!(Lazy::Float, eval!(i) as f64)
+        }
+
+        #[forall a | input:a => ret:string()]
+        fn "to-string"(input) {
+            let input = input.clone();
+            lazy!(Lazy::String, {
+                let a = input.eval();
+                format!("{a}").into()
             })
         }
     }

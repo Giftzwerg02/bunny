@@ -12,5 +12,6 @@
 		)
 	)
 
-	(fib until)
+	(def res (fib until))
+	(get res (- (len res) 1))
 )

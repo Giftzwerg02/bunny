@@ -27,6 +27,10 @@
             openssl.dev 
             clippy
             marp-cli
+
+            (python3.withPackages(pp: with pp; [
+              numpy
+            ]))
           ];
 
           PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
