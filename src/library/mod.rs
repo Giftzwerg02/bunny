@@ -147,6 +147,28 @@ pub fn standard_library() -> Library {
             })
         }
 
+        #[| format_str:string() => args:array(&string()) => ret:string() ]
+        fn "format"(Lazy::String(format_str), Lazy::Array(args)) {
+            let format_str = format_str.clone();
+            let args = args.clone();
+            lazy!(Lazy::String, {
+                let mut format_str = eval!(format_str).to_string();
+                let args = eval!(args);
+
+                for arg in &args {
+                    let Lazy::String(arg_str) = arg else {
+                        panic!("Expected string argument for format");
+                    };
+                    
+                    let arg_str = eval!(arg_str);
+                    format_str = format_str.replacen("{}", &arg_str, 1);
+
+                }
+
+                format_str.into()
+            })
+        }
+
         #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => ret:array(&b) ]
         fn "map"(Lazy::Lambda(f), Lazy::Array(v)) {
             let f = f.clone();
