@@ -26,6 +26,7 @@
             openssl
             openssl.dev 
             clippy
+            marp-cli
           ];
 
           PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
