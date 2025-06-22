@@ -130,6 +130,23 @@ pub fn standard_library() -> Library {
             v[idx as usize].clone()
         }
 
+        #[| text:string() => delimiter:string() => ret:array(&string())]
+        fn "explode"(Lazy::String(text), Lazy::String(delimiter)) {
+            let text = text.clone();
+            let delimiter = delimiter.clone();
+            lazy!(Lazy::Array, {
+                let text = eval!(text);
+                let delimiter = eval!(delimiter);
+
+                text.to_string()
+                    .leak() // Please ignore this for now
+                    .split(delimiter.as_str())
+                    .map(|s: &str| lazy!(Lazy::String, s.into()))
+                    .collect::<Vector<Lazy>>()
+                    .into()
+            })
+        }
+
         #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => ret:array(&b) ]
         fn "map"(Lazy::Lambda(f), Lazy::Array(v)) {
             let f = f.clone();
