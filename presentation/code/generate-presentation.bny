@@ -16,7 +16,12 @@
     ))
 
     (def code (input) (
-        (format "<pre><code>{}</code></pre>" [input])
+        (def sanitized (
+            (def san-1 (replace-all "<" input "&lt;"))
+            (replace-all ">" san-1 "&gt;")
+        ))
+
+        (format "<pre><code>{}</code></pre>" [sanitized])
     ))
 
     (def list (items) (
@@ -37,7 +42,7 @@
     (presentation [
         (slide [
             (title "Bunny")
-            (figure 700 700 "bunny-logo.png")
+            (figure 700 700 "./imgs/bunny-logo.png")
         ])
 
         (slide [
@@ -61,8 +66,7 @@
         (slide [
             (title "Yes, it's a LISP.")
             (content "<i>(Without homoiconicity)</i>")
-            (code "
-(def fib (n) 
+            (code "(def fib (n) 
     (foldl
         (\ (acc num) (
             (def l (len acc))
@@ -85,7 +89,7 @@
         (slide [
             (title "Lexer, Parser, Scoping")
             (list [
-                "Extremely simple due to minimal syntax of the language (<code>def</code> and <code>\\</code> as the <b>only</b> keywords!)"
+                "Extremely simple due to minimal syntax of the language (<code>def</code> and <code>\</code> as the <b>only</b> keywords!)"
                 "Variable declaration and visibilty checking done in a single pass (enforced define before use)"
             ])
         ])
@@ -126,8 +130,7 @@ expr = {
         (slide [
             (title "Runner")
             (content "Converts the AST into an IR that rust can run:")
-            (code "
-pub type LazyType<T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
+            (code "pub type LazyType<T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
 
 #[derive(Debug, Clone)]
 pub enum Lazy {
@@ -144,13 +147,11 @@ pub enum Lazy {
         ])
 
         (slide [
-            (list [
-                "Result: A tree of function-pointers (<code>LazyCell</code>s)!"
-                "Control structures are implemented using laziness:"
-            ])
+            (content "Result: A tree of function-pointers (<code>LazyCell</code>s)!")
+                
+            (content "Control structures are implemented using laziness:")
 
-            (code "
-#[forall a | cond:int() => iftrue:a => iffalse:a => ret:a]
+            (code "#[forall a | cond:int() => iftrue:a => iffalse:a => ret:a]
 fn 'if'(Lazy::Int(cond), iftrue, iffalse){
     lazy!([iftrue -> i1, iffalse -> i2], {
         if eval!(cond) != 0 {
@@ -168,12 +169,12 @@ fn 'if'(Lazy::Int(cond), iftrue, iffalse){
         (slide [
             (title "Fibonacci")
             (content "notice something?")
-            (figure 700 700 "./imgs/hyperfine.svg")
+            (figure 900 400 "./imgs/hyperfine.svg")
         ])
 
         (slide [
             (title "Demo Time")
-            (figure 700 700 "./imgs/giphy.webp")
+            (figure 300 500 "./imgs/giphy.webp")
         ])
     ])
 )

@@ -176,7 +176,89 @@
         </style>
     </head>
     <body>
-        <div class='slideshow-container'>{}</div>
+        <div class='slideshow-container'><div class='slide'>
+    <h1>Bunny</h1><figure><img src='./imgs/bunny-logo.png' width='700' height='700' /></figure>
+</div><div class='slide'>
+    <p>is an</p><ul><li>immutable</li><li>deterministic</li><li>functional</li><li>interpreted</li><li>lazy</li><li>statically-typed</li><li>strongly-typed</li></ul><p>language for creating graphs.</p>
+</div><div class='slide'>
+    <h1>Show me the code.</h1>
+</div><div class='slide'>
+    <h1>Yes, it's a LISP.</h1><p><i>(Without homoiconicity)</i></p><pre><code>(def fib (n) 
+    (foldl
+        (\ (acc num) (
+            (def l (len acc))
+            (def f1 (get acc (- l 1)))
+            (def f2 (get acc (- l 2)))
+            (append acc (+ f1 f2))
+        ))
+        [0 1]
+        (range 0 n)
+    )
+)
+
+(fib 20)</code></pre>
+</div><div class='slide'>
+    <h1>Quick Technical Rundown</h1>
+</div><div class='slide'>
+    <h1>Lexer, Parser, Scoping</h1><ul><li>Extremely simple due to minimal syntax of the language (<code>def</code> and <code>\</code> as the <b>only</b> keywords!)</li><li>Variable declaration and visibilty checking done in a single pass (enforced define before use)</li></ul>
+</div><div class='slide'>
+    <p>Lexer / Parser written in <code>pest</code>:</p><pre><code>
+program = _{ SOI ~ func_call ~ EOI }
+
+expr = { 
+	 float 
+	 | int 
+	 | string 
+	 | array 
+	 | dict
+	 | func_call 
+	 | color 
+	 | identifier
+}</code></pre>
+</div><div class='slide'>
+    <h1>Typechecker</h1><p>Implements Hindley-Milner's <i>Algorithm J</i></p><pre><code>
+; Can infer generics
+(def arr [[1 2] [3 4] [5 6]]) ; array[array[int]]
+
+; Does not require type annotations, even for complex types
+(def last (a) (get a (- (len a) 1)))
+(def first-of-last (compose1 last first)) ; array[array['6]] -&gt; '6
+
+; Supports let-polymorphism
+(def id (x) x) 
+(get (id [1 2 3]) (id 0)) ; =&gt; 1</code></pre>
+</div><div class='slide'>
+    <h1>Runner</h1><p>Converts the AST into an IR that rust can run:</p><pre><code>pub type LazyType&lt;T&gt; = Arc&lt;LazyCell&lt;T, Box&lt;dyn FnOnce() -&gt; T&gt;&gt;&gt;;
+
+#[derive(Debug, Clone)]
+pub enum Lazy {
+    Int(LazyType&lt;i64&gt;),
+    Float(LazyType&lt;f64&gt;),
+    String(LazyType&lt;ImString&gt;),
+    Color(LazyType&lt;Srgba&lt;u8&gt;&gt;),
+    Opaque(LazyType&lt;Element&gt;), // internal repr of SVGs
+    Array(LazyType&lt;Vector&lt;Lazy&gt;&gt;),
+    Dict(LazyType&lt;HashMap&lt;Value, Lazy&gt;&gt;),
+    Lambda(LazyType&lt;LazyLambda&gt;),
+}
+</code></pre>
+</div><div class='slide'>
+    <p>Result: A tree of function-pointers (<code>LazyCell</code>s)!</p><p>Control structures are implemented using laziness:</p><pre><code>#[forall a | cond:int() =&gt; iftrue:a =&gt; iffalse:a =&gt; ret:a]
+fn 'if'(Lazy::Int(cond), iftrue, iffalse){
+    lazy!([iftrue -&gt; i1, iffalse -&gt; i2], {
+        if eval!(cond) != 0 {
+            eval!(i1)
+        } else {
+            eval!(i2)
+        }
+    })
+}
+            </code></pre><p>(<code>if</code> is just a function)</p>
+</div><div class='slide'>
+    <h1>Fibonacci</h1><p>notice something?</p><figure><img src='./imgs/hyperfine.svg' width='900' height='400' /></figure>
+</div><div class='slide'>
+    <h1>Demo Time</h1><figure><img src='./imgs/giphy.webp' width='300' height='500' /></figure>
+</div></div>
         
         <div class='slide-counter'>
             <span id='current-slide'>1</span> / <span id='total-slides'>12</span>
