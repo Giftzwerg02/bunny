@@ -1,4 +1,7 @@
 ; Specify document-template and slide-template per commandline
+; export slidetemplate=$(cat ./presentation/code/slide-template.html)
+; export presentationtemplate=$(cat ./presentation/code/presentation-template.html)
+; ./bunny presentation/code/generate-presentation.bny -- --slide-template "\"${slidetemplate}\"" --document-template "\"${presentationtemplate}\"" > ./presentation/prezi.html
 (
     (def content (input) (
         (format "<p>{}</p>" [input])
@@ -8,7 +11,9 @@
         (format "<h1>{}</h1>" [input])
     ))
 
-    (def figure (w h path) ())
+    (def figure (w h img-path) (
+        (format "<figure><img src='{}' width='{}' height='{}' /></figure>" [img-path (to-string w) (to-string h)])
+    ))
 
     (def code (input) (
         (format "<pre><code>{}</code></pre>" [input])
@@ -18,15 +23,15 @@
         (def item-elems 
             (map (\ (item) (format "<li>{}</li>" [item])) items))
 
-        (format "<ul>{}</ul>" (join item-elems ""))
+        (format "<ul>{}</ul>" [(join item-elems "")])
     ))
 
     (def slide (source) (
-        (format slide-template source)
+        (format slide-template [(join source "")])
     ))
 
     (def presentation (slides) (
-        (format document-template (join slides ""))
+        (format document-template [(join slides "")])
     ))
 
     (presentation [
@@ -36,7 +41,7 @@
         ])
 
         (slide [
-            (content "")
+            (content "is an")
             (list [
                 "immutable"
                 "deterministic"
@@ -46,6 +51,7 @@
                 "statically-typed"
                 "strongly-typed"
             ])
+            (content "language for creating graphs.")
         ])
 
         (slide [
@@ -79,7 +85,7 @@
         (slide [
             (title "Lexer, Parser, Scoping")
             (list [
-                "Extremely simple due to minimal syntax of the language (<code>def</code> and <code>\\</code> as the <b>only<b> keywords!)"
+                "Extremely simple due to minimal syntax of the language (<code>def</code> and <code>\\</code> as the <b>only</b> keywords!)"
                 "Variable declaration and visibilty checking done in a single pass (enforced define before use)"
             ])
         ])
@@ -145,7 +151,7 @@ pub enum Lazy {
 
             (code "
 #[forall a | cond:int() => iftrue:a => iffalse:a => ret:a]
-fn "if"(Lazy::Int(cond), iftrue, iffalse){
+fn 'if'(Lazy::Int(cond), iftrue, iffalse){
     lazy!([iftrue -> i1, iffalse -> i2], {
         if eval!(cond) != 0 {
             eval!(i1)
