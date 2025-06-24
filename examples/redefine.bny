@@ -1,0 +1,5 @@
+(
+	(def a 5)
+	(def a (+ 4 a))
+	(return a)
+)

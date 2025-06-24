@@ -42,72 +42,87 @@
 		(text legend 100 (+ 55 (+ origin-y height)))
 	]))
 
-	(def bny-bar (width children)
-		(rect 0 0 width 10 #ff0000 children)
+	(def bny-bar (bny-bar-color width children)
+		(rect 0 0 width 10 bny-bar-color children)
 	)
 
-	(def py-bar (width children)
-		(rect 0 0 width 10 #00ff00 children)
+	(def py-bar (py-bar-color width children)
+		(rect 0 0 width 10 py-bar-color children)
 	)
 
-	(def over-bar (bunny-width py-width content offset-y)
+	(def over-bar (bny-bar-color py-bar-color bunny-width py-width content offset-y)
 		(if (> bunny-width py-width)
 			(translate (group [
-				(bny-bar bunny-width [])
-				(py-bar py-width [])
+				(bny-bar bny-bar-color bunny-width [])
+				(py-bar py-bar-color py-width [])
 				(bar-text content (- 0 75) 10)
 			]) 0 offset-y)
 			(translate (group [
-				(py-bar py-width [])
-				(bny-bar bunny-width [])
+				(py-bar py-bar-color py-width [])
+				(bny-bar bny-bar-color bunny-width [])
 				(bar-text content (- 0 75) 10)
 			]) 0 offset-y)
 		)
 	)
 
-	(bar-chart 100 100 200 150 [
-		(over-bar 
-			(normalize 0.28149663182000007f)
-			(normalize 0.11169801916000002f)
-			"mean"
-			0
-		)
-		(over-bar 
-			(normalize 0.011480392796876954f)
-			(normalize 0.004978955899905649f)
-			"stddev"
-			20
-		)
-		(over-bar 
-			(normalize 0.27988438242f)
-			(normalize 0.11009116992000001f)
-			"median"
-			40
-		)
-		(over-bar 
-			(normalize 0.27407146000000004f)
-			(normalize 0.0930639f)
-			"user"
-			60
-		)
-		(over-bar 
-			(normalize 0.00504886f)
-			(normalize 0.017301040000000004f)
-			"system"
-			80
-		)
-		(over-bar 
-			(normalize 0.25950006992f)
-			(normalize 0.10570431892000001f)
-			"min"
-			100
-		)
-		(over-bar 
-			(normalize 0.29811913292000003f)
-			(normalize 0.12835516992f)
-			"max"
-			120
-		)
-	] "Bunny vs. Python: Fibonacci" "Red: Bunny, Green: Python (milliseconds, lower is better)")
-
+	(def draw-chart (bny-bar-color py-bar-color)
+		(bar-chart 100 100 200 150 [
+			(over-bar 
+				bny-bar-color
+				py-bar-color
+				(normalize 0.28149663182000007f)
+				(normalize 0.11169801916000002f)
+				"mean"
+				0
+			)
+			(over-bar 
+				bny-bar-color
+				py-bar-color
+				(normalize 0.011480392796876954f)
+				(normalize 0.004978955899905649f)
+				"stddev"
+				20
+			)
+			(over-bar 
+				bny-bar-color
+				py-bar-color
+				(normalize 0.27988438242f)
+				(normalize 0.11009116992000001f)
+				"median"
+				40
+			)
+			(over-bar 
+				bny-bar-color
+				py-bar-color
+				(normalize 0.27407146000000004f)
+				(normalize 0.0930639f)
+				"user"
+				60
+			)
+			(over-bar 
+				bny-bar-color
+				py-bar-color
+				(normalize 0.00504886f)
+				(normalize 0.017301040000000004f)
+				"system"
+				80
+			)
+			(over-bar 
+				bny-bar-color
+				py-bar-color
+				(normalize 0.25950006992f)
+				(normalize 0.10570431892000001f)
+				"min"
+				100
+			)
+			(over-bar 
+				bny-bar-color
+				py-bar-color
+				(normalize 0.29811913292000003f)
+				(normalize 0.12835516992f)
+				"max"
+				120
+			)
+		] "Bunny vs. Python: Fibonacci" "Red: Bunny, Green: Python (milliseconds, lower is better)")
+	)
 )
