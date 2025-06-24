@@ -286,9 +286,25 @@ pub fn standard_library() -> Library {
         }
 
         #[forall a | message:string() => ret:a]
-        fn "panic"(Lazy::String(message)) {
+        fn "panic-int"(Lazy::String(message)) {
             let message = message.clone();
             lazy!(fromtype[a], {
+                panic!("panicked: {}", eval!(message))
+            })
+        }
+
+        #[| message:string() => ret:int()]
+        fn "panic-int"(Lazy::String(message)) {
+            let message = message.clone();
+            lazy!(Lazy::Int, {
+                panic!("panicked: {}", eval!(message))
+            })
+        }
+
+        #[| message:string() => ret:string()]
+        fn "panic-string"(Lazy::String(message)) {
+            let message = message.clone();
+            lazy!(Lazy::String, {
                 panic!("panicked: {}", eval!(message))
             })
         }

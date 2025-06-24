@@ -178,9 +178,8 @@ impl Runner {
 
                 let TypedValue::FromBunny(implementation) = implementation else {
                     let args = self.run_func_args(func.clone());
-                    let native = self.native_syms.get(&func.id.value).unwrap().clone();
-
-                    return (*native)(args.clone());
+                    let native = self.native_syms.get(&func.id.value).unwrap();
+                    return native(args);
                 };
 
                 match implementation {
@@ -330,12 +329,10 @@ impl Runner {
             .into_iter()
             .map(|arg| match arg {
                 crate::ast::Argument::Positional(arg_expr) => {
-                    let mut runner = self.clone();
-                    runner.run(arg_expr)
+                    self.run(arg_expr)
                 }
                 crate::ast::Argument::Named(named_argument) => {
-                    let mut runner = self.clone();
-                    runner.run(*named_argument.value)
+                    self.run(*named_argument.value)
                 }
             })
             .collect()

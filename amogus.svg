@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
+<svg height="127mm" viewBox="0, 0, 480, 480" width="127mm" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<g>
+		<g>
+			<g>
+				<g>
+					<path d="M100.000 95.000 L100.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,100,92)" x="100" y="92">
+0				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M120.000 95.000 L120.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,120,92)" x="120" y="92">
+0.002				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M140.000 95.000 L140.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,140,92)" x="140" y="92">
+0.004				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M160.000 95.000 L160.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,160,92)" x="160" y="92">
+0.006				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M180.000 95.000 L180.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,180,92)" x="180" y="92">
+0.008				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M200.000 95.000 L200.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,200,92)" x="200" y="92">
+0.01				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M220.000 95.000 L220.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,220,92)" x="220" y="92">
+0.012				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M240.000 95.000 L240.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,240,92)" x="240" y="92">
+0.014				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M260.000 95.000 L260.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,260,92)" x="260" y="92">
+0.016				</text>
+			</g>
+			<g>
+				<g>
+					<path d="M280.000 95.000 L280.000 105.000" fill="none" stroke="#777777ff" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" transform="rotate(300,280,92)" x="280" y="92">
+0.018				</text>
+			</g>
+			<g>
+				<path d="M100.000 100.000 L300.000 100.000" fill="none" stroke="#000000ff" />
+			</g>
+			<g>
+				<path d="M100.000 100.000 L100.000 250.000" fill="none" stroke="#000000ff" />
+			</g>
+		</g>
+		<g transform="translate(100,110)">
+			<g transform="translate(0,0)">
+				<g>
+					<rect fill="#0000ffff" height="10" width="140" x="0" y="0" />
+				</g>
+				<g>
+					<rect fill="#ffff00ff" height="10" width="55" x="0" y="0" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="-75" y="10">
+mean				</text>
+			</g>
+			<g transform="translate(0,20)">
+				<g>
+					<rect fill="#0000ffff" height="10" width="5" x="0" y="0" />
+				</g>
+				<g>
+					<rect fill="#ffff00ff" height="10" width="2" x="0" y="0" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="-75" y="10">
+stddev				</text>
+			</g>
+			<g transform="translate(0,40)">
+				<g>
+					<rect fill="#0000ffff" height="10" width="139" x="0" y="0" />
+				</g>
+				<g>
+					<rect fill="#ffff00ff" height="10" width="55" x="0" y="0" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="-75" y="10">
+median				</text>
+			</g>
+			<g transform="translate(0,60)">
+				<g>
+					<rect fill="#0000ffff" height="10" width="137" x="0" y="0" />
+				</g>
+				<g>
+					<rect fill="#ffff00ff" height="10" width="46" x="0" y="0" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="-75" y="10">
+user				</text>
+			</g>
+			<g transform="translate(0,80)">
+				<g>
+					<rect fill="#ffff00ff" height="10" width="8" x="0" y="0" />
+				</g>
+				<g>
+					<rect fill="#0000ffff" height="10" width="2" x="0" y="0" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="-75" y="10">
+system				</text>
+			</g>
+			<g transform="translate(0,100)">
+				<g>
+					<rect fill="#0000ffff" height="10" width="129" x="0" y="0" />
+				</g>
+				<g>
+					<rect fill="#ffff00ff" height="10" width="52" x="0" y="0" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="-75" y="10">
+min				</text>
+			</g>
+			<g transform="translate(0,120)">
+				<g>
+					<rect fill="#0000ffff" height="10" width="149" x="0" y="0" />
+				</g>
+				<g>
+					<rect fill="#ffff00ff" height="10" width="64" x="0" y="0" />
+				</g>
+				<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="-75" y="10">
+max				</text>
+			</g>
+		</g>
+		<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="100" y="280">
+Bunny vs. Python: Fibonacci		</text>
+		<text style="font-family:Roboto;font-size:14;font-weight:normal;stroke-width:0;fill:#000000;stroke:#000000;stroke-opacity:1;" x="100" y="305">
+Red: Bunny, Green: Python (milliseconds, lower is better)		</text>
+	</g>
+</svg>

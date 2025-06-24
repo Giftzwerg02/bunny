@@ -112,7 +112,7 @@ pub enum Value {
 
 impl Value {
     pub fn is_renderable(&self) -> bool {
-        return matches!(self, Value::Opaque(_));
+        matches!(self, Value::Opaque(_))
     }
 }
 
@@ -162,10 +162,10 @@ impl PartialEq for Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Value::Int(int) => write!(f, "{}", int),
-            Value::Float(float) => write!(f, "{}", float),
-            Value::String(string) => write!(f, "{}", string),
-            Value::Color(color) => write!(f, "{}", to_color_str(&color)),
+            Value::Int(int) => write!(f, "{int}"),
+            Value::Float(float) => write!(f, "{float}"),
+            Value::String(string) => write!(f, "{string}"),
+            Value::Color(color) => write!(f, "{}", to_color_str(color)),
             Value::Array(array) => write!(
                 f,
                 "[{}]",
@@ -179,7 +179,7 @@ impl Display for Value {
                 f,
                 "[{}]",
                 dict.iter()
-                    .map(|(k, v)| format!("{}: {}", k.to_string(), v.to_string()))
+                    .map(|(k, v)| format!("{k}: {v}"))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -191,7 +191,7 @@ impl Display for Value {
 
 pub fn to_color_str(color: &Alpha<Srgb<u8>, u8>) -> String {
     let (r, g, b, a) = color.into_components();
-    format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a)
+    format!("#{r:02x}{g:02x}{b:02x}{a:02x}")
 }
 
 pub enum LT {
@@ -287,16 +287,16 @@ macro_rules! lazy {
         $type(Arc::new(core::cell::LazyCell::new(callback)))
     }};
     (fromtype[$t:ident], $value:expr) => {{
-            let lt = crate::runner::value::resolve_to_lazy_type($t.clone());
+            let lt = $crate::runner::value::resolve_to_lazy_type($t.clone());
             match lt {
-                crate::runner::value::LT::Int => lazy!(Lazy::Int, $value),
-                crate::runner::value::LT::Float => lazy!(Lazy::Float, $value),
-                crate::runner::value::LT::String => lazy!(Lazy::String, $value),
-                crate::runner::value::LT::Color => lazy!(Lazy::Color, $value),
-                crate::runner::value::LT::Opaque => lazy!(Lazy::Opaque, $value),
-                crate::runner::value::LT::Array => lazy!(Lazy::Array, $value),
-                crate::runner::value::LT::Dict => lazy!(Lazy::Dict, $value),
-                crate::runner::value::LT::Lambda => lazy!(Lazy::Lambda, $value),
+                $crate::runner::value::LT::Int => lazy!(Lazy::Int, $value),
+                $crate::runner::value::LT::Float => lazy!(Lazy::Float, $value),
+                $crate::runner::value::LT::String => lazy!(Lazy::String, $value),
+                $crate::runner::value::LT::Color => lazy!(Lazy::Color, $value),
+                $crate::runner::value::LT::Opaque => lazy!(Lazy::Opaque, $value),
+                $crate::runner::value::LT::Array => lazy!(Lazy::Array, $value),
+                $crate::runner::value::LT::Dict => lazy!(Lazy::Dict, $value),
+                $crate::runner::value::LT::Lambda => lazy!(Lazy::Lambda, $value),
             }
     }}
 }
