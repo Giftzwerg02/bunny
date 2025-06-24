@@ -8,7 +8,7 @@ use palette::Srgba;
 use value::{Lazy, LazyLambda, Value};
 
 use crate::{
-    ast::{Argument, Expr, FuncCall, StageInfo, Symbol},
+    ast::{Argument, Expr, FuncCall, FuncCallSingle, StageInfo, Symbol},
     lazy,
     library::runnable_expression::InterpreterSymbolTable,
     types::typed::{AnyTypedStageInfo, TypedValue},
@@ -49,7 +49,7 @@ impl Runner {
     pub fn new(native_syms: InterpreterSymbolTable) -> Self {
         Runner {
             state: HashMap::new(),
-            native_syms
+            native_syms,
         }
     }
 
@@ -87,10 +87,7 @@ impl Runner {
     //      references user-written code or a native function.
     //      Note that a native function technically doesn't need any scoping-information anymore
     //      since it will just be provided with the arguments that were passed to it.
-    pub fn run(
-        &mut self,
-        expr: Expr<AnyTypedStageInfo>,
-    ) -> Lazy {
+    pub fn run(&mut self, expr: Expr<AnyTypedStageInfo>) -> Lazy {
         match expr {
             Expr::Int(int) => {
                 lazy!(Lazy::Int, { int.value.try_into().expect("uint too large") })
@@ -102,7 +99,10 @@ impl Runner {
                 lazy!(Lazy::String, string.value.into())
             }
             Expr::Color(color) => {
-                lazy!(Lazy::Color, Srgba::new(color.r, color.g, color.b, color.alpha))
+                lazy!(
+                    Lazy::Color,
+                    Srgba::new(color.r, color.g, color.b, color.alpha)
+                )
             }
             Expr::Array(array) => {
                 let mut runner = self.clone();
@@ -145,26 +145,26 @@ impl Runner {
                 // Therefore, if the symbol resolves to an argument we need to check the
                 // SymbolStack
 
-                let scope = symbol.info.syms.get(&symbol.value).expect("scoping err");
+                let Some(scope) = symbol.info.syms.get(&symbol.value) else {
+                    return self.read_var(symbol.value);
+                };
+
                 match scope {
                     TypedValue::FromLibrary(_) => {
                         let symbol_value_owned = symbol.value.clone();
                         let native_syms_owned = self.native_syms.clone();
 
                         lazy!(Lazy::Lambda, {
-                            let native_fn = native_syms_owned.get(&symbol_value_owned).unwrap().clone();
+                            let native_fn =
+                                native_syms_owned.get(&symbol_value_owned).unwrap().clone();
                             LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<Lazy>| {
-                                    (*native_fn)(args.into_iter().collect())
-                                })))
+                                (*native_fn)(args.into_iter().collect())
+                            })))
                         })
                     }
                     TypedValue::FromBunny(scope) => {
-                        if matches!(scope, Expr::Symbol(_))  {
-                            self.read_var(symbol.value)
-                        } else {
-                            let new_scope = scope.clone().map_stage(&mut |info| info.into());
-                            self.run(new_scope)
-                        }
+                        let new_scope = scope.clone().map_stage(&mut |info| info.into());
+                        self.run(new_scope)
                     }
                 }
             }
@@ -177,24 +177,8 @@ impl Runner {
                 let implementation = func.info.syms.get(&func.id.value).expect("scoping err");
 
                 let TypedValue::FromBunny(implementation) = implementation else {
-                    let args = func
-                        .args
-                        .into_iter()
-                        .map(|arg| match arg {
-                            crate::ast::Argument::Positional(arg_expr) => {
-                                let mut runner = self.clone();                                
-                                runner.run(arg_expr)
-                            }
-                            crate::ast::Argument::Named(named_argument) => {
-                                let mut runner = self.clone();
-                                runner.run(*named_argument.value)
-                            }
-                        })
-                        .collect::<Vec<Lazy>>();
-
-                    let native = self.native_syms.get(&func.id.value)
-                        .unwrap()
-                        .clone();
+                    let args = self.run_func_args(func.clone());
+                    let native = self.native_syms.get(&func.id.value).unwrap().clone();
 
                     return (*native)(args.clone());
                 };
@@ -202,8 +186,10 @@ impl Runner {
                 match implementation {
                     // i.e., the argument is used as a function
                     Expr::Symbol(symbol) => {
-                        
-                        let value = self.read_var(symbol.value.clone());
+                        let value = Expr::Symbol(symbol.clone())
+                            .clone()
+                            .map_stage(&mut |info| info.into());
+                        let value = self.run(value);
                         let Lazy::Lambda(lambda) = value else {
                             return value;
                         };
@@ -237,8 +223,9 @@ impl Runner {
                                     self.push_var(named_argument.name.value, arg_value);
                                 }
                                 crate::ast::Argument::Positional(arg_expr) => {
-                                    let arg_sym = lambda.args[pos].into_def_argument_symbol()
-                                    .map_stage(&mut |info| info.into());
+                                    let arg_sym = lambda.args[pos]
+                                        .into_def_argument_symbol()
+                                        .map_stage(&mut |info| info.into());
 
                                     already_set_arguments.push(arg_sym.clone());
                                     let arg_value = self.run(arg_expr);
@@ -264,9 +251,7 @@ impl Runner {
                             self.push_var(name.value, default_value);
                         }
 
-                        // TODO: can we get rid of this clone?
-                        let body= lambda.clone().body
-                            .map_stage(&mut |info| info.into());
+                        let body = lambda.clone().body.map_stage(&mut |info| info.into());
 
                         let result = self.run(body);
 
@@ -278,8 +263,7 @@ impl Runner {
                     }
 
                     thing => {
-                        let right_thing = thing.clone()
-                            .map_stage(&mut |info| info.into());
+                        let right_thing = thing.clone().map_stage(&mut |info| info.into());
 
                         let Lazy::Lambda(lambda) = self.run(right_thing) else {
                             panic!("argument must be a lambda")
@@ -299,10 +283,10 @@ impl Runner {
                         let lambda_call = (**lambda).clone().func;
                         let mut lambda_call = lambda_call.lock().unwrap();
                         lambda_call(args)
-                    } 
+                    }
                 }
             }
-            
+
             Expr::Lambda(lambda) => {
                 // A lambda should return a lazy of
                 // a function that takes some arguments and returns a result
@@ -317,8 +301,7 @@ impl Runner {
 
                 let mut lambda_runner = self.clone();
 
-                let body = (*lambda.clone().body)
-                    .map_stage(&mut |info| info.into());
+                let body = (*lambda.clone().body).map_stage(&mut |info| info.into());
 
                 lazy!(Lazy::Lambda, {
                     LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
@@ -340,6 +323,22 @@ impl Runner {
                 })
             }
         }
+    }
+
+    fn run_func_args(&mut self, f: FuncCallSingle<AnyTypedStageInfo>) -> Vec<Lazy> {
+        f.args
+            .into_iter()
+            .map(|arg| match arg {
+                crate::ast::Argument::Positional(arg_expr) => {
+                    let mut runner = self.clone();
+                    runner.run(arg_expr)
+                }
+                crate::ast::Argument::Named(named_argument) => {
+                    let mut runner = self.clone();
+                    runner.run(*named_argument.value)
+                }
+            })
+            .collect()
     }
 
     fn push_var(&mut self, sym: String, val: Lazy) {

@@ -1,0 +1,7 @@
+(
+	(def a return)
+	(def b (x) (return x))
+	(def c return)
+	(def d (x) (return x))
+	(foldl + 0 [(a 5) (b 3) (apply1 c 4) (apply1 d 1)])
+)
