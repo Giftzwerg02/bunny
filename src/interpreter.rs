@@ -44,7 +44,7 @@ impl Interpreter {
             let scoped_ast = scoped_expr_pass(ast, &interpreter.scope_symbol_table)?;
             interpreter.scope_symbol_table = scoped_ast.info().syms.clone();
 
-            let typed_ast = typecheck_pass(&scoped_ast, &mut interpreter.typechecker_state)?;
+            let typed_ast = typecheck_pass(&scoped_ast, &mut interpreter.typechecker_state.clone())?;
             let expr_type = typed_ast.info().typ.clone();
             let any_typed_ast = typed_ast.map_stage(&mut |info| info.into());
 
