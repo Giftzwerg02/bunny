@@ -26,6 +26,16 @@ impl InferenceState {
             hm: HMState::new()
         }
     }
+
+    pub fn scope<T>(&mut self, callback: impl FnOnce(&mut InferenceState) -> T) -> T {
+        let old = self.type_assumptions.clone();
+
+        let result = callback(self);
+
+        self.type_assumptions = old;
+
+        result
+    }
 }
 
 #[derive(Error, Debug, Diagnostic)]
@@ -179,8 +189,8 @@ fn infer_symbol(
                 // TODO Uhhh, when is this used now?
                 Expr::Symbol(create_argument_definition(sym, state)),
 
-            SymbolValue::FunctionDefinition(lambda) =>
-                infer_lambda(lambda, &mut state.clone())?,
+            SymbolValue::FunctionDefinition(lambda) => 
+                state.scope(|state| infer_lambda(lambda, state))?,
 
             SymbolValue::Argument(Argument::Named(NamedArgument { value, .. })) => 
                 typecheck_pass(value, state)?
