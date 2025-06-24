@@ -14,7 +14,7 @@
 					(\ (x) (group [
 						(line (+ origin-x (* 20 x)) (- origin-y 5) (+ origin-x (* 20 x)) (+ origin-y 5) #777777)
 						(rotate-self
-							(text (to-string (de-normalize (to-float x))) (+ origin-x (* 20 x)) (- origin-y 8))
+							(text-with-style (to-string (de-normalize (to-float x))) (+ origin-x (* 20 x)) (- origin-y 8) "stroke: #ffffff") 
 							300f
 						)
 					]))
@@ -25,7 +25,7 @@
 		)
 	))
 
-	(def bar-text (str x y) (text str x y))
+	(def bar-text (str x y) (text-with-style str x y "stroke: #ffffff"))
 
 	(def bar-chart (
 		origin-x 
@@ -38,8 +38,8 @@
 	) (group [
 		(axes origin-x origin-y width height #000000)
 		(translate (group bars) origin-x (+ origin-y 10))
-		(text title 100 (+ 30 (+ origin-y height)))
-		(text legend 100 (+ 55 (+ origin-y height)))
+		(bar-text title 100 (+ 30 (+ origin-y height)))
+		(bar-text legend 100 (+ 55 (+ origin-y height)))
 	]))
 
 	(def bny-bar (bny-bar-color width children)
