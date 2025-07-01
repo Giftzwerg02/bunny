@@ -284,7 +284,7 @@ macro_rules! lazy {
     }};
     ($type:path, $value:expr) => {{
         let callback = Box::new(move || $value);
-        $type(Arc::new(core::cell::LazyCell::new(callback)))
+        $type(::std::sync::Arc::new(core::cell::LazyCell::new(callback)))
     }};
     (fromtype[$t:ident], $value:expr) => {{
             let lt = $crate::runner::value::resolve_to_lazy_type($t.clone());

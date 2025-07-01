@@ -16,6 +16,7 @@ use crate::{eval, lazy, library};
 pub mod macros;
 pub mod runnable_expression;
 
+#[derive(Clone)]
 pub struct Library {
     pub scoped: SymbolTable<ScopedStageInfo>,
     pub typed: InferenceState,

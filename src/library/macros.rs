@@ -64,8 +64,7 @@ macro_rules! library {
                     ::std::sync::Arc::new(move |args| { // Use Arc for cloneable shared ownership
                         let args = args
                             .into_iter()
-                            .collect::<::std::vec::Vec<$crate::library::Lazy>>();
-
+                            .collect::<::std::vec::Vec<$crate::runner::value::Lazy>>();
 
                         match &args[..] {
                             [ $($arg_pat,)* ] => $body,
