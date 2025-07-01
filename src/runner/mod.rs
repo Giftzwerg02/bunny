@@ -8,10 +8,10 @@ use palette::Srgba;
 use value::{Lazy, LazyLambda, Value};
 
 use crate::{
-    ast::{Argument, Expr, FuncCall, FuncCallSingle, StageInfo, Symbol},
+    ast::{Argument, Expr, FuncCall, FuncCallSingle, Lambda, StageInfo, Symbol},
     lazy,
     library::runnable_expression::InterpreterSymbolTable,
-    types::typed::{AnyTypedStageInfo, TypedValue},
+    types::typed::{AnyTypedStageInfo, PolyTypedStageInfo, TypedValue},
 };
 
 pub mod value;
@@ -145,12 +145,8 @@ impl Runner {
         lazy!(Lazy::Dict, {
             let mut res: im::HashMap<Value, Lazy> = im::HashMap::new();
             for entry in dict.value {
-                let key = entry.key;
-                let key = runner.run(key);
-                let key = key.eval();
-
-                let value = entry.value;
-                let value = runner.run(value);
+                let key = runner.run(entry.key).eval();
+                let value = runner.run(entry.value);
 
                 res.insert(key, value);
             }
@@ -216,7 +212,7 @@ impl Runner {
         }
     }
 
-    fn run_func_call_with_symbol(&mut self, func: FuncCallSingle<AnyTypedStageInfo>, symbol: &Symbol<crate::types::typed::PolyTypedStageInfo>) -> Lazy {
+    fn run_func_call_with_symbol(&mut self, func: FuncCallSingle<AnyTypedStageInfo>, symbol: &Symbol<PolyTypedStageInfo>) -> Lazy {
         let value = Expr::Symbol(symbol.clone())
             .clone()
             .map_stage(&mut |info| info.into());
@@ -241,7 +237,7 @@ impl Runner {
         lambda_call(args)
     }
 
-    fn run_func_call_with_lambda(&mut self, func: FuncCallSingle<AnyTypedStageInfo>, lambda: &crate::ast::Lambda<crate::types::typed::PolyTypedStageInfo>) -> Lazy {
+    fn run_func_call_with_lambda(&mut self, func: FuncCallSingle<AnyTypedStageInfo>, lambda: &Lambda<PolyTypedStageInfo>) -> Lazy {
         let mut lambda_set_args = lambda.clone().map_stage(&mut |info| info.into());
         let lambda_pop_args = lambda_set_args.clone();
 

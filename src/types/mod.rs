@@ -498,7 +498,7 @@ mod tests {
     // Helper function for parsing and typechecking bunny source
     fn typecheck_bunny_source(source: &str, library: &mut Library) -> Result<Type> {
         let peg = pest_parsing_pass(source.to_string())?;
-        let ast = parsed_expr_pass(peg);
+        let ast = parsed_expr_pass(peg)?;
         let scoped_ast = scoped_expr_pass(ast, &library.scoped)?;
         let typed_ast = typecheck_pass(&scoped_ast, &mut library.typed)?;
 

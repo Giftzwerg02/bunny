@@ -39,7 +39,7 @@ impl Interpreter {
         fn compute_result(bunny_src: String, interpreter: &mut Interpreter) -> Result<(Value, Type)> {
             let peg = pest_parsing_pass(bunny_src)?;
 
-            let ast = parsed_expr_pass(peg);
+            let ast = parsed_expr_pass(peg)?;
 
             let scoped_ast = scoped_expr_pass(ast, &interpreter.scope_symbol_table)?;
             interpreter.scope_symbol_table = scoped_ast.info().syms.clone();

@@ -593,7 +593,7 @@ mod tests {
         let empty = Lambda::constant(empty_func_expr(info.clone()), info);
         syms.insert("+".to_string(), empty.into());
 
-        let parsed_expr = parsed_expr_pass(pair);
+        let parsed_expr = parsed_expr_pass(pair)?;
         scoped_expr_pass(parsed_expr, &syms)
             .map_err(|report| {
                 report.with_source_code(code.to_string())
@@ -615,7 +615,7 @@ mod tests {
         let empty = Lambda::constant(empty_func_expr(info.clone()), info);
         syms.insert("+".to_string(), empty.into());
 
-        let parsed_expr = parsed_expr_pass(pair);
+        let parsed_expr = parsed_expr_pass(pair).unwrap();
         let result = scoped_expr_pass(parsed_expr, &syms);
         assert!(result.is_err(), "expected code: {}\nto error", code)
     }
