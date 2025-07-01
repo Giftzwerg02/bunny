@@ -44,29 +44,29 @@ impl Validator for BunnyReplValidator {
 struct BunnyReplPrompt;
 
 impl Prompt for BunnyReplPrompt {
-    fn render_prompt_left(&self) -> std::borrow::Cow<str> {
+    fn render_prompt_left(&self) -> Cow<'_, str> {
         Cow::Owned("🐰".to_owned())
     }
 
-    fn render_prompt_right(&self) -> std::borrow::Cow<str> {
+    fn render_prompt_right(&self) -> Cow<'_, str> {
         Cow::Owned("".to_owned())
     }
 
     fn render_prompt_indicator(
         &self,
         _prompt_mode: reedline::PromptEditMode,
-    ) -> std::borrow::Cow<str> {
+    ) -> std::borrow::Cow<'_, str> {
         Cow::Owned("> ".to_owned())
     }
 
-    fn render_prompt_multiline_indicator(&self) -> std::borrow::Cow<str> {
+    fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
         Cow::Owned("| ".to_owned())
     }
 
     fn render_prompt_history_search_indicator(
         &self,
         _history_search: reedline::PromptHistorySearch,
-    ) -> std::borrow::Cow<str> {
+    ) -> Cow<'_, str> {
         // todo: render history search indicator
         Cow::Owned("".to_string())
     }
