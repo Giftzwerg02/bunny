@@ -91,14 +91,15 @@ mod tests {
     }
         
     fn pass_valid(mut pair: Pairs<'static, Rule>) {
-        parsed_expr_pass(pair.next().expect("called pass_valid with a non-program"));
+        parsed_expr_pass(pair.next().expect("called pass_valid with a non-program"))
+            .expect("parsed_expr_pass should not panic on valid input");
     }
 
     fn pass_invalid(mut pair: Pairs<'static, Rule>) {
         let p = pair.next().expect("called pass_valid with a non-program");
         let p_clone = p.clone();
         let res = std::panic::catch_unwind(move || {
-            parsed_expr_pass(p);
+            parsed_expr_pass(p).expect("parsed_expr_pass should not panic on valid input");
         });
 
         assert!(
