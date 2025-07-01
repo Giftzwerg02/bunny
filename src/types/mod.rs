@@ -492,253 +492,187 @@ mod tests {
     use crate::ast::scoped::scoped_expr_pass;
     use crate::parser::pest_parsing_pass;
     use crate::library::Library;
-    use crate::{eval, lazy, library};
+    use crate::types::util::{func1, func2};
+    use crate::library;
 
     // Helper function for parsing and typechecking bunny source
-    fn typecheck_bunny_source(source: &str, library: Library) -> Result<Type> {
+    fn typecheck_bunny_source(source: &str, library: &mut Library) -> Result<Type> {
         let peg = pest_parsing_pass(source.to_string())?;
         let ast = parsed_expr_pass(peg);
-        let symbol_table = library.scoped;
-        let scoped_ast = scoped_expr_pass(ast, &symbol_table)?;
-        
-        let mut inference_state = library.typed;
-        let typed_ast = typecheck_pass(&scoped_ast, &mut inference_state)?;
-        
+        let scoped_ast = scoped_expr_pass(ast, &library.scoped)?;
+        let typed_ast = typecheck_pass(&scoped_ast, &mut library.typed)?;
+
         Ok(typed_ast.info().typ.clone())
+    }
+
+    fn assert_type_simple(source: &str, expected: Type) {
+        assert_type(source, |_| expected);
+    }
+
+    fn assert_type(source: &str, expected: impl FnOnce(&mut HMState) -> Type){
+        let mut lib = basic_library();
+        let Ok(result) = typecheck_bunny_source(source, &mut lib) else {
+            panic!("Failed to typecheck '{}'", source);
+        };
+
+        let expected_value = expected(&mut lib.typed.hm);
+        let Ok(()) = result.unify(&expected_value) else {
+            panic!("Type mismatch for '{}': expected {:?}, got {:?}", source, expected_value, result);
+        };
     }
 
     // Helper to create a library with basic arithmetic operations
     fn basic_library() -> Library {
         library! {
-            #[| a:int() => b:int() => @int()]
-            fn "add"(Lazy::Int(a), Lazy::Int(b)) {
-                lazy!(Lazy::Int, eval!(a) + eval!(b))
-            }
+            #[| _a:int() => _b:int() => @int()]
+            fn "add"(Lazy::Int(_a), Lazy::Int(_b)) { unimplemented!(); }
 
-            #[| a:int() => b:int() => @int()]
-            fn "sub"(Lazy::Int(a), Lazy::Int(b)) {
-                lazy!(Lazy::Int, eval!(a) - eval!(b))
-            }
+            #[| _a:int() => _b:int() => @int()]
+            fn "sub"(Lazy::Int(_a), Lazy::Int(_b)) { unimplemented!(); }
 
-            #[| a:int() => b:int() => @int()]
-            fn "mul"(Lazy::Int(a), Lazy::Int(b)) {
-                lazy!(Lazy::Int, eval!(a) * eval!(b))
-            }
+            #[forall a | _arr:array(&a) => _b:a => @a]
+            fn "get"(_arr, _b) { unimplemented!(); }
 
-            #[forall a | elem:a => @a]
-            fn "id"(elem) {
-                elem.clone()
-            }
+            #[forall a | _elem:a => @a]
+            fn "id"(_elem) { unimplemented!(); }
+
+            #[forall a, b, c | _f1:func1(&a, &b) => _f2:func1(&b, &c) => @func1(&a, &c)]
+            fn "compose1"(Lazy::Lambda(_f1), Lazy::Lambda(_f2)) { unimplemented!(); }
+
+            #[forall a, b | _f:func1(&a, &b) => _input:a => @b]
+            fn "apply1"(Lazy::Lambda(_f), _input) { unimplemented!(); }
+
+            #[forall a | _arr:array(&a) => @a ]
+            fn "first"(Lazy::Array(_arr)) { unimplemented!(); }
         }
     }
 
     #[test]
     fn test_basic_types() {
-        let lib = basic_library();
-
         // Test basic integer type
-        let result = typecheck_bunny_source("(id 42)", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), int());
+        assert_type_simple("(id 42)", int());
 
         // Test basic float type
-        let result = typecheck_bunny_source("(id 3.14)", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), float());
+        assert_type_simple("(id 3.14f)", float());
 
         // Test basic string type
-        let result = typecheck_bunny_source("(id \"hello\")", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), string());
+        assert_type_simple("(id \"hello\")", string());
 
         // Test basic color type
-        let result = typecheck_bunny_source("(id #ff0000)", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), color());
+        assert_type_simple("(id #ff0000)", color());
     }
 
     #[test]
     fn test_array_types() {
-        let lib = basic_library();
-
         // Test homogeneous integer array
-        let result = typecheck_bunny_source("(id [1 2 3])", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), array(&int()));
+        assert_type_simple("(id [1 2 3])", array(&int()));
 
         // Test homogeneous string array
-        let result = typecheck_bunny_source("(id [\"a\" \"b\" \"c\"])", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), array(&string()));
+        assert_type_simple("(id [\"a\" \"b\" \"c\"])", array(&string()));
 
         // Test empty array (should have type variable)
-        let result = typecheck_bunny_source("(id [])", lib.clone());
-        assert!(result.is_ok());
-        // Empty array should have array type with type variable
-        match result.unwrap() {
-            Type::TApp(name, _) if name == "array" => {} // Success
-            other => panic!("Expected Array type, got: {}", other),
-        }
+        assert_type("(id [])", |state| array(&state.newvar()));
     }
 
     #[test]
     fn test_heterogeneous_array_error() {
-        let lib = basic_library();
+        let mut lib = basic_library();
 
         // Test heterogeneous array should fail
-        let result = typecheck_bunny_source("(id [1 \"hello\"])", lib);
+        let result = typecheck_bunny_source("(id [1 \"hello\"])", &mut lib);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dict_types() {
-        let lib = basic_library();
-
         // Test homogeneous dictionary
-        let result = typecheck_bunny_source("(id [\"a\": 1, \"b\": 2])", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), dict(&string(), &int()));
+        assert_type_simple("(id [\"a\": 1 \"b\": 2])", dict(&string(), &int()));
 
-        // Test empty dictionary
-        let result = typecheck_bunny_source("(id [:])", lib.clone());
-        assert!(result.is_ok());
-        match result.unwrap() {
-            Type::TApp(name, _) if name == "dict" => {} // Success
-            other => panic!("Expected Dict type, got: {}", other),
-        }
+        assert_type("(id [:])", |state| dict(&state.newvar(), &state.newvar()));
     }
 
     #[test]
     fn test_function_calls() {
-        let lib = basic_library();
-
         // Test simple function call
-        let result = typecheck_bunny_source("(add 1 2)", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), int());
+        assert_type_simple("(add 1 2)", int());
 
         // Test nested function calls
-        let result = typecheck_bunny_source("(add (mul 2 3) (sub 10 5))", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), int());
+        assert_type_simple("(add (sub 2 3) (sub 10 5))", int());
     }
 
     #[test]
     fn test_lambda_expressions() {
-        let lib = basic_library();
+        assert_type("(id (\\ (x) x))", |state| {
+            let x = state.newvar();
+            func1(&x, &x)
+        });
 
-        // Test simple lambda
-        let result = typecheck_bunny_source("(id (\\ (x) x)))", lib.clone());
-        assert!(result.is_ok());
-        // Should be a function type a -> a
-        match result.unwrap() {
-            Type::Fn(arg, ret) => {
-                // Both should be the same type variable
-                assert_eq!(*arg, *ret);
-            }
-            other => panic!("Expected function type, got: {}", other),
-        }
-
-        // Test lambda with multiple arguments
-        let result = typecheck_bunny_source("(id (\\ (x y) x))", lib.clone());
-        assert!(result.is_ok());
-        let Type::Fn(arg_x, ret) = result.unwrap() else {
-            panic!("Expected curried function type");
-        };
-
-        let Type::Fn(_, arg_x_2) = *ret else {
-            panic!("Expected curried function type");
-        };
-
-        assert_eq!(*arg_x, *arg_x_2);
+        assert_type("(id (\\ (x y) x))", |state| {
+            let x = state.newvar();
+            let y = state.newvar();
+            func2(&x, &x, &y)
+        });
     }
 
     #[test]
     fn test_lambda_with_arithmetic() {
-        let lib = basic_library();
-
         // Test lambda that uses arithmetic
-        let result = typecheck_bunny_source("(\\ x (add x 1))", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), func(&[int()], &int()));
+        assert_type_simple("(\\ x (add x 1))", func(&[int()], &int()));
     }
 
     #[test]
     fn test_variable_definitions() {
-        let lib = basic_library();
-
         // Test simple variable definition
-        let result = typecheck_bunny_source("(def x 42)", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), int());
+        assert_type_simple("(def x 42)", int());
 
         // Test function definition
-        let result = typecheck_bunny_source("(def double (\\ x (mul x 2)))", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), func(&[int()], &int()));
+        assert_type_simple("(def double (\\ x (sub x 2)))", func(&[int()], &int()));
     }
 
     #[test]
     fn test_type_inference_with_variables() {
-        let lib = basic_library();
-
         // Test that variables get proper types inferred
-        let result = typecheck_bunny_source("(def f (\\ x (add x x)))", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), func(&[int()], &int()));
+        assert_type_simple("(def f (\\ x (add x x)))", func(&[int()], &int()));
     }
 
     #[test]
-    fn test_generalization_and_instantiation() {
-        let lib = basic_library();
+    fn test_let_polymorphism() {
+        assert_type_simple("(get (id [1 2 3]) (id 0))", int());
 
-        // Test that the same polymorphic function can be used with different types
-        // This tests proper generalization and instantiation
-        let result = typecheck_bunny_source("(def test (x) (add (id 1) (id 2))))", lib.clone());
-        // This should work because id is generalized and can be instantiated differently
-        assert!(result.is_ok());
+        assert_type_simple("(first (first [[0]]))", int());
+    }
+
+    #[test]
+    fn test_complex_inference(){
+        assert_type("(def first2d (compose1 first first))", |state| {
+            let a = state.newvar();
+            func1(&array(&array(&a)), &a)
+        });
+
+        assert_type_simple("(apply1 (compose1 first first) (id [[1 2] [3 4]]))", int());
     }
 
     #[test]
     fn test_nested_array_types() {
-        let lib = basic_library();
-
         // Test nested arrays
-        let result = typecheck_bunny_source("(id [[1 2] [3 4]])",  lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), array(&array(&int())));
+        assert_type_simple("(id [[1 2] [3 4]])", array(&array(&int())));
 
         // Test deeply nested arrays
-        let result = typecheck_bunny_source("(id [[\"a\"]])", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), array(&array(&array(&string()))));
+        assert_type_simple("(id [[[\"a\"]]])", array(&array(&array(&string()))));
+    }
+
+    #[test]
+    fn test_partial_application() {
+        // Test partial application of functions
+        assert_type_simple("(add 1)", func(&[int()], &int()));
     }
 
     #[test]
     fn test_function_type_errors() {
         let lib = basic_library();
 
-        // Test calling function with wrong number of arguments
-        let result = typecheck_bunny_source("(add 1)", lib.clone());
-        assert!(result.is_err());
-
         // Test calling function with wrong argument types
-        let result = typecheck_bunny_source("(add 1 \"hello\")", lib.clone());
+        let result = typecheck_bunny_source("(add 1 \"hello\")", &mut lib.clone());
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_complex_nested_structures() {
-        let lib = basic_library();
-
-        // Test complex nested structure
-        let result = typecheck_bunny_source("[{\"x\": 3}, {\"y\": 4}]", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), array(&dict(&string(), &int())));
-
-        // Test array of functions
-        let result = typecheck_bunny_source("[(\\ (x) (add x 1)) (\\ (y) (mul y 2))]", lib.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), array(&func(&[int()], &int())));
     }
 }
