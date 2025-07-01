@@ -1,9 +1,12 @@
 #[macro_export]
 macro_rules! library {
     ( $(
-         #[ $(forall $($var:ident),+ )? | $( $name:ident : $ty:expr ) => + ]
+         #[ $(forall $($var:ident),+ )? | $( $name:ident : $arg_ty:expr => )+ @ $ret_ty:expr ]
          fn $func_name:tt ( $($arg_pat:pat),* ) $body:block
        )* ) => {{
+            use crate::ast::scoped::SymbolTable;
+            use $crate::runner::value::Lazy;
+
             let mut scoped: $crate::ast::scoped::SymbolTable<$crate::ast::scoped::ScopedStageInfo> = $crate::ast::scoped::SymbolTable::new();
             let mut typed = $crate::types::InferenceState::new();
             let mut runnable = $crate::library::InterpreterSymbolTable::new();
@@ -36,13 +39,9 @@ macro_rules! library {
                 // Generate let bindings for forall variables if they exist
                 $( $(let $var = typed.hm.newvar();)* )?
 
-                // Process the type signature - uses the captured $ty expressions
-                let all_types = vec![$(($ty).clone()),+]; // Clone each type
-                // Ensure there's at least a return type
-                assert!(!all_types.is_empty(), "Function type signature cannot be empty.");
-                let args_ty = all_types[..all_types.len() - 1].to_vec(); // All but the last are args
-                // Clone the last element safely
-                let ret_ty = all_types.last().expect("Should have at least one type").clone(); // The last one is the return type
+                // Process the type signature - argument types and return type are now separate
+                let args_ty = vec![$(($arg_ty).clone()),*]; // Argument types
+                let ret_ty = ($ret_ty).clone(); // Return type
 
                 // Build the function type
                 let func_typ = $crate::types::util::func(&args_ty[..], &ret_ty);
@@ -61,13 +60,12 @@ macro_rules! library {
                 // Store the function pointer (type NativeExpr) in the runnable table.
                 runnable.insert(
                     name.to_string(),
-                    ::std::sync::Arc::new(move |args| { // Use Arc for cloneable shared ownership
-                        let args = args
-                            .into_iter()
-                            .collect::<::std::vec::Vec<$crate::runner::value::Lazy>>();
-
+                    ::std::sync::Arc::new(move |args| {
                         match &args[..] {
-                            [ $($arg_pat,)* ] => $body,
+                            [ $($arg_pat,)* ] => {
+                                $( let $name = $name.clone(); )*
+                                $body
+                            },
                             _ => panic!("Invalid argument count or types for function '{}'\nargs: {:?}", name, args),
                         }
                     })

@@ -8,7 +8,7 @@ use polygonical::point::Point;
 pub use runnable_expression::InterpreterSymbolTable;
 
 use crate::ast::scoped::{ScopedStageInfo, SymbolTable};
-use crate::runner::value::{to_color_str, Lazy, LazyLambda, LazyType, Value};
+use crate::runner::value::{to_color_str, LazyLambda, LazyType, Value};
 use crate::types::InferenceState;
 use crate::types::util::*;
 use crate::{eval, lazy, library};
@@ -37,10 +37,8 @@ macro_rules! lfalse {
 
 pub fn standard_library() -> Library {
     library! {
-        #[forall a, b, c | f1:func1(&a, &b) => f2:func1(&b, &c) => f3:func1(&a, &c)]
+        #[forall a, b, c | f1:func1(&a, &b) => f2:func1(&b, &c) => @func1(&a, &c)]
         fn "compose1"(Lazy::Lambda(f1), Lazy::Lambda(f2)) {
-            let f1 = f1.clone();
-            let f2 = f2.clone();
             lazy!(Lazy::Lambda, {
                 LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
                     let mut f1 = f1.func.lock().unwrap();
@@ -50,25 +48,20 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[forall a, b | f:func1(&a, &b) => input:a => ret:b]
+        #[forall a, b | f:func1(&a, &b) => input:a => @b]
         fn "apply1"(Lazy::Lambda(f), input) {
-            let f = f.clone();
             let mut f = f.func.lock().unwrap();
-            let input = input.clone();
             f(vec![input].into())
         }
 
 
-        #[| a:int() => ret:int()]
+        #[| a:int() => @int()]
         fn "neg"(Lazy::Int(a)) {
-            let a = a.clone();
             lazy!(Lazy::Int, -eval!(a))
         }
 
-        #[| a:int() => b:int() => ret:int()]
+        #[| a:int() => b:int() => @int()]
         fn "+"(Lazy::Int(a), Lazy::Int(b)) {
-            let a = a.clone();
-            let b = b.clone();
             lazy!(Lazy::Int, {
                 let a = eval!(a);
                 let b = eval!(b);
@@ -76,67 +69,54 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| a:int() => b:int() => ret:int()]
+        #[| a:int() => b:int() => @int()]
         fn "-"(Lazy::Int(a), Lazy::Int(b)) {
-            let a = a.clone();
-            let b = b.clone();
             lazy!(Lazy::Int, {
                 eval!(a) - eval!(b)
             })
         }
 
-        #[| a:int() => b:int() => ret:int()]
+        #[| a:int() => b:int() => @int()]
         fn "*"(Lazy::Int(a), Lazy::Int(b)) {
-            let a = a.clone();
-            let b = b.clone();
             lazy!(Lazy::Int, eval!(a) * eval!(b))
         }
 
-        #[| a:float() => b:float() => ret:float()]
+        #[| a:float() => b:float() => @float()]
         fn "*f"(Lazy::Float(a), Lazy::Float(b)) {
-            let a = a.clone();
-            let b = b.clone();
             lazy!(Lazy::Float, eval!(a) * eval!(b))
         }
 
-        #[| a:int() => b:int() => ret:int()]
+        #[| a:int() => b:int() => @int()]
         fn "/"(Lazy::Int(a), Lazy::Int(b)) {
-            let a = a.clone();
-            let b = b.clone();
             lazy!(Lazy::Int, eval!(a) / eval!(b))
         }
 
-        #[| a:float() => b:float() => ret:float()]
+        #[| a:float() => b:float() => @float()]
         fn "/f"(Lazy::Float(a), Lazy::Float(b)) {
-            let a = a.clone();
-            let b = b.clone();
             lazy!(Lazy::Float, eval!(a) / eval!(b))
         }
 
-        #[forall a | arr:array(&a) => ret:a ]
-        fn "first"(Lazy::Array(v)) {
-            v[0].clone()
+        #[forall a | arr:array(&a) => @a ]
+        fn "first"(Lazy::Array(arr)) {
+            arr[0].clone()
         }
 
-        #[forall a | arr:array(&a) => ret:int() ]
-        fn "len"(Lazy::Array(v)) {
-            let v = v.clone();
+        #[forall a | arr:array(&a) => @int() ]
+        fn "len"(Lazy::Array(arr)) {
             lazy!(Lazy::Int, {
-                let len = v.len();
+                let len = arr.len();
                 len as i64
             })
         }
 
-        #[forall a | arr:array(&a) => idx:int() => ret:a ]
-        fn "get"(Lazy::Array(v), Lazy::Int(idx)) {
+        #[forall a | arr:array(&a) => idx:int() => @a ]
+        fn "get"(Lazy::Array(arr), Lazy::Int(idx)) {
             let idx = eval!(idx);
-            v[idx as usize].clone()
+            arr[idx as usize].clone()
         }
 
-        #[| text:string() => delimiter:string() => ret:array(&string())]
+        #[| text:string() => delimiter:string() => @array(&string())]
         fn "explode"(Lazy::String(text), Lazy::String(delimiter)) {
-            let text = text.clone();
-            let delimiter = delimiter.clone();
             lazy!(Lazy::Array, {
                 let text = eval!(text);
                 let delimiter = eval!(delimiter);
@@ -150,10 +130,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| format_str:string() => args:array(&string()) => ret:string() ]
+        #[| format_str:string() => args:array(&string()) => @string() ]
         fn "format"(Lazy::String(format_str), Lazy::Array(args)) {
-            let format_str = format_str.clone();
-            let args = args.clone();
             lazy!(Lazy::String, {
                 let mut format_str = eval!(format_str).to_string();
                 let args = eval!(args);
@@ -172,11 +150,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| regex_str:string() => input:string() => with:string() => ret:string()]
+        #[| regex_str:string() => input:string() => with:string() => @string()]
         fn "replace-all"(Lazy::String(regex_str), Lazy::String(input), Lazy::String(with)) {
-            let regex_str = regex_str.clone();
-            let input = input.clone();
-            let with = with.clone();
             lazy!(Lazy::String, {
                 let re = Regex::new(&regex_str).unwrap();
                 let with = eval!(with).to_string();
@@ -185,14 +160,12 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => ret:array(&b) ]
-        fn "map"(Lazy::Lambda(f), Lazy::Array(v)) {
-            let f = f.clone();
-            let v = v.clone();
+        #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => @array(&b) ]
+        fn "map"(Lazy::Lambda(fun), Lazy::Array(arr)) {
             lazy!(Lazy::Array, {
-                let mut f = f.func.lock().unwrap();
+                let mut f = fun.func.lock().unwrap();
                 let mut res = vec![];
-                for elem in eval!(v) {
+                for elem in eval!(arr) {
                     let mapped = f(vec![elem].into());
                     res.push(mapped);
                 }
@@ -200,43 +173,37 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[forall a, b | fun:func2(&b, &a, &b) => ground:b => arr:array(&a) => ret:b]
-        fn "foldl" (Lazy::Lambda(f), fst, Lazy::Array(list)) {
-            let mut f = f.func.lock().unwrap();
-            let mut acc = fst.clone();
-            for elem in eval!(list) {
+        #[forall a, b | fun:func2(&b, &a, &b) => fst:b => arr:array(&a) => @b]
+        fn "foldl" (Lazy::Lambda(fun), fst, Lazy::Array(arr)) {
+            let mut f = fun.func.lock().unwrap();
+            let mut acc = fst;
+            for elem in eval!(arr) {
                 acc = f(vec![acc, elem].into());
             }
             acc
         }
 
-        #[forall a | arr:array(&a) => val:a => ret:array(&a)]
-        fn "append" (Lazy::Array(a), val) {
-            let a = a.clone();
-            let val = val.clone();
+        #[forall a | arr:array(&a) => val:a => @array(&a)]
+        fn "append" (Lazy::Array(arr), val) {
             lazy!(Lazy::Array, {
-                let mut res = eval!(a);
+                let mut res = eval!(arr);
                 res.push_back(val);
                 res
             })
         }
 
-        #[forall a | arr:array(&a) => another:array(&a) => ret:array(&a)]
-        fn "append-all"(Lazy::Array(a), Lazy::Array(b)) {
-            let a = a.clone();
-            let b = b.clone();
+        #[forall a | this:array(&a) => other:array(&a) => @array(&a)]
+        fn "append-all"(Lazy::Array(this), Lazy::Array(other)) {
             lazy!(Lazy::Array, {
-                let mut res = eval!(a);
-                let to_add = eval!(b);
+                let mut res = eval!(this);
+                let to_add = eval!(other);
                 res.append(to_add);
                 res
             })
         }
 
-        #[| from:int() => to:int() => res:array(&int())]
+        #[| from:int() => to:int() => @array(&int())]
         fn "range" (Lazy::Int(from), Lazy::Int(to)) {
-            let from = from.clone();
-            let to = to.clone();
             lazy!(Lazy::Array, {
                 let from = **from;
                 let to = **to;
@@ -247,17 +214,13 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[forall a | val:a.clone() => ret:a]
-        fn "return" (v) {
-            v.clone()
+        #[forall a | val:a => @a]
+        fn "return" (val) {
+            val
         }
 
-        #[forall a | cond:int() => iftrue:a => iffalse:a => ret:a]
+        #[forall a | cond:int() => iftrue:a => iffalse:a => @a]
         fn "if"(Lazy::Int(cond), iftrue, iffalse){
-            let cond = cond.clone();
-            let iftrue = iftrue.clone();
-            let iffalse = iffalse.clone();
-
             lazy!([iftrue -> i1, iffalse -> i2], {
                 if eval!(cond) != 0 {
                     eval!(i1)
@@ -267,18 +230,16 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| str:string() => ret:int()]
-        fn "strlen"(Lazy::String(s)) {
-            let s = s.clone();
+        #[| string:string() => @int()]
+        fn "strlen"(Lazy::String(string)) {
             lazy!(Lazy::Int, {
-                let len = eval!(s).len();
+                let len = eval!(string).len();
                 len as i64
             })
         }
 
-        #[forall a | elem:a => ret:a]
+        #[forall a | elem:a => @a]
         fn "print"(elem){
-            let elem = elem.clone();
             let e2 = elem.clone();
             lazy!([elem -> value], {
                 println!("{}", e2.eval());
@@ -286,31 +247,28 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[forall a | message:string() => ret:a]
+        #[forall a | message:string() => @a]
         fn "panic-int"(Lazy::String(message)) {
-            let message = message.clone();
             lazy!(fromtype[a], {
                 panic!("panicked: {}", eval!(message))
             })
         }
 
-        #[| message:string() => ret:int()]
+        #[| message:string() => @int()]
         fn "panic-int"(Lazy::String(message)) {
-            let message = message.clone();
             lazy!(Lazy::Int, {
                 panic!("panicked: {}", eval!(message))
             })
         }
 
-        #[| message:string() => ret:string()]
+        #[| message:string() => @string()]
         fn "panic-string"(Lazy::String(message)) {
-            let message = message.clone();
             lazy!(Lazy::String, {
                 panic!("panicked: {}", eval!(message))
             })
         }
 
-        #[| a:int() => b:int() => res:int()]
+        #[| a:int() => b:int() => @int()]
         fn "<"(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) < eval!(b) {
                 ltrue!()
@@ -319,7 +277,7 @@ pub fn standard_library() -> Library {
             }
         }
 
-        #[| a:int() => b:int() => res:int()]
+        #[| a:int() => b:int() => @int()]
         fn ">"(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) > eval!(b) {
                 ltrue!()
@@ -328,7 +286,7 @@ pub fn standard_library() -> Library {
             }
         }
 
-        #[| a:int() => b:int() => res:int()]
+        #[| a:int() => b:int() => @int()]
         fn "<="(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) <= eval!(b) {
                 ltrue!()
@@ -338,7 +296,7 @@ pub fn standard_library() -> Library {
         }
 
 
-        #[| a:int() => b:int() => res:int()]
+        #[| a:int() => b:int() => @int()]
         fn ">="(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) >= eval!(b) {
                 ltrue!()
@@ -347,7 +305,7 @@ pub fn standard_library() -> Library {
             }
         }
 
-        #[| a:int() => b:int() => res:int()]
+        #[| a:int() => b:int() => @int()]
         fn "="(Lazy::Int(a), Lazy::Int(b)) {
             if eval!(a) == eval!(b) {
                 ltrue!()
@@ -356,7 +314,7 @@ pub fn standard_library() -> Library {
             }
         }
 
-        #[| a:int() => ret:int()]
+        #[| a:int() => @int()]
         fn "not"(Lazy::Int(a)) {
             let a = a.clone();
             lazy!(Lazy::Int, {
@@ -368,48 +326,36 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| x:int() => y:int() => command:string()]
+        #[| x:int() => y:int() => @string()]
         fn "move"(Lazy::Int(x), Lazy::Int(y)){
-            let x = x.clone();
-            let y = y.clone();
             lazy!(Lazy::String, {
                 format!("M {},{}", eval!(x), eval!(y)).into()
             })
         }
 
-        #[| size:int() => command:string()]
+        #[| size:int() => @string()]
         fn "horizontal-line"(Lazy::Int(size)){
-            let size = size.clone();
             lazy!(Lazy::String, {
                 format!("h {}", eval!(size)).into()
             })
         }
 
-        #[| size:int() => command:string()]
+        #[| size:int() => @string()]
         fn "vertical-line"(Lazy::Int(size)){
-            let size = size.clone();
             lazy!(Lazy::String, {
                 format!("v {}", eval!(size)).into()
             })
         }
 
-        #[| x1:int() => y1:int() => x2:int() => y2:int() => x:int() => y:int() => command:string()]
+        #[| x1:int() => y1:int() => x2:int() => y2:int() => x:int() => y:int() => @string()]
         fn "curve"(Lazy::Int(x1), Lazy::Int(y1), Lazy::Int(x2), Lazy::Int(y2), Lazy::Int(x), Lazy::Int(y)){
-            let x1 = x1.clone();
-            let y1 = y1.clone();
-            let x2 = x2.clone();
-            let y2 = y2.clone();
-            let x = x.clone();
-            let y = y.clone();
             lazy!(Lazy::String, {
                 format!("C {} {}, {} {}, {} {}", eval!(x1), eval!(y1), eval!(x2), eval!(y2), eval!(x), eval!(y)).into()
             })
         }
 
-        #[| commands:array(&string()) => fill:color() => ret:opaque()]
+        #[| commands:array(&string()) => fill:color() => @opaque()]
         fn "path"(Lazy::Array(commands), Lazy::Color(fill)) {
-            let commands = commands.clone();
-            let fill = fill.clone();
             lazy!(Lazy::Opaque, {
                 let mut path_str = String::new();
                 for command in eval!(commands) {
@@ -428,10 +374,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| points:array(&array(&int())) => fill:color() => ret:opaque() ]
+        #[| points:array(&array(&int())) => fill:color() => @opaque() ]
         fn "polygon"(Lazy::Array(points), Lazy::Color(fill)){
-            let points = points.clone();
-            let fill = fill.clone();
             lazy!(Lazy::Opaque, {
                 let mut polygon = Element::new("polygon");
 
@@ -454,13 +398,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| x:int() => y:int() => radius:int() => fill:color() => children:array(&opaque()) => ret:opaque()]
+        #[| x:int() => y:int() => radius:int() => fill:color() => children:array(&opaque()) => @opaque()]
         fn "circle"(Lazy::Int(x), Lazy::Int(y), Lazy::Int(radius), Lazy::Color(fill), Lazy::Array(children)){
-            let x = x.clone();
-            let y = y.clone();
-            let radius = radius.clone();
-            let fill = fill.clone();
-            let children = children.clone();
             lazy!(Lazy::Opaque, {
                 let mut group = Element::new("g");
 
@@ -484,14 +423,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| x:int() => y:int() => w:int() => h:int() => fill:color() => children:array(&opaque()) => ret:opaque()]
+        #[| x:int() => y:int() => w:int() => h:int() => fill:color() => children:array(&opaque()) => @opaque()]
         fn "rect"(Lazy::Int(x), Lazy::Int(y), Lazy::Int(w), Lazy::Int(h), Lazy::Color(fill), Lazy::Array(children)){
-            let x = x.clone();
-            let y = y.clone();
-            let w = w.clone();
-            let h = h.clone();
-            let fill = fill.clone();
-            let children = children.clone();
             lazy!(Lazy::Opaque, {
                 let mut group = Element::new("g");
 
@@ -514,13 +447,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| x1:int() => y1:int() => x2:int() => y2:int() => stroke:color() => ret:opaque()]
+        #[| x1:int() => y1:int() => x2:int() => y2:int() => stroke:color() => @opaque()]
         fn "line"(Lazy::Int(x1),Lazy::Int(y1),Lazy::Int(x2),Lazy::Int(y2),Lazy::Color(stroke)) {
-            let x1 = x1.clone();
-            let y1 = y1.clone();
-            let x2 = x2.clone();
-            let y2 = y2.clone();
-            let stroke = stroke.clone();
             lazy!(Lazy::Opaque, {
                 let mut group = Element::new("g");
                 let mut line = esvg::path::create(&[
@@ -537,9 +465,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| elems:array(&opaque()) => ret:opaque()]
+        #[| elems:array(&opaque()) => @opaque()]
         fn "group"(Lazy::Array(elems)) {
-            let elems = elems.clone();
             lazy!(Lazy::Opaque, {
                 let mut group = Element::new("g");
                 for elem in eval!(elems) {
@@ -550,11 +477,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| s:string() => x:int() => y:int() => ret:opaque()]
+        #[| s:string() => x:int() => y:int() => @opaque()]
         fn "text"(Lazy::String(s), Lazy::Int(x), Lazy::Int(y)) {
-            let s = s.clone();
-            let x = x.clone();
-            let y = y.clone();
             lazy!(Lazy::Opaque, {
                 let loc = eval_point(x, y);
                 let style = esvg::text::create_text_style(
@@ -571,23 +495,16 @@ pub fn standard_library() -> Library {
         }
 
 
-        #[| s:string() => x:int() => y:int() => style:string() => ret:opaque()]
+        #[| s:string() => x:int() => y:int() => style:string() => @opaque()]
         fn "text-with-style"(Lazy::String(s), Lazy::Int(x), Lazy::Int(y), Lazy::String(style)) {
-            let s = s.clone();
-            let x = x.clone();
-            let y = y.clone();
-            let style = style.clone();
             lazy!(Lazy::Opaque, {
                 let loc = eval_point(x, y);
                 esvg::text::create_text(eval!(s).to_string(), loc, &eval!(style))
             })
         }
 
-        #[| elem:opaque() => x:int() => y:int() => ret:opaque()]
+        #[| elem:opaque() => x:int() => y:int() => @opaque()]
         fn "translate"(Lazy::Opaque(elem), Lazy::Int(x), Lazy::Int(y)) {
-            let elem = elem.clone();
-            let x = x.clone();
-            let y = y.clone();
             lazy!(Lazy::Opaque, {
                 let mut elem = eval!(elem);
                 let x = eval!(x);
@@ -597,10 +514,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| elem:opaque() => degrees:float() => ret:opaque()]
+        #[| elem:opaque() => degrees:float() => @opaque()]
         fn "rotate"(Lazy::Opaque(elem), Lazy::Float(degrees)) {
-            let elem = elem.clone();
-            let degrees = degrees.clone();
             lazy!(Lazy::Opaque, {
                 let mut elem = eval!(elem);
                 let degrees = eval!(degrees);
@@ -609,10 +524,8 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| elem:opaque() => degrees:float() => ret:opaque()]
+        #[| elem:opaque() => degrees:float() => @opaque()]
         fn "rotate-self"(Lazy::Opaque(elem), Lazy::Float(degrees)) {
-            let elem = elem.clone();
-            let degrees = degrees.clone();
             lazy!(Lazy::Opaque, {
                 let mut elem = eval!(elem);
                 let degrees = eval!(degrees);
@@ -623,31 +536,26 @@ pub fn standard_library() -> Library {
             })
         }
 
-        #[| f:float() => ret:int()]
+        #[| f:float() => @int()]
         fn "floor"(Lazy::Float(f)) {
-            let f = f.clone();
             lazy!(Lazy::Int, eval!(f) as i64)
         }
 
-        #[| i:int() => ret:float()]
+        #[| i:int() => @float()]
         fn "to-float"(Lazy::Int(i)) {
-            let i = i.clone();
             lazy!(Lazy::Float, eval!(i) as f64)
         }
 
-        #[forall a | input:a => ret:string()]
+        #[forall a | input:a => @string()]
         fn "to-string"(input) {
-            let input = input.clone();
             lazy!(Lazy::String, {
                 let a = input.eval();
                 format!("{a}").into()
             })
         }
 
-        #[| a:array(&string()) => sep:string() => ret:string()]
+        #[| a:array(&string()) => sep:string() => @string()]
         fn "join"(Lazy::Array(a), Lazy::String(sep)) {
-            let a = a.clone();
-            let sep = sep.clone();
             lazy!(Lazy::String, {
                 let a = eval!(a);
                 let a = a.into_iter()

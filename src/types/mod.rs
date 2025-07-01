@@ -489,11 +489,10 @@ fn infer_lambda(
 mod tests {
     use super::*;
     use crate::ast::parsed::parsed_expr_pass;
-    use crate::ast::scoped::{scoped_expr_pass, SymbolTable};
+    use crate::ast::scoped::scoped_expr_pass;
     use crate::parser::pest_parsing_pass;
     use crate::library::Library;
     use crate::{eval, lazy, library};
-    use crate::runner::value::Lazy;
 
     // Helper function for parsing and typechecking bunny source
     fn typecheck_bunny_source(source: &str, library: Library) -> Result<Type> {
@@ -511,26 +510,22 @@ mod tests {
     // Helper to create a library with basic arithmetic operations
     fn basic_library() -> Library {
         library! {
-            #[|a:int() => b:int() => ret:int()]
+            #[| a:int() => b:int() => @int()]
             fn "add"(Lazy::Int(a), Lazy::Int(b)) {
                 lazy!(Lazy::Int, eval!(a) + eval!(b))
             }
 
-            #[|a:int() => b:int() => ret:int()]
+            #[| a:int() => b:int() => @int()]
             fn "sub"(Lazy::Int(a), Lazy::Int(b)) {
-                let a = a.clone();
-                let b = b.clone();
                 lazy!(Lazy::Int, eval!(a) - eval!(b))
             }
 
-            #[|a:int() => b:int() => ret:int()]
+            #[| a:int() => b:int() => @int()]
             fn "mul"(Lazy::Int(a), Lazy::Int(b)) {
-                let a = a.clone();
-                let b = b.clone();
                 lazy!(Lazy::Int, eval!(a) * eval!(b))
             }
 
-            #[forall a | elem:a => ret:a]
+            #[forall a | elem:a => @a]
             fn "id"(elem) {
                 elem.clone()
             }
