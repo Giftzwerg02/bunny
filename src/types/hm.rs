@@ -74,7 +74,7 @@ impl Default for HMState {
 impl HMState {
     pub fn new() -> HMState {
         HMState {
-            current_level: 1,
+            current_level: 0,
             current_typevar: 0
         }
     }
@@ -247,7 +247,7 @@ impl Type {
     }
 
     fn unify_typevar(tv_ref: Rc<RefCell<TypeVar>>, other: &Type) -> Result<(), HMError> {
-        let mut tv_guard = tv_ref.borrow_mut();
+        let tv_guard = tv_ref.borrow_mut();
 
         match &*tv_guard {
             TypeVar::Bound(bound_type) => {
@@ -269,11 +269,18 @@ impl Type {
                 // Note: The case where 'other' is 'TVar(tv_ref)' (i.e., unifying a TVar with itself)
                 // is handled by the `self == other` check in the main `unify` function.
                 
-                if Self::occurs(*id, *level, other) {
+                let var_id = *id;
+                let var_level = *level;
+                
+                // Release the mutable borrow before calling occurs to avoid borrow conflicts
+                drop(tv_guard);
+                
+                if Self::occurs(var_id, var_level, other) {
                     Err(HMError::OccursCheckError(other.clone()))
                 } else {
                     // Occurs check passed. Bind the type variable tv_ref to 'other'.
-                    // The mutable borrow tv_guard is still active here.
+                    // Reacquire the mutable borrow to update the type variable.
+                    let mut tv_guard = tv_ref.borrow_mut();
                     *tv_guard = TypeVar::Bound(other.clone());
                     Ok(())
                 }
@@ -293,8 +300,11 @@ impl Type {
                 let mut tb = tvar_rc.borrow_mut();
                 match &mut *tb {
                     TypeVar::Bound(t) => {
-                        // descend into bound type
-                        Self::occurs(a_id, a_level, t)
+                        // Clone the bound type to avoid borrow conflicts when recursing
+                        let bound_type = t.clone();
+                        // Release the borrow before recursing
+                        drop(tb);
+                        Self::occurs(a_id, a_level, &bound_type)
                     }
                     TypeVar::Unbound(b_id, b_level) => {
                         // update the level in place
@@ -605,10 +615,36 @@ mod tests {
     }
 
     #[test]
+    fn test_occurs_check_through_bound_var() {
+        let mut state = HMState::new();
+        let tvar1 = state.newvar();
+        let tvar2 = state.newvar();
+        
+        // First bind tvar2 to tvar1
+        assert!(tvar2.unify(&tvar1).is_ok());
+        
+        // Now try to unify tvar1 with List[tvar2] 
+        // This should fail because tvar2 is bound to tvar1,
+        // so we're essentially trying to unify tvar1 with List[tvar1]
+        let list_tvar2 = tapp("List", vec![tvar2]);
+        
+        if let Err(HMError::OccursCheckError(_)) = tvar1.unify(&list_tvar2) {
+            // Expected
+        } else {
+            panic!("Expected OccursCheckError");
+        }
+    }
+
+    #[test]
     fn test_generalization_basic() {
         let mut state = HMState::new();
+        
+        // Enter a level to simulate let-binding context
+        state.enter_level();
         let tvar = state.newvar();
         
+        // Exit level and generalize
+        state.exit_level();
         let polytype = tvar.generalize(&state);
         
         // Should contain the type variable id
@@ -620,10 +656,13 @@ mod tests {
     fn test_generalization_with_levels() {
         let mut state = HMState::new();
         
+        // Enter level 1
+        state.enter_level();
+        
         // Create a type variable at level 1
         let tvar1 = state.newvar();
         
-        // Enter a new level
+        // Enter level 2
         state.enter_level();
         
         // Create a type variable at level 2
@@ -632,16 +671,23 @@ mod tests {
         // Create a function type: tvar1 -> tvar2
         let func_type = func(tvar1.clone(), tvar2.clone());
         
-        // Generalize at level 2 - should only generalize tvar2
+        // Generalize at level 2 - should only generalize tvar2 (level 2 > 2 is false, so none)
         let polytype = func_type.generalize(&state);
         
-        // Should contain only one type variable (tvar2)
-        assert_eq!(polytype.typevars.len(), 1);
+        // Should contain no type variables since we're still at level 2
+        assert_eq!(polytype.typevars.len(), 0);
         
-        // Exit level
+        // Exit to level 1
         state.exit_level();
         
-        // Now generalize at level 1 - should generalize both
+        // Now generalize at level 1 - should generalize tvar2 (level 2 > 1 is true)
+        let polytype = func_type.generalize(&state);
+        assert_eq!(polytype.typevars.len(), 1);
+        
+        // Exit to level 0
+        state.exit_level();
+        
+        // Now generalize at level 0 - should generalize both (levels 1,2 > 0)
         let polytype = func_type.generalize(&state);
         assert_eq!(polytype.typevars.len(), 2);
     }
@@ -682,6 +728,9 @@ mod tests {
     #[test]
     fn test_instantiation() {
         let mut state = HMState::new();
+        
+        // Enter level and create a type variable that will be generalized
+        state.enter_level();
         let tvar = state.newvar();
         
         // Get the type variable id for later comparison
@@ -695,6 +744,8 @@ mod tests {
             panic!("Expected TVar");
         };
         
+        // Exit level and generalize
+        state.exit_level();
         let polytype = tvar.generalize(&state);
         let instantiated = polytype.inst(&mut state);
         
@@ -771,7 +822,8 @@ mod tests {
     fn test_level_updating_in_occurs_check() {
         let mut state = HMState::new();
         
-        // Create a type variable at level 1
+        // Enter level 1
+        state.enter_level();
         let tvar1 = state.newvar();
         
         // Enter level 2
@@ -814,5 +866,122 @@ mod tests {
                 panic!("Expected unbound TVar");
             }
         }
+    }
+
+    #[test]
+    fn test_complex_generalization_scenario() {
+        let mut state = HMState::new();
+        
+        // Simulate: let f = fun x -> x in (f 1, f true)
+        // This should generalize f to have type: forall a. a -> a
+        
+        // Enter let level
+        state.enter_level();
+        
+        // Create identity function: a -> a
+        let tvar_a = state.newvar();
+        let identity_type = func(tvar_a.clone(), tvar_a.clone());
+        
+        // Exit let level and generalize
+        state.exit_level();
+        let generalized_identity = identity_type.generalize(&state);
+        
+        // Should have generalized the type variable
+        assert_eq!(generalized_identity.typevars.len(), 1);
+        
+        // Now instantiate twice for two different uses
+        let use1 = generalized_identity.inst(&mut state);
+        let use2 = generalized_identity.inst(&mut state);
+        
+        // Use with int: should unify use1 with int -> int
+        let int_type = basic("int");
+        let int_to_int = func(int_type.clone(), int_type.clone());
+        assert!(use1.unify(&int_to_int).is_ok());
+        
+        // Use with bool: should unify use2 with bool -> bool
+        let bool_type = basic("bool");
+        let bool_to_bool = func(bool_type.clone(), bool_type.clone());
+        assert!(use2.unify(&bool_to_bool).is_ok());
+    }
+
+    #[test]
+    fn test_unification_with_nested_functions() {
+        let mut state = HMState::new();
+        
+        // Test: (a -> b) -> (b -> c) -> (a -> c)
+        let tvar_a = state.newvar();
+        let tvar_b = state.newvar();
+        let tvar_c = state.newvar();
+        
+        let a_to_b = func(tvar_a.clone(), tvar_b.clone());
+        let b_to_c = func(tvar_b.clone(), tvar_c.clone());
+        let a_to_c = func(tvar_a.clone(), tvar_c.clone());
+        
+        let compose_type1 = func(a_to_b, func(b_to_c, a_to_c));
+        
+        // Create another compose type with different variables
+        let tvar_x = state.newvar();
+        let tvar_y = state.newvar();
+        let tvar_z = state.newvar();
+        
+        let x_to_y = func(tvar_x.clone(), tvar_y.clone());
+        let y_to_z = func(tvar_y.clone(), tvar_z.clone());
+        let x_to_z = func(tvar_x.clone(), tvar_z.clone());
+        
+        let compose_type2 = func(x_to_y, func(y_to_z, x_to_z));
+        
+        // They should unify successfully
+        assert!(compose_type1.unify(&compose_type2).is_ok());
+    }
+
+    #[test]
+    fn test_occurs_check_with_multiple_levels() {
+        let mut state = HMState::new();
+        
+        state.enter_level();
+        let tvar1 = state.newvar();
+        
+        state.enter_level();
+        let tvar2 = state.newvar();
+        
+        // Try to create a cycle: tvar1 -> List[tvar2], tvar2 -> tvar1
+        let list_tvar2 = tapp("List", vec![tvar2.clone()]);
+        assert!(tvar1.unify(&list_tvar2).is_ok());
+        
+        // Now this should fail due to occurs check
+        if let Err(HMError::OccursCheckError(_)) = tvar2.unify(&tvar1) {
+            // Expected
+        } else {
+            panic!("Expected OccursCheckError");
+        }
+    }
+
+    #[test]
+    fn test_unification_of_partial_application_types() {
+        let mut state = HMState::new();
+        
+        // Test partial application: List[int] vs List[a] where a should unify with int
+        let int_type = basic("int");
+        let tvar_a = state.newvar();
+        
+        let list_int = tapp("List", vec![int_type.clone()]);
+        let list_a = tapp("List", vec![tvar_a.clone()]);
+        
+        assert!(list_int.unify(&list_a).is_ok());
+        
+        // Check that tvar_a is now bound to int
+        if let Type::TVar(tv_ref) = &tvar_a {
+            if let TypeVar::Bound(bound_type) = &*tv_ref.borrow() {
+                assert_eq!(*bound_type, int_type);
+            } else {
+                panic!("TVar should be bound");
+            }
+        }
+        
+        // Test with nested type applications
+        let nested_list_int = tapp("List", vec![list_int]);
+        let nested_list_a = tapp("List", vec![list_a]);
+        
+        assert!(nested_list_int.unify(&nested_list_a).is_ok());
     }
 }
