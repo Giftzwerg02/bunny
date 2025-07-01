@@ -105,223 +105,249 @@ impl Runner {
                 )
             }
             Expr::Array(array) => {
-                let mut runner = self.clone();
-                lazy!(Lazy::Array, {
-                    let mut res = Vector::new();
-
-                    for elem in array.value {
-                        let elem = runner.run(elem);
-                        res.push_back(elem);
-                    }
-
-                    res
-                })
+                self.run_array(array)
             }
             Expr::Dict(dict) => {
-                let mut runner = self.clone();
-                lazy!(Lazy::Dict, {
-                    let mut res: im::HashMap<Value, Lazy> = im::HashMap::new();
-                    for entry in dict.value {
-                        let key = entry.key;
-                        let key = runner.run(key);
-                        let key = key.eval();
-
-                        let value = entry.value;
-                        let value = runner.run(value);
-
-                        res.insert(key, value);
-                    }
-                    res
-                })
+                self.run_dict(dict)
             }
             Expr::Symbol(symbol) => {
-                // if the implementation of a function is just a symbol,
-                // then we just have another indirection
-                //
-                // We are inside some func-call, meaning a variable could either come from:
-                // 1. An immediately preceeding "let-binding" (def foo ...)
-                // 2. From the outer scope which is stored on the SymbolStack
-                //
-                // Therefore, if the symbol resolves to an argument we need to check the
-                // SymbolStack
-
-                let Some(scope) = symbol.info.syms.get(&symbol.value) else {
-                    return self.read_var(symbol.value);
-                };
-
-                match scope {
-                    TypedValue::FromLibrary(_) => {
-                        let symbol_value_owned = symbol.value.clone();
-                        let native_syms_owned = self.native_syms.clone();
-
-                        lazy!(Lazy::Lambda, {
-                            let native_fn =
-                                native_syms_owned.get(&symbol_value_owned).unwrap().clone();
-                            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<Lazy>| {
-                                (*native_fn)(args.into_iter().collect())
-                            })))
-                        })
-                    }
-                    TypedValue::FromBunny(scope) => {
-                        let new_scope = scope.clone().map_stage(&mut |info| info.into());
-                        self.run(new_scope)
-                    }
-                }
+                self.run_symbol(symbol)
             }
-
             Expr::FuncCall(func) => {
                 let FuncCall::Single(func) = func else {
                     panic!("invalid ast");
                 };
 
-                let implementation = func.info.syms.get(&func.id.value).expect("scoping err");
+                self.run_func_call(func)
+            }
+            Expr::Lambda(lambda) => {
+                self.run_lambda(lambda)
+            }
+        }
+    }
 
-                let TypedValue::FromBunny(implementation) = implementation else {
-                    let args = self.run_func_args(func.clone());
-                    let native = self.native_syms.get(&func.id.value).unwrap();
-                    return native(args);
-                };
+    fn run_array(&mut self, array: crate::ast::Array<AnyTypedStageInfo>) -> Lazy {
+        let mut runner = self.clone();
+        lazy!(Lazy::Array, {
+            let mut res = Vector::new();
 
-                match implementation {
-                    // i.e., the argument is used as a function
-                    Expr::Symbol(symbol) => {
-                        let value = Expr::Symbol(symbol.clone())
-                            .clone()
-                            .map_stage(&mut |info| info.into());
-                        let value = self.run(value);
-                        let Lazy::Lambda(lambda) = value else {
-                            return value;
-                        };
-
-                        let args = func.args.into_iter().map(|arg| {
-                            match arg {
-                                Argument::Positional(expr) => {
-                                    self.run(expr)
-                                },
-                                Argument::Named(_) => {
-                                    panic!("named arguments are not allowed when passing to an argument-lambda")
-                                },
-                            }
-                        }).collect();
-
-                        let lambda_call = (**lambda).clone().func;
-                        let mut lambda_call = lambda_call.lock().unwrap();
-                        lambda_call(args)
-                    }
-                    Expr::Lambda(lambda) => {
-                        let mut lambda_set_args = lambda.clone().map_stage(&mut |info| info.into());
-
-                        let lambda_pop_args = lambda_set_args.clone();
-
-                        let mut already_set_arguments = vec![];
-                        for (pos, arg) in func.args.iter().cloned().enumerate() {
-                            match arg {
-                                crate::ast::Argument::Named(named_argument) => {
-                                    already_set_arguments.push(named_argument.name.clone());
-                                    let arg_value = self.run(*named_argument.value);
-                                    self.push_var(named_argument.name.value, arg_value);
-                                }
-                                crate::ast::Argument::Positional(arg_expr) => {
-                                    let arg_sym = lambda.args[pos]
-                                        .into_def_argument_symbol()
-                                        .map_stage(&mut |info| info.into());
-
-                                    already_set_arguments.push(arg_sym.clone());
-                                    let arg_value = self.run(arg_expr);
-                                    self.push_var(arg_sym.value, arg_value);
-                                }
-                            }
-                        }
-
-                        // remove already set arguments
-                        for already_set_arg in already_set_arguments {
-                            pop_arg_by_name(&mut lambda_set_args.args, &already_set_arg);
-                        }
-
-                        // apply the default-value for the remaining ones
-                        // since this passed the type-checker, we can assume
-                        // that earch remaining argument here actually has a default-value
-                        for arg in lambda_set_args.args {
-                            let name = arg.into_def_argument_symbol();
-                            let default_value = arg
-                                .into_def_argument_expr()
-                                .expect("non-set argument should have a default value");
-                            let default_value = self.run(default_value);
-                            self.push_var(name.value, default_value);
-                        }
-
-                        let body = lambda.clone().body.map_stage(&mut |info| info.into());
-
-                        let result = self.run(body);
-
-                        for arg in lambda_pop_args.args {
-                            self.pop_var(arg.into_def_argument_symbol().value);
-                        }
-
-                        result
-                    }
-
-                    thing => {
-                        let right_thing = thing.clone().map_stage(&mut |info| info.into());
-
-                        let Lazy::Lambda(lambda) = self.run(right_thing) else {
-                            panic!("argument must be a lambda")
-                        };
-
-                        let args = func.args.into_iter().map(|arg| {
-                            match arg {
-                                Argument::Positional(expr) => {
-                                    self.run(expr)
-                                },
-                                Argument::Named(_) => {
-                                    panic!("named arguments are not allowed when passing to an argument-lambda")
-                                },
-                            }
-                        }).collect();
-
-                        let lambda_call = (**lambda).clone().func;
-                        let mut lambda_call = lambda_call.lock().unwrap();
-                        lambda_call(args)
-                    }
-                }
+            for elem in array.value {
+                let elem = runner.run(elem);
+                res.push_back(elem);
             }
 
-            Expr::Lambda(lambda) => {
-                // A lambda should return a lazy of
-                // a function that takes some arguments and returns a result
+            res
+        })
+    }
 
-                let lambda_args = Arc::new(
-                    lambda
-                        .args
-                        .iter()
-                        .map(|arg| arg.into_def_argument_symbol().value.clone())
-                        .collect::<Vec<_>>(),
-                );
+    fn run_dict(&mut self, dict: crate::ast::Dict<AnyTypedStageInfo>) -> Lazy {
+        let mut runner = self.clone();
+        lazy!(Lazy::Dict, {
+            let mut res: im::HashMap<Value, Lazy> = im::HashMap::new();
+            for entry in dict.value {
+                let key = entry.key;
+                let key = runner.run(key);
+                let key = key.eval();
 
-                let mut lambda_runner = self.clone();
+                let value = entry.value;
+                let value = runner.run(value);
 
-                let body = (*lambda.clone().body).map_stage(&mut |info| info.into());
+                res.insert(key, value);
+            }
+            res
+        })
+    }
+
+    fn run_symbol(&mut self, symbol: Symbol<AnyTypedStageInfo>) -> Lazy {
+        // if the implementation of a function is just a symbol,
+        // then we just have another indirection
+        //
+        // We are inside some func-call, meaning a variable could either come from:
+        // 1. An immediately preceeding "let-binding" (def foo ...)
+        // 2. From the outer scope which is stored on the SymbolStack
+        //
+        // Therefore, if the symbol resolves to an argument we need to check the
+        // SymbolStack
+
+        let Some(scope) = symbol.info.syms.get(&symbol.value) else {
+            return self.read_var(symbol.value);
+        };
+
+        match scope {
+            TypedValue::FromLibrary(_) => {
+                let symbol_value_owned = symbol.value.clone();
+                let native_syms_owned = self.native_syms.clone();
 
                 lazy!(Lazy::Lambda, {
-                    LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
-                        let body = body.clone();
-                        let lambda_args = (*lambda_args).clone();
-                        for (pos, arg) in args.iter().cloned().enumerate() {
-                            let arg_sym = lambda_args[pos].clone();
-                            lambda_runner.push_var(arg_sym, arg);
-                        }
-
-                        let result = lambda_runner.run(body);
-
-                        for arg in (lambda_args).clone() {
-                            lambda_runner.pop_var(arg);
-                        }
-
-                        result
+                    let native_fn =
+                        native_syms_owned.get(&symbol_value_owned).unwrap().clone();
+                    LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<Lazy>| {
+                        (*native_fn)(args.into_iter().collect())
                     })))
                 })
             }
+            TypedValue::FromBunny(scope) => {
+                let new_scope = scope.clone().map_stage(&mut |info| info.into());
+                self.run(new_scope)
+            }
         }
+    }
+
+    fn run_func_call(&mut self, func: FuncCallSingle<AnyTypedStageInfo>) -> Lazy {
+        let implementation = func.info.syms.get(&func.id.value).expect("scoping err");
+
+        let TypedValue::FromBunny(implementation) = implementation else {
+            let args = self.run_func_args(func.clone());
+            let native = self.native_syms.get(&func.id.value).unwrap();
+            return native(args);
+        };
+
+        match implementation {
+            // i.e., the argument is used as a function
+            Expr::Symbol(symbol) => {
+                self.run_func_call_with_symbol(func.clone(), symbol)
+            }
+            Expr::Lambda(lambda) => {
+                self.run_func_call_with_lambda(func.clone(), lambda)
+            }
+            thing => {
+                self.run_func_call_with_expression(func.clone(), thing)
+            }
+        }
+    }
+
+    fn run_func_call_with_symbol(&mut self, func: FuncCallSingle<AnyTypedStageInfo>, symbol: &Symbol<crate::types::typed::PolyTypedStageInfo>) -> Lazy {
+        let value = Expr::Symbol(symbol.clone())
+            .clone()
+            .map_stage(&mut |info| info.into());
+        let value = self.run(value);
+        let Lazy::Lambda(lambda) = value else {
+            return value;
+        };
+
+        let args = func.args.into_iter().map(|arg| {
+            match arg {
+                Argument::Positional(expr) => {
+                    self.run(expr)
+                },
+                Argument::Named(_) => {
+                    panic!("named arguments are not allowed when passing to an argument-lambda")
+                },
+            }
+        }).collect();
+
+        let lambda_call = (**lambda).clone().func;
+        let mut lambda_call = lambda_call.lock().unwrap();
+        lambda_call(args)
+    }
+
+    fn run_func_call_with_lambda(&mut self, func: FuncCallSingle<AnyTypedStageInfo>, lambda: &crate::ast::Lambda<crate::types::typed::PolyTypedStageInfo>) -> Lazy {
+        let mut lambda_set_args = lambda.clone().map_stage(&mut |info| info.into());
+        let lambda_pop_args = lambda_set_args.clone();
+
+        let mut already_set_arguments = vec![];
+        for (pos, arg) in func.args.iter().cloned().enumerate() {
+            match arg {
+                crate::ast::Argument::Named(named_argument) => {
+                    already_set_arguments.push(named_argument.name.clone());
+                    let arg_value = self.run(*named_argument.value);
+                    self.push_var(named_argument.name.value, arg_value);
+                }
+                crate::ast::Argument::Positional(arg_expr) => {
+                    let arg_sym = lambda.args[pos]
+                        .into_def_argument_symbol()
+                        .map_stage(&mut |info| info.into());
+
+                    already_set_arguments.push(arg_sym.clone());
+                    let arg_value = self.run(arg_expr);
+                    self.push_var(arg_sym.value, arg_value);
+                }
+            }
+        }
+
+        // remove already set arguments
+        for already_set_arg in already_set_arguments {
+            pop_arg_by_name(&mut lambda_set_args.args, &already_set_arg);
+        }
+
+        // apply the default-value for the remaining ones
+        // since this passed the type-checker, we can assume
+        // that earch remaining argument here actually has a default-value
+        for arg in lambda_set_args.args {
+            let name = arg.into_def_argument_symbol();
+            let default_value = arg
+                .into_def_argument_expr()
+                .expect("non-set argument should have a default value");
+            let default_value = self.run(default_value);
+            self.push_var(name.value, default_value);
+        }
+
+        let body = lambda.clone().body.map_stage(&mut |info| info.into());
+        let result = self.run(body);
+
+        for arg in lambda_pop_args.args {
+            self.pop_var(arg.into_def_argument_symbol().value);
+        }
+
+        result
+    }
+
+    fn run_func_call_with_expression(&mut self, func: FuncCallSingle<AnyTypedStageInfo>, thing: &Expr<crate::types::typed::PolyTypedStageInfo>) -> Lazy {
+        let right_thing = thing.clone().map_stage(&mut |info| info.into());
+
+        let Lazy::Lambda(lambda) = self.run(right_thing) else {
+            panic!("argument must be a lambda")
+        };
+
+        let args = func.args.into_iter().map(|arg| {
+            match arg {
+                Argument::Positional(expr) => {
+                    self.run(expr)
+                },
+                Argument::Named(_) => {
+                    panic!("named arguments are not allowed when passing to an argument-lambda")
+                },
+            }
+        }).collect();
+
+        let lambda_call = (**lambda).clone().func;
+        let mut lambda_call = lambda_call.lock().unwrap();
+        lambda_call(args)
+    }
+
+    fn run_lambda(&mut self, lambda: crate::ast::Lambda<AnyTypedStageInfo>) -> Lazy {
+        // A lambda should return a lazy of
+        // a function that takes some arguments and returns a result
+
+        let lambda_args = Arc::new(
+            lambda
+                .args
+                .iter()
+                .map(|arg| arg.into_def_argument_symbol().value.clone())
+                .collect::<Vec<_>>(),
+        );
+
+        let mut lambda_runner = self.clone();
+        let body = (*lambda.clone().body).map_stage(&mut |info| info.into());
+
+        lazy!(Lazy::Lambda, {
+            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
+                let body = body.clone();
+                let lambda_args = (*lambda_args).clone();
+                for (pos, arg) in args.iter().cloned().enumerate() {
+                    let arg_sym = lambda_args[pos].clone();
+                    lambda_runner.push_var(arg_sym, arg);
+                }
+
+                let result = lambda_runner.run(body);
+
+                for arg in (lambda_args).clone() {
+                    lambda_runner.pop_var(arg);
+                }
+
+                result
+            })))
+        })
     }
 
     fn run_func_args(&mut self, f: FuncCallSingle<AnyTypedStageInfo>) -> Vec<Lazy> {
