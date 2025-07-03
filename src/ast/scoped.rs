@@ -733,7 +733,7 @@ mod tests {
                 (+ x y z)
             ))
         )",
-        );
+        )
     }
 
     #[test]
@@ -1085,5 +1085,119 @@ mod tests {
             )
             ",
         )
+    }
+
+
+    #[test]
+    fn function_call_with_all_args_provided() -> Result<()> {
+        scoped_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo 1 2 3)
+                (foo 1 c: 3 b: 2)
+                (foo 1 2 c: 3)
+            )
+            "
+        )
+    }
+
+    #[test]
+    fn function_call_with_too_few_args_provided() {
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo 1)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo 1 2)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo 1 c: 3)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo a: 1 b: 2)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo b: 2 c: 3)
+            )
+            "
+        );
+    }
+
+    #[test]
+    fn function_call_with_too_many_args_provided() {
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo 1 2 3 4)
+            )
+            "
+        );
+    }
+
+    #[test]
+    fn function_call_with_args_provided_multiple_times() {
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo 1 2 3 a: 1)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo 1 2 c: 3 a: 1)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))
+                (foo a: 1 a: 1 b: 2 c: 3)
+            )
+            "
+        );
     }
 }
