@@ -4,7 +4,7 @@ macro_rules! library {
          #[ $(forall $($var:ident),+ )? | $( $name:ident : $arg_ty:expr => )+ @ $ret_ty:expr ]
          fn $func_name:tt ( $($arg_pat:pat),* ) $body:block
        )* ) => {{
-            use crate::ast::scoped::SymbolTable;
+            use $crate::ast::scoped::SymbolTable;
             use $crate::runner::value::Lazy;
 
             let mut scoped: $crate::ast::scoped::SymbolTable<$crate::ast::scoped::ScopedStageInfo> = $crate::ast::scoped::SymbolTable::new();
