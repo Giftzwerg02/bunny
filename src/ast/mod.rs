@@ -908,7 +908,7 @@ impl<I: StageInfo> Lambda<I> {
             .map(|arg| arg.as_code())
             .collect::<Vec<_>>()
             .join(" ");
-        format!("({} {})", FUNC_LAMBDA_KEYWORD, args)
+        format!("({FUNC_LAMBDA_KEYWORD} {args})")
     }
 
     /// Recursively maps the StageInfo from type I to type O using the provided closure f.

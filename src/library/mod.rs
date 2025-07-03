@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use regex::Regex;
 
@@ -40,9 +41,9 @@ pub fn standard_library() -> Library {
         #[forall a, b, c | f1:func1(&a, &b) => f2:func1(&b, &c) => @func1(&a, &c)]
         fn "compose1"(Lazy::Lambda(f1), Lazy::Lambda(f2)) {
             lazy!(Lazy::Lambda, {
-                LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
-                    let mut f1 = f1.func.lock().unwrap();
-                    let mut f2 = f2.func.lock().unwrap();
+                LazyLambda::new(Rc::new(RefCell::new(move |args: Vector<_>| {
+                    let mut f1 = f1.func.borrow_mut();
+                    let mut f2 = f2.func.borrow_mut();
                     f2(vec![f1(args)].into())
                 })))
             })
@@ -50,7 +51,7 @@ pub fn standard_library() -> Library {
 
         #[forall a, b | f:func1(&a, &b) => input:a => @b]
         fn "apply1"(Lazy::Lambda(f), input) {
-            let mut f = f.func.lock().unwrap();
+            let mut f = f.func.borrow_mut();
             f(vec![input].into())
         }
 
@@ -126,7 +127,6 @@ pub fn standard_library() -> Library {
                     .split(delimiter.as_str())
                     .map(|s: &str| lazy!(Lazy::String, s.into()))
                     .collect::<Vector<Lazy>>()
-                    .into()
             })
         }
 
@@ -163,7 +163,7 @@ pub fn standard_library() -> Library {
         #[forall a, b | fun:func1(&a, &b) => arr:array(&a) => @array(&b) ]
         fn "map"(Lazy::Lambda(fun), Lazy::Array(arr)) {
             lazy!(Lazy::Array, {
-                let mut f = fun.func.lock().unwrap();
+                let mut f = fun.func.borrow_mut();
                 let mut res = vec![];
                 for elem in eval!(arr) {
                     let mapped = f(vec![elem].into());
@@ -175,7 +175,7 @@ pub fn standard_library() -> Library {
 
         #[forall a, b | fun:func2(&b, &a, &b) => fst:b => arr:array(&a) => @b]
         fn "foldl" (Lazy::Lambda(fun), fst, Lazy::Array(arr)) {
-            let mut f = fun.func.lock().unwrap();
+            let mut f = fun.func.borrow_mut();
             let mut acc = fst;
             for elem in eval!(arr) {
                 acc = f(vec![acc, elem].into());

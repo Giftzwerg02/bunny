@@ -1,9 +1,9 @@
 use std::cell::LazyCell;
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::rc::Rc;
 
 use esvg::Element;
 use im::HashMap;
@@ -17,7 +17,7 @@ use crate::types::hm::Type;
 use crate::types::hm::TypeVar;
 
 pub type LambdaFunc = dyn FnMut(Vector<Lazy>) -> Lazy;
-pub type LambdaFuncWrap = Arc<Mutex<LambdaFunc>>;
+pub type LambdaFuncWrap = Rc<RefCell<LambdaFunc>>;
 
 #[derive(Clone)]
 pub struct LazyLambda {
@@ -37,7 +37,7 @@ impl Debug for LazyLambda {
 }
 
 // pub type ValueLambda = fn(Vector<Value>) -> Value;
-pub type LazyType<T> = Arc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
+pub type LazyType<T> = Rc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
 
 #[derive(Debug, Clone)]
 pub enum Lazy {
@@ -284,7 +284,7 @@ macro_rules! lazy {
     }};
     ($type:path, $value:expr) => {{
         let callback = Box::new(move || $value);
-        $type(::std::sync::Arc::new(core::cell::LazyCell::new(callback)))
+        $type(::std::rc::Rc::new(core::cell::LazyCell::new(callback)))
     }};
     (fromtype[$t:ident], $value:expr) => {{
             let lt = $crate::runner::value::resolve_to_lazy_type($t.clone());

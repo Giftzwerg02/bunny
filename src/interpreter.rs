@@ -70,7 +70,7 @@ impl Interpreter {
     }
 
     pub fn add_predefined_variable(&mut self, key: String, value: String) -> Result<(Value, Type)> {
-        self.run(format!("(def {} {})", key, value), "script-arguments".to_owned())
+        self.run(format!("(def {key} {value})"), "script-arguments".to_owned())
     }
 }
 

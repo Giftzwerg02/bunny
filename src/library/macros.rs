@@ -24,10 +24,11 @@ macro_rules! library {
                     info.clone(),
                 );
 
-                let mut args = vec![];
-                $(args.push(
-                    $crate::ast::Argument::Positional($crate::ast::Expr::Symbol($crate::ast::Symbol::new(stringify!($name).to_string(), info.clone())))
-                );)+
+                let args = vec![
+                    $(
+                        $crate::ast::Argument::Positional($crate::ast::Expr::Symbol($crate::ast::Symbol::new(stringify!($name).to_string(), info.clone()))),
+                    )+
+                ];
 
                 scoped.insert(
                     name.to_string(),

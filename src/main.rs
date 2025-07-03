@@ -248,7 +248,7 @@ fn main() -> Result<()> {
             if result.is_renderable() {
                 output_svg(&result, &cli.render_config)?;
             } else {
-                println!("{}", result);
+                println!("{result}");
             }
 
             Ok(())
@@ -318,7 +318,7 @@ fn main() -> Result<()> {
                         break;
                     }
                     x => {
-                        println!("Event: {:?}", x)
+                        println!("Event: {x:?}")
                     }
                 }
             }

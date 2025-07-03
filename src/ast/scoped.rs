@@ -204,8 +204,8 @@ pub fn scoped_expr_pass(
 
                         let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
                         for (s, val) in similar_vars {
-                            if let SymbolValue::FunctionDefinition(lambda) = val {
-                                if let Some(parsed) = lambda.info.inner {
+                            if let SymbolValue::FunctionDefinition(lambda) = val
+                                && let Some(parsed) = lambda.info.inner {
                                     let lambda_token = create_source(parsed);
                                     let span = LabeledSpan::at(
                                         lambda_token,
@@ -213,7 +213,6 @@ pub fn scoped_expr_pass(
                                     );
                                     labels.push(span);
                                 }
-                            }
                         }
 
                         let report = miette!(
@@ -251,7 +250,7 @@ pub fn scoped_expr_pass(
                             .into_iter()
                             .map(|a| match a {
                                 Argument::Positional(Expr::Symbol(a)) => (a, false, None),
-                                Argument::Named(NamedArgument { name, value, info }) => {
+                                Argument::Named(NamedArgument { name, value, info: _ }) => {
                                     (name, false, Some(value))
                                 }
                                 _ => panic!("invalid ast"),
@@ -438,14 +437,13 @@ pub fn scoped_expr_pass(
 
                 let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
                 for (s, val) in similar_vars {
-                    if let SymbolValue::FunctionDefinition(lambda) = val {
-                        if let Some(parsed) = lambda.info.inner {
+                    if let SymbolValue::FunctionDefinition(lambda) = val
+                        && let Some(parsed) = lambda.info.inner {
                             let lambda_token = create_source(parsed);
                             let span =
                                 LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
                             labels.push(span);
                         }
-                    }
                 }
 
                 let report = miette!(

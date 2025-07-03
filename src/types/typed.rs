@@ -7,6 +7,7 @@ use crate::types::hm::{HMState, PolyType, Type};
 
 pub type TypedSymbolTable = HashMap<String, TypedValue>;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum TypedValue {
     FromLibrary(PolyType),

@@ -336,7 +336,7 @@ impl Display for Type {
                 write!(f, "{}", tv.borrow()),
 
             Type::Basic(name) =>
-                write!(f, "{}", name),
+                write!(f, "{name}"),
 
             Type::TApp(name, vars) => {
               let vars_str = vars
@@ -345,11 +345,11 @@ impl Display for Type {
                   .collect::<Vec<String>>()
                   .join(" ");
 
-                write!(f, "{}[{}]", name, vars_str)
+                write!(f, "{name}[{vars_str}]")
             },
 
             Type::Fn(arg, ret) =>
-                write!(f, "{} -> {}", arg, ret)
+                write!(f, "{arg} -> {ret}")
         }
     }
 }
@@ -358,10 +358,10 @@ impl Display for TypeVar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             TypeVar::Bound(t) =>
-                write!(f, "{}", t),
+                write!(f, "{t}"),
 
             TypeVar::Unbound(tv_id, _) =>
-                write!(f, "'{}", tv_id)
+                write!(f, "'{tv_id}")
         }
     }
 }

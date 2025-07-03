@@ -1,6 +1,5 @@
 use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex}
+    cell::RefCell, collections::HashMap, rc::Rc, sync::{Arc}
 };
 
 use im::Vector;
@@ -183,7 +182,7 @@ impl Runner {
                 lazy!(Lazy::Lambda, {
                     let native_fn =
                         native_syms_owned.get(&symbol_value_owned).unwrap().clone();
-                    LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<Lazy>| {
+                    LazyLambda::new(Rc::new(RefCell::new(move |args: Vector<Lazy>| {
                         (*native_fn)(args.into_iter().collect())
                     })))
                 })
@@ -238,8 +237,7 @@ impl Runner {
             }
         }).collect();
 
-        let lambda_call = (**lambda).clone().func;
-        let mut lambda_call = lambda_call.lock().unwrap();
+        let lambda_call = &mut lambda.func.borrow_mut();
         lambda_call(args)
     }
 
@@ -313,8 +311,7 @@ impl Runner {
             }
         }).collect();
 
-        let lambda_call = (**lambda).clone().func;
-        let mut lambda_call = lambda_call.lock().unwrap();
+        let lambda_call = &mut lambda.func.borrow_mut();
         lambda_call(args)
     }
 
@@ -331,10 +328,10 @@ impl Runner {
         );
 
         let mut lambda_runner = self.clone();
-        let body = (*lambda.clone().body).map_stage(&mut |info| info.into());
+        let body = (*lambda.clone().body).map_stage(&mut |info| info);
 
         lazy!(Lazy::Lambda, {
-            LazyLambda::new(Arc::new(Mutex::new(move |args: Vector<_>| {
+            LazyLambda::new(Rc::new(RefCell::new(move |args: Vector<_>| {
                 let body = body.clone();
                 let lambda_args = (*lambda_args).clone();
                 for (pos, arg) in args.iter().cloned().enumerate() {

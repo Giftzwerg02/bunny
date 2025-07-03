@@ -145,7 +145,7 @@ pub fn parsed_expr_pass(pair: Pair) -> Result<Expr<ParsedStageInfo>> {
                 Rule::normal_func_call | Rule::def_func_call | Rule::lambda_func_call => {
                     parsed_expr_pass(next)
                 }
-                _ => return Err(parse_error("illegal function call rule", Some(&next))),
+                _ => Err(parse_error("illegal function call rule", Some(&next))),
             }
         }
         Rule::def_func_call => {
@@ -226,7 +226,7 @@ pub fn parsed_expr_pass(pair: Pair) -> Result<Expr<ParsedStageInfo>> {
             }
         }
         Rule::named_argument | Rule::positional_argument => {
-            return Err(parse_error("arguments should not be parsed directly", Some(&pair)));
+            Err(parse_error("arguments should not be parsed directly", Some(&pair)))
         }
         Rule::identifier | Rule::def_id | Rule::lambda_id => Ok(Expr::Symbol(Symbol::new(text.to_string(), info(pair)))),
         Rule::int => {
@@ -252,7 +252,7 @@ pub fn parsed_expr_pass(pair: Pair) -> Result<Expr<ParsedStageInfo>> {
                 Ok(Expr::Color(Color::new(r, g, b, 255, info(pair))))
             }
         },
-        _ => return Err(parse_error(&format!("unsupported parser rule: {:?}", pair.as_rule()), Some(&pair))),
+        _ => Err(parse_error(&format!("unsupported parser rule: {:?}", pair.as_rule()), Some(&pair))),
     }
 }
 

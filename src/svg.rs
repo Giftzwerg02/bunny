@@ -28,7 +28,7 @@ pub fn output_svg(val: &Value, config: &RenderConfig) -> Result<()> {
             .map_err(|err| miette!("Error writing to file: {err}"))?;
     }
     else {
-        println!("{}", svg)
+        println!("{svg}")
     }
 
     Ok(())
