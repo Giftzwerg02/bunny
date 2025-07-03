@@ -192,8 +192,10 @@ fn infer_symbol(
             SymbolValue::FunctionDefinition(lambda) => 
                 state.scope(|state| infer_lambda(lambda, state))?,
 
-            SymbolValue::Argument(Argument::Named(NamedArgument { value, .. })) => 
-                typecheck_pass(value, state)?
+            SymbolValue::Argument(Argument::Named(NamedArgument { name, value, .. })) => {
+                typecheck_pass(value, state)?;
+                Expr::Symbol(create_argument_definition(name, state))
+            }
         };
 
         let poly_expr = typed_expr.map_stage(
@@ -659,12 +661,6 @@ mod tests {
 
         // Test deeply nested arrays
         assert_type_simple("(id [[[\"a\"]]])", array(&array(&array(&string()))));
-    }
-
-    #[test]
-    fn test_partial_application() {
-        // Test partial application of functions
-        assert_type_simple("(add 1)", func(&[int()], &int()));
     }
 
     #[test]

@@ -24,7 +24,10 @@ fn create_source(source: ParsedStageInfo) -> SourceSpan {
     (span.start(), span.end() - span.start()).into()
 }
 
-fn find_similar_vars(wrong_name: &str, syms: &SymbolTable<ScopedStageInfo>) -> Vec<(String, SymbolValue<ScopedStageInfo>)> {
+fn find_similar_vars(
+    wrong_name: &str,
+    syms: &SymbolTable<ScopedStageInfo>,
+) -> Vec<(String, SymbolValue<ScopedStageInfo>)> {
     fn is_similar(a: &str, b: &str, threshold: f64) -> bool {
         normalized_levenshtein(a, b) >= threshold
     }
@@ -32,9 +35,10 @@ fn find_similar_vars(wrong_name: &str, syms: &SymbolTable<ScopedStageInfo>) -> V
     // NOTE: I carefully chose this value completely at random
     let threshold = 0.7;
 
-    syms.inner.iter()
-        .filter(|(k,_)| is_similar(wrong_name, k, threshold))
-        .map(|(k,v)| (k.clone(), v.clone()))
+    syms.inner
+        .iter()
+        .filter(|(k, _)| is_similar(wrong_name, k, threshold))
+        .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
 }
 
@@ -179,22 +183,34 @@ pub fn scoped_expr_pass(
             match func_call {
                 FuncCall::Single(func_call_single) => {
                     // 1. check if function exists
-                    if !syms.contains(&func_call_single.id.value) {
+                    let Some(func_def) = syms.get(&func_call_single.id.value) else {
                         let token = create_source(func_call_single.id.info);
                         let similar_vars = find_similar_vars(&func_call_single.id.value, syms);
                         let help = match &similar_vars[..] {
-                            [] => format!("A definition is anything in the form of: (def {} ...)", func_call_single.id.value),
+                            [] => format!(
+                                "A definition is anything in the form of: (def {} ...)",
+                                func_call_single.id.value
+                            ),
                             [(a, _)] => format!("A similar name was found: {a}"),
-                            multiple => format!("Multiple similar names were found: {}", multiple.iter().map(|(s,_)| s.clone()).collect::<Vec<String>>().join(", "))
+                            multiple => format!(
+                                "Multiple similar names were found: {}",
+                                multiple
+                                    .iter()
+                                    .map(|(s, _)| s.clone())
+                                    .collect::<Vec<String>>()
+                                    .join(", ")
+                            ),
                         };
-
 
                         let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
                         for (s, val) in similar_vars {
                             if let SymbolValue::FunctionDefinition(lambda) = val {
                                 if let Some(parsed) = lambda.info.inner {
                                     let lambda_token = create_source(parsed);
-                                    let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
+                                    let span = LabeledSpan::at(
+                                        lambda_token,
+                                        format!("\"{s}\" defined here"),
+                                    );
                                     labels.push(span);
                                 }
                             }
@@ -204,11 +220,12 @@ pub fn scoped_expr_pass(
                             labels = labels,
                             help = help,
                             code = "undefined function call",
-                            "Function \"{}\" is not defined.", func_call_single.id.value
+                            "Function \"{}\" is not defined.",
+                            func_call_single.id.value
                         );
 
                         return Err(report);
-                    }
+                    };
 
                     // 2. check if it is the def-function (special handling)
                     // (def <name> (<arg1> <arg2> <arg3>) (<body>))
@@ -225,11 +242,143 @@ pub fn scoped_expr_pass(
                     } else if func_call_single.is_lambda() {
                         Expr::Lambda(handle_lambda(func_call_single, syms)?)
                     } else {
+                        let SymbolValue::FunctionDefinition(func_def) = func_def else {
+                            panic!("here")
+                        };
+                        let mut func_def_args = func_def
+                            .args
+                            .clone()
+                            .into_iter()
+                            .map(|a| match a {
+                                Argument::Positional(Expr::Symbol(a)) => (a, false, None),
+                                Argument::Named(NamedArgument { name, value, info }) => {
+                                    (name, false, Some(value))
+                                }
+                                _ => panic!("invalid ast"),
+                            })
+                            .collect::<Vec<_>>();
+
                         let mapped_args = func_call_single
                             .args
+                            .clone()
                             .into_iter()
                             .map(|arg| pass_arg(arg, syms))
                             .collect::<Result<Vec<_>>>()?;
+
+                        for (idx, arg) in mapped_args.iter().enumerate() {
+                            match arg {
+                                Argument::Positional(pos_argument) => {
+                                    let Some(def_arg) = func_def_args.get_mut(idx) else {
+                                        let token = create_source(
+                                            pos_argument.info().clone().inner.expect("exists"),
+                                        );
+                                        let labels =
+                                            vec![LabeledSpan::at(token, "excessive argument")];
+
+                                        let report = miette!(
+                                            labels = labels,
+                                            help = "Too many positional arguments were provided to a function",
+                                            code = "Too many arguments",
+                                            "The function only takes {} arguments, but {} were provided",
+                                            func_def_args.len(),
+                                            mapped_args.len()
+                                        );
+
+                                        return Err(report);
+                                    };
+
+                                    if def_arg.1 {
+                                        let token = create_source(
+                                            pos_argument.info().clone().inner.expect("exists"),
+                                        );
+                                        let mut labels = vec![LabeledSpan::at(token, "duplicate")];
+
+                                        if let Some(arg_def) = &def_arg.0.info.inner {
+                                            let token = create_source(arg_def.clone());
+                                            labels.push(LabeledSpan::at(token, "defined here"));
+                                        }
+
+                                        let report = miette!(
+                                            labels = labels,
+                                            help = "An argument was provided more than once",
+                                            code = "Duplicate argument",
+                                            "Duplicate argument: {}",
+                                            def_arg.0.value
+                                        );
+
+                                        return Err(report);
+                                    } else {
+                                        def_arg.1 = true;
+                                    }
+                                }
+                                Argument::Named(named_argument) => {
+                                    let Some(matched) =
+                                        func_def_args.iter_mut().find(|(def_arg, _, _)| {
+                                            named_argument.name.value == def_arg.value
+                                        })
+                                    else {
+                                        let token = create_source(
+                                            named_argument.clone().info.inner.expect("exists"),
+                                        );
+                                        let labels = vec![LabeledSpan::at(token, "unknown")];
+                                        let report = miette!(
+                                            labels = labels,
+                                            help = "A named argument was provided whose name does not occur in the function definition",
+                                            code = "Unknown named argument",
+                                            "Unknown named argument: {}",
+                                            named_argument.name.value
+                                        );
+
+                                        return Err(report);
+                                    };
+
+                                    if matched.1 {
+                                        let token = create_source(
+                                            named_argument.clone().info.inner.expect("exists"),
+                                        );
+                                        let mut labels = vec![LabeledSpan::at(token, "duplicate")];
+
+                                        if let Some(arg_def) = &matched.0.info.inner {
+                                            let token = create_source(arg_def.clone());
+                                            labels.push(LabeledSpan::at(token, "defined here"));
+                                        }
+
+                                        let report = miette!(
+                                            labels = labels,
+                                            help = "An argument was provided more than once",
+                                            code = "Duplicate argument",
+                                            "Duplicate argument: {}",
+                                            named_argument.name.value
+                                        );
+
+                                        return Err(report);
+                                    } else {
+                                        matched.1 = true;
+                                    }
+                                }
+                            }
+                        }
+
+                        if !func_def_args.iter().all(|(_, checked, default)| *checked || default.is_some()) {
+                            let token = create_source(func_call_single.clone().info);
+                            let mut labels = vec![LabeledSpan::at(token, "call here")];
+
+                            if let Some(arg_def) = &func_def.info.inner {
+                                let token = create_source(arg_def.clone());
+                                labels.push(LabeledSpan::at(token, "defined here"));
+                            }
+
+                            let report = miette!(
+                                labels = labels,
+                                help = "Too few arguments were provided",
+                                code = "Too few arguments",
+                                "The function call only provided {} arguments, but {} were expected",
+                                mapped_args.len(),
+                                func_def_args.len()
+                            );
+
+                            return Err(report);
+                        }
 
                         let ret = FuncCall::Single(FuncCallSingle::new(
                             pass_symbol(func_call_single.id, syms.clone()),
@@ -264,23 +413,36 @@ pub fn scoped_expr_pass(
             }
         }
         Expr::Symbol(symbol) => {
-            let s = Symbol::new(symbol.value.clone(), info(symbol.info.clone(), syms.clone()));
+            let s = Symbol::new(
+                symbol.value.clone(),
+                info(symbol.info.clone(), syms.clone()),
+            );
             if !syms.contains(&symbol.value) {
                 let token = create_source(symbol.info);
                 let similar_vars = find_similar_vars(&symbol.value, syms);
                 let help = match &similar_vars[..] {
-                    [] => format!("A definition is anything in the form of: (def {} ...)", symbol.value),
+                    [] => format!(
+                        "A definition is anything in the form of: (def {} ...)",
+                        symbol.value
+                    ),
                     [(a, _)] => format!("A similar name was found: {a}"),
-                    multiple => format!("Multiple similar names were found: {}", multiple.iter().map(|(s,_)| s.clone()).collect::<Vec<String>>().join(", "))
+                    multiple => format!(
+                        "Multiple similar names were found: {}",
+                        multiple
+                            .iter()
+                            .map(|(s, _)| s.clone())
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    ),
                 };
-
 
                 let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
                 for (s, val) in similar_vars {
                     if let SymbolValue::FunctionDefinition(lambda) = val {
                         if let Some(parsed) = lambda.info.inner {
                             let lambda_token = create_source(parsed);
-                            let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
+                            let span =
+                                LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
                             labels.push(span);
                         }
                     }
@@ -290,7 +452,8 @@ pub fn scoped_expr_pass(
                     labels = labels,
                     help = help,
                     code = "undefined function call",
-                    "Function \"{}\" is not defined.", symbol.value
+                    "Function \"{}\" is not defined.",
+                    symbol.value
                 );
 
                 return Err(report);
@@ -310,10 +473,7 @@ fn pass_symbol(
     Symbol::new(symbol.value.clone(), info(symbol.info.clone(), table))
 }
 
-fn info(
-    parsed: ParsedStageInfo,
-    syms: SymbolTable<ScopedStageInfo>,
-) -> ScopedStageInfo {
+fn info(parsed: ParsedStageInfo, syms: SymbolTable<ScopedStageInfo>) -> ScopedStageInfo {
     info_opt(Some(parsed), syms)
 }
 
@@ -338,9 +498,10 @@ fn find_non_unique_args<I: StageInfo>(args: &[Argument<I>]) -> Vec<Argument<I>> 
         }
     }
 
-    found.into_iter()
-        .filter(|(_,v)| v.len() > 1)
-        .flat_map(|(_,v)| v)
+    found
+        .into_iter()
+        .filter(|(_, v)| v.len() > 1)
+        .flat_map(|(_, v)| v)
         .collect()
 }
 
@@ -360,7 +521,7 @@ fn pass_arg_def(
             Argument::Named(NamedArgument::new(
                 name,
                 expr.clone(),
-                info_opt(expr.info().inner.clone(), syms.clone()),
+                info_opt(Some(named_argument.info.clone()), syms.clone()),
             ))
         }
     };
@@ -381,7 +542,7 @@ fn pass_arg(
             Argument::Named(NamedArgument::new(
                 name,
                 expr.clone(),
-                info_opt(expr.info().inner.clone(), syms.clone()),
+                info_opt(Some(named_argument.info.clone()), syms.clone()),
             ))
         }
     };
@@ -590,14 +751,22 @@ mod tests {
 
         syms.insert("def".to_string(), SymbolValue::Defined);
         syms.insert(r"\".to_string(), SymbolValue::Defined);
-        let empty = Lambda::constant(empty_func_expr(info.clone()), info);
-        syms.insert("+".to_string(), empty.into());
+
+        let empty = Lambda::constant(empty_func_expr(info.clone()), info.clone());
+
+        let plus = Lambda::parametric(
+            vec![
+                Argument::Positional(Expr::Symbol(Symbol::new("a".to_string(), info.clone()))),
+                Argument::Positional(Expr::Symbol(Symbol::new("b".to_string(), info.clone()))),
+            ],
+            Expr::Lambda(empty),
+            info,
+        );
+        syms.insert("+".to_string(), plus.into());
 
         let parsed_expr = parsed_expr_pass(pair)?;
         scoped_expr_pass(parsed_expr, &syms)
-            .map_err(|report| {
-                report.with_source_code(code.to_string())
-            })?;
+            .map_err(|report| report.with_source_code(code.to_string()))?;
         Ok(())
     }
 
@@ -612,8 +781,17 @@ mod tests {
 
         syms.insert("def".to_string(), SymbolValue::Defined);
         syms.insert(r"\".to_string(), SymbolValue::Defined);
-        let empty = Lambda::constant(empty_func_expr(info.clone()), info);
-        syms.insert("+".to_string(), empty.into());
+        let empty = Lambda::constant(empty_func_expr(info.clone()), info.clone());
+
+        let plus = Lambda::parametric(
+            vec![
+                Argument::Positional(Expr::Symbol(Symbol::new("a".to_string(), info.clone()))),
+                Argument::Positional(Expr::Symbol(Symbol::new("b".to_string(), info.clone()))),
+            ],
+            Expr::Lambda(empty),
+            info,
+        );
+        syms.insert("+".to_string(), plus.into());
 
         let parsed_expr = parsed_expr_pass(pair).unwrap();
         let result = scoped_expr_pass(parsed_expr, &syms);
@@ -673,7 +851,7 @@ mod tests {
         scoped_test(
             "(
             (def a (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
         )",
         )
@@ -684,7 +862,7 @@ mod tests {
         scoped_panic_test(
             "(
             (def a (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
             (x)
         )",
@@ -693,7 +871,7 @@ mod tests {
         scoped_panic_test(
             "(
             (def a (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
             (y)
         )",
@@ -702,7 +880,7 @@ mod tests {
         scoped_panic_test(
             "(
             (def a (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
             (z)
         )",
@@ -712,7 +890,7 @@ mod tests {
             "(
             (x)
             (def a (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
         )",
         );
@@ -721,7 +899,7 @@ mod tests {
             "(
             (y)
             (def a (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
         )",
         );
@@ -730,7 +908,7 @@ mod tests {
             "(
             (z)
             (def a (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
         )",
         )
@@ -742,7 +920,7 @@ mod tests {
             "(
             (def a (x y z) (
                 (def b (foo bar baz) (
-                    (+ x y z foo bar baz)
+                    (+ x (+ y (+ z (+ foo (+ bar baz)))))
                 ))
                 (b 4 5 6)
             ))
@@ -759,7 +937,7 @@ mod tests {
                 (+ bar baz)
             ))
             (def a (x y z) (
-                (+ x y z (foo 3 4))
+                (+ x (+ y (+ z (foo 3 4))))
             ))
             (a 1 2 3)
         )",
@@ -770,7 +948,7 @@ mod tests {
     fn arguments_can_be_set_by_their_name() -> Result<()> {
         scoped_test(
             "(
-                (def a (foo bar baz) (+ foo bar baz))
+                (def a (foo bar baz) (+ foo (+ bar baz)))
                 (a foo: 1 bar: 2 baz: 3)
         )",
         )
@@ -804,10 +982,10 @@ mod tests {
             (
                 (def a (b) (
                     (def inner 5) 
-                    (+ 1 b inner)
+                    (+ 1 (+ b inner))
                 ))
                 (def foo (bar) (
-                    (+ 2 bar inner)
+                    (+ 2 (+ bar inner))
                 ))
                 (a (foo 3)) 
             )
@@ -819,10 +997,10 @@ mod tests {
             (
                 (def a (b) (
                     (def inner 5) 
-                    (+ 1 b inner)
+                    (+ 1 (+ b inner))
                 ))
                 (def foo (bar) (
-                    (+ 2 bar b)
+                    (+ 2 (+ bar b))
                 ))
                 (a (foo 3)) 
             )
@@ -834,11 +1012,11 @@ mod tests {
             (
                 (def foo (bar) (
                     (def inner 5)
-                    (+ 1 2 inner bar)
+                    (+ 1 (+ 2 (+ inner bar)))
                 ))
                 (def a (b) (
                     (def res (foo 1)) 
-                    (+ inner res b)
+                    (+ inner (+ res b))
                 ))
                 (a 4) 
             )
@@ -850,11 +1028,11 @@ mod tests {
             (
                 (def foo (bar) (
                     (def inner 5)
-                    (+ 1 2 inner bar)
+                    (+ 1 (+ 2 (+ inner bar)))
                 ))
                 (def a (b) (
                     (def res (foo 1)) 
-                    (+ bar res b)
+                    (+ bar (+ res b))
                 ))
                 (a 4) 
             )
@@ -867,7 +1045,7 @@ mod tests {
         scoped_test(
             r"(
             (\ (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
         )",
         )
@@ -878,7 +1056,7 @@ mod tests {
         scoped_panic_test(
             r"(
             (\ (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
             (x)
         )",
@@ -887,7 +1065,7 @@ mod tests {
         scoped_panic_test(
             r"(
             (\ (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
             (y)
         )",
@@ -896,7 +1074,7 @@ mod tests {
         scoped_panic_test(
             r"(
             (\ (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
             (z)
         )",
@@ -906,7 +1084,7 @@ mod tests {
             r"(
             (x)
             (\ (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
         )",
         );
@@ -915,7 +1093,7 @@ mod tests {
             r"(
             (y)
             (\ (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
         )",
         );
@@ -924,7 +1102,7 @@ mod tests {
             r"(
             (z)
             (\ (x y z) (
-                (+ x y z)
+                (+ x (+ y z))
             ))
         )",
         );
@@ -936,7 +1114,7 @@ mod tests {
             r"(
             (\ (x y z) (
                 (\ (foo bar baz) (
-                    (+ x y z foo bar baz)
+                    (+ x (+ y (+ z (+ foo (+ bar baz)))))
                 ))
             ))
         )",
@@ -965,7 +1143,7 @@ mod tests {
                 (def a (x y z) (
                     (\ (foo bar baz) (
                         (def test 5)
-                        (+ test x y z foo bar baz)
+                        (+ test (+ x (+ y (+ z (+ foo (+ bar baz))))))
                     ))
                 )) 
                 (a 1 2 3)
@@ -1087,7 +1265,6 @@ mod tests {
         )
     }
 
-
     #[test]
     fn function_call_with_all_args_provided() -> Result<()> {
         scoped_test(
@@ -1098,7 +1275,7 @@ mod tests {
                 (foo 1 c: 3 b: 2)
                 (foo 1 2 c: 3)
             )
-            "
+            ",
         )
     }
 
@@ -1110,7 +1287,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1119,7 +1296,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo 1)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1128,7 +1305,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo 1 2)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1137,7 +1314,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo 1 c: 3)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1146,7 +1323,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo a: 1 b: 2)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1155,7 +1332,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo b: 2 c: 3)
             )
-            "
+            ",
         );
     }
 
@@ -1167,7 +1344,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo 1 2 3 4)
             )
-            "
+            ",
         );
     }
 
@@ -1179,7 +1356,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo 1 2 3 a: 1)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1188,7 +1365,7 @@ mod tests {
                 (def foo (a b c) (+ a (+ b c)))
                 (foo 1 2 c: 3 a: 1)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1196,6 +1373,117 @@ mod tests {
             (
                 (def foo (a b c) (+ a (+ b c)))
                 (foo a: 1 a: 1 b: 2 c: 3)
+            )
+            ",
+        );
+    }
+
+    #[test]
+    fn function_call_with_unknown_named_argument() {
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b c) (+ a (+ b c)))   
+                (foo a: 1 b: 2 d: 3)
+            )
+            ",
+        );
+    }
+
+    #[test]
+    fn function_call_with_too_few_args_but_with_defaults() -> Result<()> {
+        scoped_test(
+            r"
+            (
+                (def foo (a b: 2 c) (+ a (+ b c)))
+                (foo 1 c: 3)
+            )
+            "
+        )?;
+
+
+        scoped_test(
+            r"
+            (
+                (def foo (a b: 2 c) (+ a (+ b c)))
+                (foo a: 1 c: 3)
+            )
+            "
+        )?;
+
+        scoped_test(
+            r"
+            (
+                (def foo (a b: 2 c) (+ a (+ b c)))
+                (foo a: 1 b: 2 c: 3)
+            )
+            "
+        )?;
+
+        scoped_test(
+            r"
+            (
+                (def foo (a b: 2 c: 3) (+ a (+ b c)))
+                (foo 1)
+            )
+            "
+        )?;
+
+
+        scoped_test(
+            r"
+            (
+                (def foo (a b: 2 c: 3) (+ a (+ b c)))
+                (foo a: 1)
+            )
+            "
+        )?;
+
+        scoped_test(
+            r"
+            (
+                (def foo (a: 1 b: 2 c: 3) (+ a (+ b c)))
+                (foo a: 1)
+            )
+            "
+        )?;
+
+        scoped_test(
+            r"
+            (
+                (def foo (a: 1 b: 2 c: 3) (+ a (+ b c)))
+                (foo)
+            )
+            "
+        )
+    }
+
+
+    #[test]
+    fn function_call_with_too_few_args_and_too_few_defaults() {
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a b: 2 c) (+ a (+ b c)))   
+                (foo 1)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a: 1 b: 2 c) (+ a (+ b c)))   
+                (foo 1)
+            )
+            "
+        );
+
+        scoped_panic_test(
+            r"
+            (
+                (def foo (a: 1 b: 2 c) (+ a (+ b c)))   
+                (foo a: 1)
             )
             "
         );

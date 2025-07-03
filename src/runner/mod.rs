@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex}, task::Wake,
 };
 
 use im::Vector;
@@ -161,9 +161,15 @@ impl Runner {
         // We are inside some func-call, meaning a variable could either come from:
         // 1. An immediately preceeding "let-binding" (def foo ...)
         // 2. From the outer scope which is stored on the SymbolStack
+        // 3. A default argument
+        //
+        // Choosing the value should be treated in this order, i.e. default arguments have
+        // the least priority while local let-bindings have the highest priority
         //
         // Therefore, if the symbol resolves to an argument we need to check the
         // SymbolStack
+        
+
 
         let Some(scope) = symbol.info.syms.get(&symbol.value) else {
             return self.read_var(symbol.value);
@@ -279,6 +285,7 @@ impl Runner {
         }
 
         let body = lambda.clone().body.map_stage(&mut |info| info.into());
+
         let result = self.run(body);
 
         for arg in lambda_pop_args.args {
