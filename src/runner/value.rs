@@ -36,7 +36,6 @@ impl Debug for LazyLambda {
     }
 }
 
-// pub type ValueLambda = fn(Vector<Value>) -> Value;
 pub type LazyType<T> = Rc<LazyCell<T, Box<dyn FnOnce() -> T>>>;
 
 #[derive(Debug, Clone)]
