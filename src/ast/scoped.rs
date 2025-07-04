@@ -205,14 +205,13 @@ pub fn scoped_expr_pass(
                         let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
                         for (s, val) in similar_vars {
                             if let SymbolValue::FunctionDefinition(lambda) = val
-                                && let Some(parsed) = lambda.info.inner {
-                                    let lambda_token = create_source(parsed);
-                                    let span = LabeledSpan::at(
-                                        lambda_token,
-                                        format!("\"{s}\" defined here"),
-                                    );
-                                    labels.push(span);
-                                }
+                                && let Some(parsed) = lambda.info.inner
+                            {
+                                let lambda_token = create_source(parsed);
+                                let span =
+                                    LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
+                                labels.push(span);
+                            }
                         }
 
                         let report = miette!(
@@ -242,7 +241,19 @@ pub fn scoped_expr_pass(
                         Expr::Lambda(handle_lambda(func_call_single, syms)?)
                     } else {
                         let SymbolValue::FunctionDefinition(func_def) = func_def else {
-                            panic!("here")
+                            let token = create_source(func_call_single.info);
+                            let labels = vec![
+                                LabeledSpan::at(token, "here")
+                            ];
+                            let report = miette!(
+                                labels = labels,
+                                help = "An argument is directly called as a function which is not supported - use a function like `apply1` instead.",
+                                code = "Argument used as a function",
+                                "Argument used as a function: {}",
+                                func_call_single.id.value
+                            );
+
+                            return Err(report);
                         };
                         let mut func_def_args = func_def
                             .args
@@ -250,9 +261,11 @@ pub fn scoped_expr_pass(
                             .into_iter()
                             .map(|a| match a {
                                 Argument::Positional(Expr::Symbol(a)) => (a, false, None),
-                                Argument::Named(NamedArgument { name, value, info: _ }) => {
-                                    (name, false, Some(value))
-                                }
+                                Argument::Named(NamedArgument {
+                                    name,
+                                    value,
+                                    info: _,
+                                }) => (name, false, Some(value)),
                                 _ => panic!("invalid ast"),
                             })
                             .collect::<Vec<_>>();
@@ -358,7 +371,10 @@ pub fn scoped_expr_pass(
                             }
                         }
 
-                        if !func_def_args.iter().all(|(_, checked, default)| *checked || default.is_some()) {
+                        if !func_def_args
+                            .iter()
+                            .all(|(_, checked, default)| *checked || default.is_some())
+                        {
                             let token = create_source(func_call_single.clone().info);
                             let mut labels = vec![LabeledSpan::at(token, "call here")];
 
@@ -438,12 +454,12 @@ pub fn scoped_expr_pass(
                 let mut labels = vec![LabeledSpan::at(token, "This name is not defined")];
                 for (s, val) in similar_vars {
                     if let SymbolValue::FunctionDefinition(lambda) = val
-                        && let Some(parsed) = lambda.info.inner {
-                            let lambda_token = create_source(parsed);
-                            let span =
-                                LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
-                            labels.push(span);
-                        }
+                        && let Some(parsed) = lambda.info.inner
+                    {
+                        let lambda_token = create_source(parsed);
+                        let span = LabeledSpan::at(lambda_token, format!("\"{s}\" defined here"));
+                        labels.push(span);
+                    }
                 }
 
                 let report = miette!(
@@ -1396,9 +1412,8 @@ mod tests {
                 (def foo (a b: 2 c) (+ a (+ b c)))
                 (foo 1 c: 3)
             )
-            "
+            ",
         )?;
-
 
         scoped_test(
             r"
@@ -1406,7 +1421,7 @@ mod tests {
                 (def foo (a b: 2 c) (+ a (+ b c)))
                 (foo a: 1 c: 3)
             )
-            "
+            ",
         )?;
 
         scoped_test(
@@ -1415,7 +1430,7 @@ mod tests {
                 (def foo (a b: 2 c) (+ a (+ b c)))
                 (foo a: 1 b: 2 c: 3)
             )
-            "
+            ",
         )?;
 
         scoped_test(
@@ -1424,9 +1439,8 @@ mod tests {
                 (def foo (a b: 2 c: 3) (+ a (+ b c)))
                 (foo 1)
             )
-            "
+            ",
         )?;
-
 
         scoped_test(
             r"
@@ -1434,7 +1448,7 @@ mod tests {
                 (def foo (a b: 2 c: 3) (+ a (+ b c)))
                 (foo a: 1)
             )
-            "
+            ",
         )?;
 
         scoped_test(
@@ -1443,7 +1457,7 @@ mod tests {
                 (def foo (a: 1 b: 2 c: 3) (+ a (+ b c)))
                 (foo a: 1)
             )
-            "
+            ",
         )?;
 
         scoped_test(
@@ -1452,10 +1466,9 @@ mod tests {
                 (def foo (a: 1 b: 2 c: 3) (+ a (+ b c)))
                 (foo)
             )
-            "
+            ",
         )
     }
-
 
     #[test]
     fn function_call_with_too_few_args_and_too_few_defaults() {
@@ -1465,7 +1478,7 @@ mod tests {
                 (def foo (a b: 2 c) (+ a (+ b c)))   
                 (foo 1)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1474,7 +1487,7 @@ mod tests {
                 (def foo (a: 1 b: 2 c) (+ a (+ b c)))   
                 (foo 1)
             )
-            "
+            ",
         );
 
         scoped_panic_test(
@@ -1483,7 +1496,7 @@ mod tests {
                 (def foo (a: 1 b: 2 c) (+ a (+ b c)))   
                 (foo a: 1)
             )
-            "
+            ",
         );
     }
 }

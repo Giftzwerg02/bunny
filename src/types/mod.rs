@@ -179,7 +179,7 @@ fn infer_symbol(
     // https://github.com/jfecher/algorithm-j/blob/7119150ae1822deac1dfe1dbb14f172d7c75e921/j.ml#L241
     if !state.type_assumptions.contains_key(key) {
         let scoped_expr = sym.info.syms.get(key)
-            .unwrap_or_else(|| panic!("The should be no undefined symbols in the type checking stage: {key}"));
+            .unwrap_or_else(|| panic!("There should be no undefined symbols in the type checking stage: {key}"));
 
         state.hm.enter_level();
 
