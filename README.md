@@ -28,13 +28,7 @@
 
 ## Installation
 
-install via `cargo`:
-
-```bash
-cargo install bunny
-```
-
-... or clone the repo and compile it yourself:
+Clone the repo and compile it yourself:
 
 ```bash
 # Note that cargo should've been installed via rustup and a C compiler must be in the path for this to work

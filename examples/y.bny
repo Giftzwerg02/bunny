@@ -1,0 +1,8 @@
+(
+    (def y (f) (
+        (def g (x) (apply1 x x))
+        (g (\ (x) (
+            f (\ (y) (apply1 (apply1 x x) y))
+        )))
+    ))
+)

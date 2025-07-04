@@ -8,9 +8,9 @@ use thiserror::Error;
 
 use crate::ast::parsed::ParsedStageInfo;
 use crate::ast::scoped::{ScopedStageInfo, SymbolValue};
-use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, Lambda, NamedArgument, Str, Symbol};
+use crate::ast::{Argument, Array, Color, Dict, DictEntry, Expr, Float, FuncCall, FuncCallSingle, Int, Lambda, NamedArgument, StageInfo, Str, Symbol};
 use crate::types::hm::{HMState, Type};
-use crate::types::typed::{TypedStageInfo, TypedSymbolTable, TypedValue};
+use crate::types::typed::{PolyTypedStageInfo, TypedStageInfo, TypedSymbolTable, TypedValue};
 use crate::types::util::{array, color, dict, float, func, int, pair, string};
 
 #[derive(Clone)]
@@ -226,37 +226,38 @@ fn infer_single_func_call(
 ) -> Result<FuncCallSingle<TypedStageInfo>> {
     let fn_sym = infer_symbol(&call.id, state)?;
 
+    let fn_impl = state.type_assumptions
+        .get(&fn_sym.value)
+        .unwrap();
+
+    let (args, default_args) = if let TypedValue::FromBunny(Expr::Lambda(lambda)) = fn_impl {
+        sorted_arguments(call.args.clone(), &lambda)
+    }
+    else {
+        // If the function is not a lambda in Bunny itself, we assume that the arguments are only positional
+        (call.args.clone(), Vec::new())
+    };
+
     // t0 in the paper
     let mut current_typ = fn_sym.info.typ.clone();
 
     let mut arg_types = Vec::new();
 
-    // TODO We have to sort the function arguments here for this to work with named arguments
-    for arg in &call.args {
+    // Process actual arguments first
+    for arg in args {
         // t1 in the paper
-        let current_arg_typ = infer_argument(arg, state)?;
+        let current_arg_typ = infer_argument(&arg, state)?;
         arg_types.push(current_arg_typ.clone());
         
-        let arg_typ = current_arg_typ.info().typ.clone();
+        current_typ = apply_function_argument(current_arg_typ, &current_typ, state)?;
+    }
 
-        // t' in the paper
-        let ret_typ = state.hm.newvar();
+    // Process default arguments
+    for arg in default_args {
+        let arg_instance = arg.map_stage(&mut |stage: PolyTypedStageInfo| stage.inst(&mut state.hm));
+        arg_types.push(arg_instance.clone());
 
-        let constructed_func = Type::Fn(
-            Box::new(arg_typ),
-            Box::new(ret_typ.clone())
-        );
-
-        let result = current_typ.unify(&constructed_func);
-
-        if let Err(hmerror) = result {
-            return type_error(
-                hmerror,
-                &Some(current_arg_typ.info().inner.clone())
-            );
-        }
-
-        current_typ = ret_typ;
+        current_typ = apply_function_argument(arg_instance, &current_typ, state)?;
     }
 
     Ok(FuncCallSingle::new(
@@ -270,6 +271,82 @@ fn infer_single_func_call(
     ))
 }
 
+fn apply_function_argument(
+    arg: Argument<TypedStageInfo>,
+    expected_type: &Type,
+    state: &mut InferenceState
+) -> Result<Type> {
+    let arg_typ = arg.info().typ.clone();
+
+    // t' in the paper
+    let ret_typ = state.hm.newvar();
+
+    let constructed_func = Type::Fn(
+        Box::new(arg_typ),
+        Box::new(ret_typ.clone())
+    );
+
+    let result = expected_type.unify(&constructed_func);
+
+    if let Err(hmerror) = result {
+        return type_error(
+            hmerror,
+            &Some(arg.info().inner.clone())
+        );
+    }
+
+    Ok(ret_typ)
+}
+
+fn sorted_arguments<T: StageInfo>(
+    arguments: Vec<Argument<T>>,
+    definition: &Lambda<PolyTypedStageInfo>
+) -> (Vec<Argument<T>>, Vec<Argument<PolyTypedStageInfo>>) {
+    // We assume that, considering all argument including default values,
+    // all needed arguments are supplied. Furthermore, the order is as follows:
+    // 1. Positional arguments
+    // 2. Named arguments
+    // 3. Default arguments
+
+    let mut sorted_args = Vec::new();
+
+    // Handle positional arguments first
+    let mut i = 0;
+    while i < arguments.len() {
+        if let Argument::Positional(_) = &arguments[i] {
+            sorted_args.push(arguments[i].clone());
+        }
+        else {
+            // If we reach a named argument, we stop processing positional arguments
+            break;
+        }
+
+        i += 1;
+    }
+
+    'definitions: while i < definition.args.len() {
+        let Argument::Named(named_arg) = &definition.args[i] else { panic!() };
+        i += 1;
+
+        for j in i..arguments.len() {
+            let Argument::Named(arg) = &arguments[j] else { panic!() };
+
+            if arg.name.value == named_arg.name.value {
+                sorted_args.push(arguments[j].clone());
+                continue 'definitions;
+            }
+        }
+
+        // If we reach here, it means that the named argument was not found in the arguments
+        // This means that we reached the default arguments
+        break;
+    }
+
+    let default_args = definition.args.clone().split_off(i);
+
+    (sorted_args, default_args)
+}
+
 fn infer_argument(
     arg: &Argument<ScopedStageInfo>,
     state: &mut InferenceState
@@ -281,7 +358,6 @@ fn infer_argument(
             Ok(Argument::Positional(typed_expr))
         },
 
-        // TODO Checking the name?
         Argument::Named(
             NamedArgument { name: Symbol { value: name, .. },
                 value: scoped_expr, .. }
@@ -304,7 +380,6 @@ fn infer_array(
     state: &mut InferenceState
 ) -> Result<Array<TypedStageInfo>> {
 
-    // TODO InteliJ doesn't like this for some reason
     let Some(first) = barray.value.first() else {
         return Ok(Array::new(
             vec![],
@@ -546,6 +621,9 @@ mod tests {
 
             #[forall a | _arr:array(&a) => @a ]
             fn "first"(Lazy::Array(_arr)) { unimplemented!(); }
+
+            #[forall a, b | _fun:func1(&a, &b) => _arr:array(&a) => @array(&b) ]
+            fn "map"(Lazy::Lambda(_fun), Lazy::Array(_arr)) { unimplemented!(); }
         }
     }
 
@@ -635,6 +713,39 @@ mod tests {
     fn test_type_inference_with_variables() {
         // Test that variables get proper types inferred
         assert_type_simple("(def f (\\ x (add x x)))", func(&[int()], &int()));
+    }
+
+    #[test]
+    fn test_default_arguments() {
+        assert_type_simple("(
+            (def foo (x: 5 y) (add x y))
+            (foo y: 10)
+        )", int());
+
+        assert_type_simple(r"
+            (def my-map (x f: (\ (y) (y))) (map f x))
+            (my-map [3])
+        )", array(&int()));
+    }
+
+    #[test]
+    fn test_named_arguments() {
+        assert_type_simple("(
+            (def foo (x y z) (add (add x y) z))
+            (foo 5 z: 10 y: 15)
+        )", int());
+    }
+
+    #[test]
+    fn test_mixed_arguments() {
+        let mut lib = basic_library();
+
+        let result = typecheck_bunny_source("(
+            (def foo (x: 5 y z) (add x y))
+            (foo 10 y: 10)
+        )", &mut lib);
+
+        assert!(result.is_err());
     }
 
     #[test]
